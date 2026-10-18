@@ -69,11 +69,11 @@ struct ModelPicker: View {
     private func title(for option: OnboardingModel.SpeechModel) -> Text {
         switch option {
         case .gigaAM:
-            Text("GigaAM v3 ").foregroundStyle(.black) + Text("(300 мб, лучше отключить впн)").foregroundStyle(.black.opacity(0.3))
+            Text("GigaAM v3 \(Text("(300 мб, лучше отключить впн)").foregroundStyle(.black.opacity(0.3)))").foregroundStyle(.black)
         case .whisperSmall:
             Text("Whisper small (466 мб)").foregroundStyle(.black)
         case .whisperLargeTurbo:
-            Text("Whisper large-v3 turbo ").foregroundStyle(.black) + Text("(1,6 гб.)").foregroundStyle(.black.opacity(0.3))
+            Text("Whisper large-v3 turbo \(Text("(1,6 гб.)").foregroundStyle(.black.opacity(0.3)))").foregroundStyle(.black)
         }
     }
 
@@ -159,13 +159,7 @@ struct PermissionRows: View {
     @ViewBuilder
     private func status(granted: Bool, request: @escaping () async -> Void) -> some View {
         if granted {
-            HStack(spacing: 4) {
-                DotIcon(glyph: .check, color: Color(red: 0x34 / 255, green: 0xC7 / 255, blue: 0x59 / 255))
-                Text("разрешено")
-                    .font(Martian.body.font(13))
-                    .kerning(Theme.tracking(-7, size: 13))
-                    .foregroundStyle(Color(red: 134 / 255, green: 134 / 255, blue: 139 / 255))
-            }
+            GrantedLabel(text: "разрешено")
         } else {
             Button("разрешить") { Task { await request() } }
                 .buttonStyle(WhitePillStyle())
@@ -173,8 +167,11 @@ struct PermissionRows: View {
     }
 }
 
-// Шаг 9. Окно ввода пинкода автор ещё рисует, поэтому «настроить» пока ничего не делает.
+// Шаг 9. Окно ввода пинкода автор ещё рисует, поэтому «настроить» у пинкода пока ничего не делает.
+// Pass-key — вход по Touch ID: работает уже сейчас.
 struct PasswordRows: View {
+    @State private var biometricsOn = BiometricLock.isEnabled
+
     var body: some View {
         VStack(spacing: 5) {
             GlassRow {
@@ -189,11 +186,37 @@ struct PasswordRows: View {
                     .kerning(Theme.tracking(-7, size: 13))
                     .foregroundStyle(Theme.ink)
                 Spacer(minLength: 0)
-                Button("настроить") {}
+                if biometricsOn {
+                    GrantedLabel(text: "включено")
+                } else if BiometricLock.isAvailable {
+                    Button("настроить") {
+                        Task { biometricsOn = await BiometricLock.enable() }
+                    }
                     .buttonStyle(WhitePillStyle())
+                } else {
+                    Text("нет touch id")
+                        .font(Martian.body.font(13))
+                        .kerning(Theme.tracking(-7, size: 13))
+                        .foregroundStyle(.black.opacity(0.3))
+                }
             }
         }
         .offset(x: 48 - 60, y: 157 - Layout.sheetTop)
+    }
+}
+
+// Зелёная галочка и серый текст — «разрешено» на шаге 8, «включено» на шаге 9.
+struct GrantedLabel: View {
+    let text: String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            DotIcon(glyph: .check, color: Color(red: 0x34 / 255, green: 0xC7 / 255, blue: 0x59 / 255))
+            Text(text)
+                .font(Martian.body.font(13))
+                .kerning(Theme.tracking(-7, size: 13))
+                .foregroundStyle(Color(red: 134 / 255, green: 134 / 255, blue: 139 / 255))
+        }
     }
 }
 

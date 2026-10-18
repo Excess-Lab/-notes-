@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import NotesCore
 
 // Содержимое листа для каждого шага. Все координаты — из кадров Figma, от верха листа (y = 54 в окне).
 struct OnboardingStepContent: View {
@@ -15,24 +16,19 @@ struct OnboardingStepContent: View {
         case .git:
             StepLayout(title: "git в папке",
                        text: "сделаем из папки git-репозиторий — каждая правка сохранится в истории, и любую заметку можно откатить",
-                       primary: ("инициализировать", { model.wantsGit = true; model.go(to: .github) }),
+                       primary: ("инициализировать", { model.initializeGit() }),
                        // Без git нечего отправлять на GitHub — сразу к моделям.
                        secondary: ("пропустить, настрою потом", { model.go(to: .models) }))
         case .github:
             StepLayout(title: "отправлять на github?",
                        text: "история будет храниться ещё и в приватном репозитории на github для синхронизации и восстановлений данных",
-                       primary: ("войти через github", { model.go(to: .githubCode) }),
+                       primary: ("войти через github", { model.startGitHubLogin() }),
                        secondary: ("нет, только на этом маке", { model.go(to: .models) }))
         case .githubCode:
-            StepLayout(title: "введи код на github",
-                       text: "открой github.com/login/device и введи этот код, пароль от github приложению не нужен",
-                       primary: ("открыть github", { DeviceCode.openGitHub() }),
-                       back: { model.go(to: .github) }) {
-                DeviceCodeCapsule(code: DeviceCode.placeholder)
-            }
+            GitHubCodeStep(model: model)
         case .githubDone:
             StepLayout(title: "готово!",
-                       text: "создали приватный репозиторий makark/notes. история отправляется туда сама раз в день",
+                       text: "создали приватный репозиторий \(model.githubRepository ?? "notes"). история отправляется туда сама раз в день",
                        primary: ("дальше", { model.go(to: .models) }))
         case .models:
             StepLayout(title: "модели",
@@ -68,8 +64,75 @@ struct OnboardingStepContent: View {
 
 private extension OnboardingModel {
     func vaultChosen(_ url: URL) {
+        if VaultStore.isInICloud(url), !VaultPicker.confirmICloud() { return }
+        do {
+            try VaultStore.save(url)
+        } catch {
+            NSAlert(error: error).runModal()
+            return
+        }
         vaultURL = url
         go(to: .git)
+    }
+
+    // git init в папке: .gitignore и первый коммит «начало истории» (NotesCore.GitVault).
+    func initializeGit() {
+        guard let vaultURL else {
+            // Папки нет только в отладке, когда шаг открыли напрямую.
+            wantsGit = true
+            go(to: .github)
+            return
+        }
+        Task {
+            do {
+                // libgit2 работает с диском синхронно — уводим с главного потока, чтобы не замер UI.
+                try await Task.detached { _ = try GitVault.prepare(at: vaultURL) }.value
+                wantsGit = true
+                go(to: .github)
+            } catch {
+                NSAlert(error: error).runModal()
+            }
+        }
+    }
+
+    func startGitHubLogin() {
+        guard GitHubApp.clientID != nil else {
+            let alert = NSAlert()
+            alert.messageText = "вход в github ещё не настроен"
+            alert.informativeText = "нужно зарегистрировать приложение на github и вписать client id в GitHubApp.swift. история пока остаётся на этом маке"
+            alert.runModal()
+            return
+        }
+        go(to: .githubCode)
+    }
+}
+
+// Шаг 4. Код живёт в GitHubLogin; уход с экрана отменяет вход (.task отменяется сам).
+private struct GitHubCodeStep: View {
+    let model: OnboardingModel
+    @State private var login = GitHubLogin()
+    @State private var attempt = 0
+
+    var body: some View {
+        StepLayout(title: "введи код на github",
+                   text: "открой github.com/login/device и введи этот код, пароль от github приложению не нужен",
+                   primary: primary,
+                   back: { model.go(to: .github) }) {
+            DeviceCodeCapsule(state: login.state, renew: { attempt += 1 })
+        }
+        .task(id: attempt) {
+            await login.run(vault: model.vaultURL) { repository in
+                model.githubRepository = repository
+                model.go(to: .githubDone)
+            }
+        }
+    }
+
+    private var primary: (String, () -> Void) {
+        if case .waiting(let code, let url) = login.state {
+            return ("открыть github", { DeviceCode.copy(code); NSWorkspace.shared.open(url) })
+        }
+        return ("открыть github", { DeviceCode.openGitHub() })
     }
 }
 
@@ -133,7 +196,8 @@ extension StepLayout where Middle == EmptyView {
 
 // Капсула с кодом GitHub (кадр 4). Коралловое свечение по краям внутри — пульсирует, пока ждём подтверждения.
 struct DeviceCodeCapsule: View {
-    let code: String
+    let state: GitHubLogin.State
+    let renew: () -> Void
     @State private var glow = false
     @State private var copied = false
 
@@ -145,31 +209,67 @@ struct DeviceCodeCapsule: View {
                     .shadow(.inner(color: Theme.coral.opacity(glow ? 1 : 0.35), radius: 10, x: -3, y: -4)))
                 .frame(width: 520, height: 100)
 
-            Text(code)
+            Text(headline)
                 .font(Martian.heading.font(40))
                 .kerning(Theme.tracking(2, size: 40))
-                .foregroundStyle(Theme.ink)
+                .foregroundStyle(Theme.ink.opacity(isWaiting ? 1 : 0.3))
+                .lineLimit(1)
+                .minimumScaleFactor(0.4)
+                .frame(width: 480)
                 .offset(y: 233 - 207)
 
-            Button(copied ? "скопировано" : "скопировать код") {
-                NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(code.replacingOccurrences(of: "–", with: "-"), forType: .string)
-                copied = true
-            }
-            .buttonStyle(QuietLinkStyle(size: 10))
-            .offset(y: 281 - 207)
+            caption.offset(y: 281 - 207)
         }
         .offset(y: 207 - Layout.sheetTop)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { glow = true }
         }
     }
+
+    private var isWaiting: Bool {
+        if case .waiting = state { return true }
+        return false
+    }
+
+    private var headline: String {
+        switch state {
+        // GitHub отдаёт код через дефис, в макете — через тире.
+        case .waiting(let code, _): code.replacingOccurrences(of: "-", with: "–")
+        case .requesting: "····–····"
+        case .connecting: "подключаем"
+        case .expired: "код истёк"
+        case .failed: "не вышло"
+        }
+    }
+
+    @ViewBuilder
+    private var caption: some View {
+        switch state {
+        case .waiting(let code, _):
+            Button(copied ? "скопировано" : "скопировать код") {
+                DeviceCode.copy(code)
+                copied = true
+            }
+            .buttonStyle(QuietLinkStyle(size: 10))
+        case .expired, .failed:
+            Button(failureText) { renew() }
+                .buttonStyle(QuietLinkStyle(size: 10))
+        case .requesting, .connecting:
+            EmptyView()
+        }
+    }
+
+    private var failureText: String {
+        if case .failed(let reason) = state { return "\(reason) — попробовать снова" }
+        return "получить новый код"
+    }
 }
 
 enum DeviceCode {
-    // Настоящий код выдаст GitHub Device Flow (CONTEXT.md). Пока приложение не зарегистрировано
-    // на GitHub, показываем код из макета.
-    static let placeholder = "WDJB–MJHT"
+    static func copy(_ code: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(code, forType: .string)
+    }
 
     static func openGitHub() {
         if let url = URL(string: "https://github.com/login/device") { NSWorkspace.shared.open(url) }
@@ -178,6 +278,16 @@ enum DeviceCode {
 
 // Выбор папки хранилища через системные окна Finder.
 enum VaultPicker {
+    // Предупреждение про iCloud Drive (CONTEXT.md): true — пользователь всё равно хочет эту папку.
+    static func confirmICloud() -> Bool {
+        let alert = NSAlert()
+        alert.messageText = "папка лежит в icloud drive"
+        alert.informativeText = "icloud синхронизирует историю git по кусочкам и может её сломать. лучше выбрать папку вне icloud"
+        alert.addButton(withTitle: "выбрать другую")
+        alert.addButton(withTitle: "всё равно использовать")
+        return alert.runModal() == .alertSecondButtonReturn
+    }
+
     static func choose(_ done: @escaping (URL) -> Void) {
         let panel = NSOpenPanel()
         panel.canChooseDirectories = true

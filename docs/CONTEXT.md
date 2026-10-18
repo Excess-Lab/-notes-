@@ -34,10 +34,12 @@
 
 **Решено:** локальный git плюс вход в GitHub по коду. Чужие настройки (`~/.ssh`, глобальный git config) не читаем.
 
-- **Git — библиотекой (libgit2 через Swift-обёртку), а не системным `git`.** На чистом Mac git нет без
-  Command Line Tools, а библиотека работает всегда и не запускает внешние программы.
-- **Песочница остаётся включённой.** Нужен доступ к выбранной папке (security-scoped bookmark)
-  и entitlement на исходящую сеть.
+- **Git — libgit2 напрямую через C API** (пакет `ibrahimcetin/libgit2` 1.9.2, собирается из исходников),
+  а не системным `git`: на чистом Mac git нет без Command Line Tools. Обёртку SwiftGitX смотрели и не взяли:
+  в ней нет init с веткой main и push с токеном. Код — `NotesCore/GitVault.swift`.
+- **Песочница остаётся включённой.** Нужен доступ к выбранной папке (security-scoped bookmark,
+  `notes.entitlements`) и исходящая сеть (`ENABLE_OUTGOING_NETWORK_CONNECTIONS`).
+- **Токен в git не пишем.** Push передаёт его паролем через колбэк libgit2, в URL remote — чистый адрес.
 - **Инициализация:** если `.git` нет — `init`, свой `.gitignore` (служебное Obsidian, `.DS_Store`, видео/аудио),
   автор `notes <notes@local>` в `.git/config`, первый коммит «начало истории».
   Если папка в iCloud Drive — предупредить: iCloud может сломать `.git`.

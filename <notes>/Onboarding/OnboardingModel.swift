@@ -36,6 +36,8 @@ final class OnboardingModel {
     var vaultURL: URL?
     // Пользователь согласился сделать git-репозиторий в папке (сам git init — этап 2 в ROADMAP).
     var wantsGit = false
+    // Полное имя репозитория на GitHub после входа, например makark/notes.
+    var githubRepository: String?
     // По умолчанию выбрана GigaAM: лучше всех понимает русский (CONTEXT.md).
     var speechModel: SpeechModel = .gigaAM
     // Доля скачанной модели, 0…1.
@@ -44,6 +46,7 @@ final class OnboardingModel {
     var runID = UUID()
 
     init() {
+        vaultURL = VaultStore.restore()
         #if DEBUG
         // Запуск сразу с нужного шага, без загрузки: `open <notes>.app --args -onboardingStep 4`.
         // 10 — финальный экран. Нужно, чтобы снимать каждый шаг для сверки с Figma.
@@ -62,14 +65,20 @@ final class OnboardingModel {
     }
 
     func finish() {
+        UserDefaults.standard.set(true, forKey: Self.completedKey)
         withAnimation(.smooth(duration: 1.4)) { phase = .finished }
     }
+
+    // Первый вход пройден. Пока основного экрана нет, только запоминаем; потом по этому флагу
+    // при запуске сразу откроются заметки.
+    static let completedKey = "onboardingCompleted"
 
     func restart() {
         phase = .loading
         step = .welcome
         vaultURL = nil
         wantsGit = false
+        githubRepository = nil
         speechModel = .gigaAM
         downloadProgress = 0
         runID = UUID()
