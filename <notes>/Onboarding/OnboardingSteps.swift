@@ -35,10 +35,33 @@ struct OnboardingStepContent: View {
                        text: "создали приватный репозиторий makark/notes. история отправляется туда сама раз в день",
                        primary: ("дальше", { model.go(to: .models) }))
         case .models:
-            // Шаги 6–10 ещё не сверстаны — здесь заглушка, чтобы ветки «пропустить» было куда вести.
             StepLayout(title: "модели",
-                       text: "этот шаг ещё в работе",
-                       primary: ("начать заново", { model.restart() }))
+                       text: "выбери одну, всегда можно сменить в настройках",
+                       primary: ("дальше", { model.startDownload(); model.go(to: .download) }),
+                       primaryY: 374) {
+                ModelPicker(model: model)
+            }
+        case .download:
+            StepLayout(title: "модели",
+                       text: "работают на твоём маке без интернета,  скачиваются один раз",
+                       // Скачивание идёт в фоне — ждать его конца не нужно.
+                       primary: ("дальше", { model.go(to: .permissions) })) {
+                DownloadRow(model: model)
+            }
+        case .permissions:
+            StepLayout(title: "пару моментиков",
+                       text: "нужны  для того, что бы все работало стабильно",
+                       primary: ("дальше", { model.go(to: .password) }),
+                       primaryY: 374) {
+                PermissionRows()
+            }
+        case .password:
+            StepLayout(title: "установим пароль?",
+                       text: nil,
+                       primary: ("дальше", { model.finish() }),
+                       primaryY: 359) {
+                PasswordRows()
+            }
         }
     }
 }
@@ -53,8 +76,10 @@ private extension OnboardingModel {
 // Общий каркас шага: заголовок, текст, своё содержимое посередине, кнопка и ссылка внизу.
 struct StepLayout<Middle: View>: View {
     let title: String
-    let text: String
+    let text: String?
     var primary: (String, () -> Void)
+    // Кнопка в разных кадрах стоит на разной высоте: 343 по умолчанию, 359 и 374 — где список длиннее.
+    var primaryY: CGFloat = 343
     var secondary: (String, () -> Void)? = nil
     var back: (() -> Void)? = nil
     @ViewBuilder var middle: () -> Middle
@@ -73,19 +98,21 @@ struct StepLayout<Middle: View>: View {
                 .foregroundStyle(Theme.ink)
                 .offset(y: 96 - Layout.sheetTop)
 
-            Text(text)
-                .font(Martian.body.font(13))
-                .kerning(Theme.tracking(-7, size: 13))
-                .foregroundStyle(.black.opacity(0.3))
-                .multilineTextAlignment(.center)
-                .frame(width: 380)
-                .offset(y: 137 - Layout.sheetTop)
+            if let text {
+                Text(text)
+                    .font(Martian.body.font(13))
+                    .kerning(Theme.tracking(-7, size: 13))
+                    .foregroundStyle(.black.opacity(0.3))
+                    .multilineTextAlignment(.center)
+                    .frame(width: 380)
+                    .offset(y: 137 - Layout.sheetTop)
+            }
 
             middle()
 
             Button(primary.0, action: primary.1)
                 .buttonStyle(CoralCapsuleStyle())
-                .offset(y: 343 - Layout.sheetTop)
+                .offset(y: primaryY - Layout.sheetTop)
 
             if let secondary {
                 Button(secondary.0, action: secondary.1)
@@ -98,7 +125,7 @@ struct StepLayout<Middle: View>: View {
 }
 
 extension StepLayout where Middle == EmptyView {
-    init(title: String, text: String, primary: (String, () -> Void),
+    init(title: String, text: String?, primary: (String, () -> Void),
          secondary: (String, () -> Void)? = nil, back: (() -> Void)? = nil) {
         self.init(title: title, text: text, primary: primary, secondary: secondary, back: back) { EmptyView() }
     }

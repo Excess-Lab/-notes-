@@ -31,21 +31,24 @@ private struct LoadingScene: View {
     @State private var slatWidth = Layout.startSlatWidth
     @State private var logoVisible = false
     @State private var contentVisible = false
+    @State private var finaleVisible = false
 
-    private var isWelcome: Bool { model.phase == .steps }
+    private var isSteps: Bool { model.phase == .steps }
+    private var isFinished: Bool { model.phase == .finished }
 
     var body: some View {
         GeometryReader { proxy in
             let size = proxy.size
-            let sheetY = isWelcome ? Layout.sheetTop : size.height
+            // На финале лист уезжает вниз, а полосы снова встают на весь экран.
+            let sheetY = isSteps ? Layout.sheetTop : size.height
             ZStack(alignment: .top) {
                 // Слои как в макете: шапка из полос (на загрузке на весь экран, потом 66 px),
                 // поверх неё стеклянный лист. Лист наезжает на шапку на 12 px и размывает её край.
-                slats(height: isWelcome ? Layout.headerHeight : size.height)
+                slats(height: isSteps ? Layout.headerHeight : size.height)
                     .mask(alignment: .top) { Rectangle().frame(height: sheetY) }
 
                 // То, что под листом, видно через стекло размытым.
-                slats(height: isWelcome ? Layout.headerHeight : size.height)
+                slats(height: isSteps ? Layout.headerHeight : size.height)
                     .blur(radius: Layout.sheetBlur)
                     .mask(alignment: .top) {
                         RoundedRectangle(cornerRadius: 18).offset(y: sheetY)
@@ -56,7 +59,10 @@ private struct LoadingScene: View {
                     .offset(y: sheetY)
 
                 logo
-                    .position(x: size.width / 2, y: isWelcome ? Layout.logoTop : size.height / 2)
+                    .position(x: size.width / 2, y: logoY(in: size))
+
+                finale
+                    .position(x: size.width / 2, y: 0)
             }
         }
         .clipped()
@@ -74,13 +80,53 @@ private struct LoadingScene: View {
             .font(Martian.logo.font(30))
             .kerning(Theme.tracking(-5, size: 30))
             .foregroundStyle(.black)
-            // В шапке логотип вдвое меньше (15 вместо 30).
-            .scaleEffect(isWelcome ? 0.5 : (logoVisible ? 1 : 0.92))
-            .opacity(logoVisible ? 1 : 0)
-            .blur(radius: logoVisible ? 0 : 10)
+            // В шапке логотип вдвое меньше (15 вместо 30). На финале он улетает вверх и гаснет.
+            .scaleEffect(isSteps || isFinished ? 0.5 : (logoVisible ? 1 : 0.92))
+            .opacity(logoVisible && !isFinished ? 1 : 0)
+            .blur(radius: logoVisible && !isFinished ? 0 : 10)
+    }
+
+    private func logoY(in size: CGSize) -> CGFloat {
+        switch model.phase {
+        case .loading: size.height / 2
+        case .steps: Layout.logoTop
+        case .finished: -Layout.logoTop
+        }
+    }
+
+    // Кадр «все круто!(10)»: «все готово» (y = 202) и «листай вниз» (y = 239) проявляются со стекла.
+    private var finale: some View {
+        VStack(spacing: 1) {
+            Text("все готово")
+                .font(Martian.logo.font(30))
+                .kerning(Theme.tracking(-5, size: 30))
+                .foregroundStyle(.black)
+            Text("листай вниз")
+                .font(Martian.body.font(11))
+                .kerning(Theme.tracking(-7, size: 11))
+                .foregroundStyle(.black.opacity(0.3))
+        }
+        .opacity(finaleVisible ? 1 : 0)
+        .blur(radius: finaleVisible ? 0 : 14)
+        .scaleEffect(finaleVisible ? 1 : 1.04)
+        .offset(y: 202 + 25)
+        .onChange(of: isFinished) { _, finished in
+            guard finished else { finaleVisible = false; return }
+            Task {
+                // Сначала уезжает лист и встают полосы, потом проявляется текст.
+                try? await Task.sleep(for: .seconds(0.7))
+                withAnimation(.smooth(duration: 1.6)) { finaleVisible = true }
+            }
+        }
     }
 
     private func run() async {
+        if model.phase == .finished {
+            slatWidth = Layout.finalSlatWidth
+            logoVisible = true
+            finaleVisible = true
+            return
+        }
         if reduceMotion || model.phase == .steps {
             slatWidth = Layout.finalSlatWidth
             logoVisible = true
