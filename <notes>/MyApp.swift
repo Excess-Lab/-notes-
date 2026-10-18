@@ -21,6 +21,8 @@ import SwiftUI
             CommandMenu("Отладка") {
                 Button("Повторить загрузку") { onboarding.restart() }
                     .keyboardShortcut("r")
+                Button("Следующий шаг") { onboarding.debugNext() }
+                    .keyboardShortcut("]")
             }
         }
     }

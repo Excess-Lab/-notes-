@@ -1,19 +1,5 @@
 import SwiftUI
 
-@Observable
-final class OnboardingModel {
-    enum Phase { case loading, welcome }
-
-    var phase: Phase = .loading
-    // Меняется при каждом перезапуске сцены, чтобы SwiftUI пересоздал её с нуля.
-    var runID = UUID()
-
-    func restart() {
-        phase = .loading
-        runID = UUID()
-    }
-}
-
 // Окно первого входа 560×440. Сейчас здесь загрузка и шаг 1, остальные шаги — дальше по ONBOARDING.md.
 struct OnboardingView: View {
     @Bindable var model: OnboardingModel
@@ -46,7 +32,7 @@ private struct LoadingScene: View {
     @State private var logoVisible = false
     @State private var contentVisible = false
 
-    private var isWelcome: Bool { model.phase == .welcome }
+    private var isWelcome: Bool { model.phase == .steps }
 
     var body: some View {
         GeometryReader { proxy in
@@ -65,7 +51,7 @@ private struct LoadingScene: View {
                         RoundedRectangle(cornerRadius: 18).offset(y: sheetY)
                     }
 
-                WelcomeSheet(contentVisible: contentVisible)
+                StepSheet(model: model, contentVisible: contentVisible)
                     .frame(height: size.height - Layout.sheetTop)
                     .offset(y: sheetY)
 
@@ -95,10 +81,10 @@ private struct LoadingScene: View {
     }
 
     private func run() async {
-        if reduceMotion {
+        if reduceMotion || model.phase == .steps {
             slatWidth = Layout.finalSlatWidth
             logoVisible = true
-            model.phase = .welcome
+            model.phase = .steps
             contentVisible = true
             return
         }
@@ -108,15 +94,16 @@ private struct LoadingScene: View {
 
         // Пока настоящей загрузки нет, держим сцену фиксированное время.
         try? await Task.sleep(for: .seconds(2.0))
-        withAnimation(.smooth(duration: 1.3)) { model.phase = .welcome }
+        withAnimation(.smooth(duration: 1.3)) { model.phase = .steps }
         // Текст начинает проявляться, пока лист ещё едет, — без паузы и без рывка.
         try? await Task.sleep(for: .seconds(0.35))
         contentVisible = true
     }
 }
 
-// Стеклянный лист шага 1. Координаты текста — от верха листа (лист начинается на y = 54).
-private struct WelcomeSheet: View {
+// Стеклянный лист с содержимым текущего шага.
+private struct StepSheet: View {
+    let model: OnboardingModel
     var contentVisible: Bool
 
     var body: some View {
@@ -131,39 +118,11 @@ private struct WelcomeSheet: View {
                 )
                 .shadow(color: .black.opacity(0.07), radius: 10, y: -2)
 
-            VStack(spacing: 0) {
-                Text("привет!")
-                    .font(Martian.heading.font(26))
-                    .kerning(Theme.tracking(-7, size: 26))
-                    .foregroundStyle(Theme.ink)
-                    .padding(.top, 96 - Layout.sheetTop)
-                    .reveal(contentVisible, delay: 0)
-
-                Text("выбери папку куда сохранять заметки")
-                    .font(Martian.body.font(13))
-                    .kerning(Theme.tracking(-7, size: 13))
-                    .foregroundStyle(.black.opacity(0.3))
-                    .multilineTextAlignment(.center)
-                    .frame(width: 380)
-                    .padding(.top, 10)
-                    .reveal(contentVisible, delay: 0.12)
-
-                Spacer()
-
-                Button("создать папку") {}
-                    .buttonStyle(CoralCapsuleStyle())
-                    .reveal(contentVisible, delay: 0.26)
-
-                Button("выбрать папку") {}
-                    .buttonStyle(.plain)
-                    .font(Martian.body.font(8))
-                    .kerning(Theme.tracking(-7, size: 8))
-                    .foregroundStyle(.black.opacity(0.2))
-                    .padding(.top, 31)
-                    .padding(.bottom, 20)
-                    .reveal(contentVisible, delay: 0.34)
-            }
-            .frame(maxWidth: .infinity)
+            OnboardingStepContent(model: model)
+                .id(model.step)
+                // Старый шаг уходит в размытие, новый из него проявляется.
+                .transition(.blurReplace)
+                .reveal(contentVisible)
         }
     }
 }
@@ -183,10 +142,23 @@ struct CoralCapsuleStyle: ButtonStyle {
     }
 }
 
+// Мелкая серая ссылка под кнопкой («пропустить», «назад»): Std Rg 8, прозрачность 20 %.
+struct QuietLinkStyle: ButtonStyle {
+    var size: CGFloat = 8
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(Martian.body.font(size))
+            .kerning(Theme.tracking(-7, size: size))
+            .foregroundStyle(.black.opacity(configuration.isPressed ? 0.4 : 0.2))
+            .contentShape(Rectangle())
+    }
+}
+
 private extension View {
-    // Текст проявляется из размытия и чуть поднимается — по очереди, сверху вниз.
+    // Содержимое листа при первом появлении проявляется из размытия и чуть поднимается.
     // Только прозрачность выглядела резко: текст будто включали.
-    func reveal(_ visible: Bool, delay: Double) -> some View {
+    func reveal(_ visible: Bool, delay: Double = 0) -> some View {
         opacity(visible ? 1 : 0)
             .blur(radius: visible ? 0 : 6)
             .offset(y: visible ? 0 : 10)
