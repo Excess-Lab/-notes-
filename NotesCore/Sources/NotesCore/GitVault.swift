@@ -28,6 +28,7 @@ func check(_ code: Int32) throws -> Int32 {
 
 // libgit2 нужно один раз инициализировать на процесс.
 private let libgit2Ready: Void = { git_libgit2_init() }()
+func gitReady() { _ = libgit2Ready }
 
 // Git-репозиторий в папке хранилища: создать, закоммитить всё изменённое, отправить на сервер.
 //
@@ -56,9 +57,9 @@ public final class GitVault {
     """
 
     public let folder: URL
-    private let repo: OpaquePointer
+    let repo: OpaquePointer
 
-    private init(repo: OpaquePointer, folder: URL) {
+    init(repo: OpaquePointer, folder: URL) {
         self.repo = repo
         self.folder = folder
     }
@@ -100,7 +101,7 @@ public final class GitVault {
         return (vault, true)
     }
 
-    private func writeLocalAuthor() throws {
+    func writeLocalAuthor() throws {
         var config: OpaquePointer?
         try check(git_repository_config(&config, repo))
         defer { git_config_free(config) }
@@ -248,31 +249,39 @@ public final class GitVault {
 
         var options = git_push_options()
         try check(git_push_options_init(&options, UInt32(GIT_PUSH_OPTIONS_VERSION)))
-        let box = Unmanaged.passRetained(TokenBox(token))
-        defer { box.release() }
-        options.callbacks.payload = box.toOpaque()
-        // C-колбэк не может захватывать переменные, поэтому токен передаём через payload.
-        options.callbacks.credentials = { out, _, _, _, payload in
-            guard let payload,
-                  let token = Unmanaged<TokenBox>.fromOpaque(payload).takeUnretainedValue().value
-            else { return -1 }
-            return git_credential_userpass_plaintext_new(out, "x-access-token", token)
-        }
-
-        try withPathspec(["\(branch):\(branch)"]) { refspecs in
-            try check(git_remote_push(remote, refspecs, &options))
+        try withAuth(token) { callbacks in
+            options.callbacks = callbacks
+            try withPathspec(["\(branch):\(branch)"]) { refspecs in
+                try check(git_remote_push(remote, refspecs, &options))
+            }
         }
     }
 }
 
-private final class TokenBox {
+// Колбэки сети libgit2 с токеном GitHub: токен уходит паролем по HTTPS и живёт только на время вызова.
+// C-колбэк не может захватывать переменные, поэтому токен передаём через payload.
+func withAuth<T>(_ token: String?, _ body: (git_remote_callbacks) throws -> T) throws -> T {
+    var callbacks = git_remote_callbacks()
+    try check(git_remote_init_callbacks(&callbacks, UInt32(GIT_REMOTE_CALLBACKS_VERSION)))
+    let box = Unmanaged.passRetained(TokenBox(token))
+    defer { box.release() }
+    callbacks.payload = box.toOpaque()
+    callbacks.credentials = { out, _, _, _, payload in
+        guard let payload,
+              let token = Unmanaged<TokenBox>.fromOpaque(payload).takeUnretainedValue().value
+        else { return -1 }
+        return git_credential_userpass_plaintext_new(out, "x-access-token", token)
+    }
+    return try body(callbacks)
+}
+final class TokenBox {
     let value: String?
     init(_ value: String?) { self.value = value }
 }
 
 // git_strarray из Swift-строк на время вызова.
 @discardableResult
-private func withPathspec<T>(_ items: [String], _ body: (UnsafePointer<git_strarray>) throws -> T) throws -> T {
+func withPathspec<T>(_ items: [String], _ body: (UnsafePointer<git_strarray>) throws -> T) throws -> T {
     var pointers: [UnsafeMutablePointer<CChar>?] = items.map { strdup($0) }
     defer { pointers.forEach { free($0) } }
     return try pointers.withUnsafeMutableBufferPointer { buffer in
@@ -285,8 +294,14 @@ extension GitVault {
     // Пустой bare-репозиторий — как «сервер» на диске. Нужен тестам push без сети.
     static func prepareBare(at folder: URL) throws -> OpaquePointer {
         _ = libgit2Ready
+        var options = git_repository_init_options()
+        try check(git_repository_init_options_init(&options, UInt32(GIT_REPOSITORY_INIT_OPTIONS_VERSION)))
+        options.flags = GIT_REPOSITORY_INIT_BARE.rawValue | GIT_REPOSITORY_INIT_MKPATH.rawValue
         var pointer: OpaquePointer?
-        try check(git_repository_init(&pointer, folder.path, 1))
+        try defaultBranch.withCString { head in
+            options.initial_head = head
+            try check(git_repository_init_ext(&pointer, folder.path, &options))
+        }
         return pointer!
     }
 }

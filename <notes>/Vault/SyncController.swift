@@ -2,8 +2,10 @@ import Foundation
 import NotesCore
 import os
 
-// Фоновая синхронизация хранилища: раз в час коммитим всё, что накопилось (кто бы ни правил —
-// мы, Obsidian или Finder), и проверяем, не пора ли отправлять на GitHub (раз в сутки).
+// Фоновая синхронизация хранилища. Раз в час (и сразу при запуске):
+// 1) коммитим всё, что накопилось — кто бы ни правил: мы, Obsidian или Finder;
+// 2) забираем правки с другого Мака (pull); конфликты не теряют текст — см. GitVault+Pull;
+// 3) отправляем на GitHub, если прошли сутки с прошлой отправки.
 // Логика — в NotesCore.SyncEngine.
 @Observable
 final class SyncController {
@@ -24,8 +26,8 @@ final class SyncController {
         self.engine = engine
         loop = Task { [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: Self.commitInterval)
                 await self?.tick()
+                try? await Task.sleep(for: Self.commitInterval)
             }
         }
         log.info("синхронизация запущена: \(vault.path, privacy: .private)")
@@ -40,12 +42,28 @@ final class SyncController {
         } catch {
             log.error("не закоммитили: \(String(describing: error), privacy: .public)")
         }
+        await pull()
         await pushIfDue()
     }
 
     // Первую отправку делает вход в GitHub — с неё и отсчитываем сутки.
     static func markPushed(_ date: Date = Date()) {
         UserDefaults.standard.set(date, forKey: lastPushKey)
+    }
+
+    // Без входа в GitHub забирать неоткуда — пропускаем.
+    private func pull() async {
+        guard let engine, let token = TokenStore().load() else { return }
+        do {
+            switch try await engine.pull(token: token) {
+            case .merged(let conflicts) where !conflicts.isEmpty:
+                log.info("слили с другого мака, конфликтов: \(conflicts.count) — обе версии сохранены")
+            default:
+                break
+            }
+        } catch {
+            log.error("не забрали с github: \(String(describing: error), privacy: .public)")
+        }
     }
 
     private func pushIfDue() async {

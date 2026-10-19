@@ -78,6 +78,15 @@ public actor SyncEngine {
         return try vault.commitAll(message: message) ? message : nil
     }
 
+    // Забирает правки с другого Мака. Сначала коммитим своё: слияние идёт только между коммитами,
+    // и незакоммиченный текст не должен попасть под перезапись.
+    public func pull(token: String?, date: Date = Date()) throws -> PullResult {
+        try commitNow()
+        let vault = try GitVault.open(at: folder)
+        guard vault.remoteURL() != nil else { return .upToDate }
+        return try vault.pull(token: token, date: date)
+    }
+
     // Отправляет историю, если пора и есть что отправлять. true — отправили.
     public func pushIfDue(token: String?, lastPush: Date?, now: Date = Date()) throws -> Bool {
         guard PushSchedule.isDue(lastPush: lastPush, now: now) else { return false }

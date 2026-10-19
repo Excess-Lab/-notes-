@@ -38,6 +38,9 @@ final class GitHubLogin {
                 try await Task.detached {
                     let git = try GitVault.prepare(at: vault).vault
                     try git.setRemote(repo.cloneURL)
+                    // notes уже был (второй Мак) — сначала забираем и сливаем его историю,
+                    // иначе GitHub отклонит push: у сервера своя история, у этой папки своя.
+                    _ = try git.pull(token: token)
                     try git.push(token: token)
                 }.value
             }
