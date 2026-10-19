@@ -130,7 +130,7 @@ public struct PinHash: Equatable, Sendable {
     }
 }
 
-// Пинкод входа в приложение. Заметки им не шифруются — иначе их не открыл бы Obsidian.
+// Пинкод входа в приложение. Заметки им не шифруются — иначе их не открыл бы другой редактор.
 public struct PinStore: Sendable {
     let keychain: TokenStore
 

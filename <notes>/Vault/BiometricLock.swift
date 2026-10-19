@@ -1,7 +1,7 @@
 import LocalAuthentication
 
 // Pass-key на шаге «установим пароль?»: вход в приложение по Touch ID.
-// Сами заметки не шифруем — иначе их не откроет Obsidian (открытый вопрос в ONBOARDING.md),
+// Сами заметки не шифруем — иначе их не откроет другой редактор (открытый вопрос в ONBOARDING.md),
 // поэтому храним только флаг «спрашивать Touch ID при входе».
 enum BiometricLock {
     private static let enabledKey = "unlockWithBiometrics"

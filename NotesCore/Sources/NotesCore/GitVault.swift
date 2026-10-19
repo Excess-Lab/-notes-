@@ -42,11 +42,10 @@ public final class GitVault {
     public static let authorEmail = "notes@local"
     public static let initialMessage = "начало истории"
 
-    // Что не попадает в историю: служебное Obsidian и macOS, тяжёлые медиа для расшифровки видео.
+    // Что не попадает в историю: служебное macOS, корзина, тяжёлые медиа для расшифровки видео.
     public static let gitignore = """
     # создано <notes>
     .DS_Store
-    .obsidian/workspace*.json
     .trash/
     *.mp4
     *.mov

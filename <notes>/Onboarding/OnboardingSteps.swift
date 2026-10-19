@@ -305,7 +305,7 @@ enum VaultPicker {
         panel.nameFieldStringValue = "notes"
         panel.canCreateDirectories = true
         panel.prompt = "Создать"
-        panel.message = "Новая папка для заметок. Её можно будет открыть и в Obsidian."
+        panel.message = "Новая папка для заметок. Это обычные файлы — их можно открыть и в любом другом редакторе."
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             do {
