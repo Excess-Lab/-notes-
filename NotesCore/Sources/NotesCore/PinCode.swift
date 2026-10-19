@@ -138,7 +138,7 @@ public struct PinStore: Sendable {
         self.keychain = keychain
     }
 
-    public var isSet: Bool { keychain.load() != nil }
+    public var isSet: Bool { keychain.exists }
 
     public func save(_ pin: String) throws { try keychain.save(PinHash(pin: pin).encoded) }
 

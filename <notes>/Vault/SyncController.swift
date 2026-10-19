@@ -51,9 +51,15 @@ final class SyncController {
         UserDefaults.standard.set(date, forKey: lastPushKey)
     }
 
+    // Чтение токена может ждать окна macOS «разрешить доступ к Связке ключей» — не на главном потоке,
+    // иначе всё приложение замирает, пока окно не закрыли.
+    private static func token() async -> String? {
+        await Task.detached { TokenStore().load() }.value
+    }
+
     // Без входа в GitHub забирать неоткуда — пропускаем.
     private func pull() async {
-        guard let engine, let token = TokenStore().load() else { return }
+        guard let engine, let token = await Self.token() else { return }
         do {
             switch try await engine.pull(token: token) {
             case .merged(let conflicts) where !conflicts.isEmpty:
@@ -68,7 +74,7 @@ final class SyncController {
 
     private func pushIfDue() async {
         // Без входа в GitHub токена нет — история остаётся на этом Маке.
-        guard let engine, let token = TokenStore().load() else { return }
+        guard let engine, let token = await Self.token() else { return }
         let lastPush = UserDefaults.standard.object(forKey: Self.lastPushKey) as? Date
         do {
             if try await engine.pushIfDue(token: token, lastPush: lastPush) {

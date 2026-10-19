@@ -77,6 +77,7 @@ final class DictationController {
 
     private func begin() {
         guard state == .idle || state == .copied else { return }
+        guard modelReady() else { return }
         guard AVCaptureDevice.authorizationStatus(for: .audio) == .authorized else {
             // Разрешение дают на шаге «пару моментиков»; без него просто спрашиваем систему.
             AVCaptureDevice.requestAccess(for: .audio) { _ in }
@@ -101,6 +102,14 @@ final class DictationController {
             log.error("микрофон не включился: \(String(describing: error), privacy: .public)")
             NSSound.beep()
         }
+    }
+
+    // Без модели записывать бессмысленно: открываем приложение и предлагаем её скачать.
+    private func modelReady() -> Bool {
+        let model = SpeechSettings.model
+        if ModelStore.standard.isInstalled(model) { return true }
+        ModelDownloadOffer.present(model, hotKey: combo.display)
+        return false
     }
 
     private func finish() async {
@@ -138,6 +147,17 @@ final class DictationController {
         return engine
     }
 
+    // Модель докачалась в фоне: та же галочка, что после распознавания, — «готово, можно говорить».
+    func flashReady() {
+        guard state == .idle else { return }
+        state = .copied
+        panel?.show()
+        Task {
+            try? await Task.sleep(for: .seconds(1.2))
+            if state == .copied { hide() }
+        }
+    }
+
     private func hide() {
         state = .idle
         panel?.hide()
@@ -148,6 +168,7 @@ final class DictationController {
     // сфера слушает (громкость из файла), распознаёт, кладёт текст в буфер, показывает галочку.
     // Запуск: `open <notes>.app --args -dictationTestFile /путь/к/файлу.wav`.
     func debugRun(file: URL) async {
+        guard modelReady() else { return }
         guard let data = try? Data(contentsOf: file), let range = data.range(of: Data("data".utf8)) else { return }
         let samples: [Float] = data[(range.upperBound + 4)...].withUnsafeBytes { raw in
             raw.bindMemory(to: Int16.self).map { Float($0) / 32768 }

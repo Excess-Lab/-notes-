@@ -111,7 +111,10 @@ struct DownloadRow: View {
                     .font(Martian.body.font(11))
                     .foregroundStyle(.black.opacity(0.3))
                     .monospacedDigit()
-                    .frame(width: 30, alignment: .leading)
+                    // «100%» шире, чем «42%»: без этого в 30 pt знак процента переносился на вторую строку.
+                    .lineLimit(1)
+                    .fixedSize()
+                    .frame(minWidth: 30, alignment: .leading)
             }
         }
         .offset(y: 199 - Layout.sheetTop)
@@ -275,14 +278,18 @@ extension OnboardingModel {
     // «дальше» можно нажать сразу, скачивание продолжится в фоне.
     func startDownload() {
         let model = speechModel
+        downloadFailed = false
+        if ModelStore.standard.isInstalled(model) {
+            downloadProgress = 1
+            return
+        }
         downloadProgress = 0
         downloadFailed = false
         downloadStarted = Date()
         Task {
             do {
-                try await ModelStore.standard.download(model) { value in
-                    Task { @MainActor in self.downloadProgress = value }
-                }
+                try await ModelDownloads.shared.download(model) { value in self.downloadProgress = value }
+                downloadProgress = 1
             } catch {
                 downloadFailed = true
             }

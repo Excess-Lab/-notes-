@@ -25,6 +25,8 @@ public struct TokenStore: Sendable {
         item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
         let status = SecItemAdd(item as CFDictionary, nil)
         guard status == errSecSuccess else { throw KeychainError(status: status) }
+        // Запись создана этой сборкой — пересоздавать её при чтении не нужно.
+        UserDefaults.standard.set(true, forKey: "keychainRecreated.\(service).\(account)")
     }
 
     public func load() -> String? {
@@ -33,8 +35,27 @@ public struct TokenStore: Sendable {
         request[kSecMatchLimit as String] = kSecMatchLimitOne
         var result: AnyObject?
         guard SecItemCopyMatching(request as CFDictionary, &result) == errSecSuccess,
-              let data = result as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+              let data = result as? Data, let value = String(data: data, encoding: .utf8) else { return nil }
+        recreateOnce(value)
+        return value
+    }
+
+    // Запись в Связке ключей помнит, какая сборка её создала. Записи от сборок без подписи командой
+    // macOS считает чужими и при каждом запуске спрашивает пароль. Один раз пересоздаём запись
+    // от имени текущей, подписанной сборки — дальше пересборки её не теряют и ничего не спрашивают.
+    private func recreateOnce(_ value: String) {
+        let key = "keychainRecreated.\(service).\(account)"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        if (try? save(value)) != nil { UserDefaults.standard.set(true, forKey: key) }
+    }
+
+    // Есть ли запись — без чтения самого секрета. Чтение данных macOS может прикрыть окном
+    // «разрешить доступ к Связке ключей», а проверка наличия его не вызывает.
+    public var exists: Bool {
+        var request = query
+        request[kSecReturnAttributes as String] = true
+        request[kSecMatchLimit as String] = kSecMatchLimitOne
+        return SecItemCopyMatching(request as CFDictionary, nil) == errSecSuccess
     }
 
     public func delete() {
