@@ -87,6 +87,7 @@ private extension OnboardingModel {
             do {
                 // libgit2 работает с диском синхронно — уводим с главного потока, чтобы не замер UI.
                 try await Task.detached { _ = try GitVault.prepare(at: vaultURL) }.value
+                SyncController.shared.start(vault: vaultURL)
                 wantsGit = true
                 go(to: .github)
             } catch {

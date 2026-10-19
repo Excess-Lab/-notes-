@@ -12,6 +12,8 @@ import SwiftUI
         // Сцена 560×440 из макета идёт под ней.
         WindowGroup("<notes>") {
             OnboardingView(model: onboarding)
+                // Папка уже выбрана и под git — история ведётся с первой секунды, даже пока открыт онбординг.
+                .task { if let vault = onboarding.vaultURL { SyncController.shared.start(vault: vault) } }
                 // Макет только светлый. Без этого в тёмной теме системы стекло и заголовок темнеют.
                 .preferredColorScheme(.light)
         }

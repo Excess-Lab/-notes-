@@ -41,6 +41,7 @@ final class GitHubLogin {
                     try git.push(token: token)
                 }.value
             }
+            SyncController.markPushed()
             onConnected(repo.fullName)
         } catch is CancellationError {
             return

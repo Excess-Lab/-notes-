@@ -1,6 +1,17 @@
 import Foundation
 import libgit2
 
+public struct FileChange: Equatable, Sendable {
+    public enum Kind: Sendable { case added, modified, deleted }
+    public let path: String
+    public let kind: Kind
+
+    public init(path: String, kind: Kind) {
+        self.path = path
+        self.kind = kind
+    }
+}
+
 public struct GitError: Error, CustomStringConvertible, Equatable {
     public let code: Int32
     public let message: String
@@ -140,6 +151,52 @@ public final class GitVault {
                                         tree, buffer.count, buffer.baseAddress))
         }
         return true
+    }
+
+    // Открывает уже существующий репозиторий. В отличие от prepare ничего не создаёт.
+    public static func open(at folder: URL) throws -> GitVault {
+        _ = libgit2Ready
+        var pointer: OpaquePointer?
+        try check(git_repository_open(&pointer, folder.path))
+        return GitVault(repo: pointer!, folder: folder)
+    }
+
+    // Новые, изменённые и удалённые файлы (пути от корня хранилища) — без игнорируемых.
+    // Нужны для подписи коммита.
+    public func changes() throws -> [FileChange] {
+        var options = git_status_options()
+        try check(git_status_options_init(&options, UInt32(GIT_STATUS_OPTIONS_VERSION)))
+        options.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR
+        options.flags = GIT_STATUS_OPT_INCLUDE_UNTRACKED.rawValue | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS.rawValue
+        var list: OpaquePointer?
+        try check(git_status_list_new(&list, repo, &options))
+        defer { git_status_list_free(list) }
+
+        let added = GIT_STATUS_WT_NEW.rawValue | GIT_STATUS_INDEX_NEW.rawValue
+        let deleted = GIT_STATUS_WT_DELETED.rawValue | GIT_STATUS_INDEX_DELETED.rawValue
+        var result: [FileChange] = []
+        for i in 0..<git_status_list_entrycount(list) {
+            guard let entry = git_status_byindex(list, i)?.pointee,
+                  let delta = entry.index_to_workdir ?? entry.head_to_index,
+                  let file = delta.pointee.new_file.path ?? delta.pointee.old_file.path
+            else { continue }
+            let flags = entry.status.rawValue
+            let kind: FileChange.Kind = flags & added != 0 ? .added : flags & deleted != 0 ? .deleted : .modified
+            result.append(FileChange(path: String(cString: file), kind: kind))
+        }
+        return result.sorted { $0.path < $1.path }
+    }
+
+    // Есть ли коммиты, которых ещё нет на сервере (сравниваем ветку с её копией origin/<ветка>).
+    public var hasUnpushedCommits: Bool {
+        guard let branch = headReference, branch.hasPrefix("refs/heads/") else { return false }
+        var local = git_oid()
+        guard git_reference_name_to_id(&local, repo, "HEAD") == 0 else { return false }
+        let tracking = "refs/remotes/origin/" + branch.dropFirst("refs/heads/".count)
+        var remote = git_oid()
+        // Ветки на сервере ещё нет — значит, ничего не отправляли.
+        guard git_reference_name_to_id(&remote, repo, tracking) == 0 else { return true }
+        return git_oid_equal(&local, &remote) == 0
     }
 
     public var commitCount: Int {
