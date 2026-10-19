@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import NotesCore
 import NotesSpeech
 import os
 import SwiftUI
@@ -26,12 +27,39 @@ final class DictationController {
     // Короче этого — случайное нажатие, а не фраза: не распознаём.
     private static let minimumSeconds = 0.4
 
+    // Сочетание, по которому сейчас работает надиктовка (по умолчанию ⌥ space).
+    private(set) var combo = HotKeyStore.load()
+
     func start() {
-        guard hotKey == nil else { return }
+        guard panel == nil else { return }
         panel = DictationPanel(controller: self)
-        hotKey = GlobalHotKey(onPress: { [weak self] in self?.begin() },
-                              onRelease: { [weak self] in Task { await self?.finish() } })
-        log.info("надиктовка готова: ⌥ space")
+        if !register(combo) { log.error("сочетание \(self.combo.display, privacy: .public) занято другим приложением") }
+    }
+
+    // Меняет сочетание без перезапуска. false — его уже заняло другое приложение; тогда остаётся старое.
+    @discardableResult
+    func changeHotKey(to newCombo: HotKeyCombo) -> Bool {
+        let old = combo
+        hotKey = nil
+        guard register(newCombo) else {
+            register(old)
+            return false
+        }
+        combo = newCombo
+        HotKeyStore.save(newCombo)
+        log.info("надиктовка: \(newCombo.display, privacy: .public)")
+        return true
+    }
+
+    // Пока человек записывает новое сочетание, старое не должно запускать надиктовку.
+    func suspendHotKey() { hotKey = nil }
+    func resumeHotKey() { if hotKey == nil { register(combo) } }
+
+    @discardableResult
+    private func register(_ combo: HotKeyCombo) -> Bool {
+        hotKey = try? GlobalHotKey(combo, onPress: { [weak self] in self?.begin() },
+                                   onRelease: { [weak self] in Task { await self?.finish() } })
+        return hotKey != nil
     }
 
     private func begin() {

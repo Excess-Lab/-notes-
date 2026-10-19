@@ -147,14 +147,7 @@ struct PermissionRows: View {
                 Spacer(minLength: 0)
                 status(granted: permissions.calendar) { await permissions.requestCalendar() }
             }
-            GlassRow {
-                RowTexts(title: Text("горячая клавиша").foregroundStyle(Theme.ink), subtitle: "надиктовка из любого приложения")
-                Spacer(minLength: 0)
-                Keycap(text: "⌥ space")
-                // Смена хоткея — вместе с надиктовкой (этап 3 в ROADMAP).
-                Button("изменить") {}
-                    .buttonStyle(QuietPillStyle())
-            }
+            HotKeyRow()
         }
         // В макете список стоит на x = 48, а не по центру (60) — повторяем как есть.
         .offset(x: 48 - 60, y: 183 - Layout.sheetTop)

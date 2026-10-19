@@ -271,8 +271,8 @@
 				ENABLE_RESOURCE_ACCESS_CALENDARS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "чтобы задачи из заметок попадали в календарь";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "микрофон нужен для надиктовки";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Задачи из заметок с датой появятся в Календаре и будут обновляться вместе с заметкой.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Чтобы надиктовывать: держи горячую клавишу (по умолчанию ⌥ Пробел) и говори. Речь распознаётся прямо на этом Mac и никуда не отправляется.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;
@@ -303,8 +303,8 @@
 				ENABLE_RESOURCE_ACCESS_CALENDARS = YES;
 				ENABLE_USER_SELECTED_FILES = readwrite;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "чтобы задачи из заметок попадали в календарь";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "микрофон нужен для надиктовки";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Задачи из заметок с датой появятся в Календаре и будут обновляться вместе с заметкой.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Чтобы надиктовывать: держи горячую клавишу (по умолчанию ⌥ Пробел) и говори. Речь распознаётся прямо на этом Mac и никуда не отправляется.";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MARKETING_VERSION = 1.0;

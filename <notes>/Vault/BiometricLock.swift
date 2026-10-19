@@ -13,11 +13,12 @@ enum BiometricLock {
         LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
     }
 
+    // macOS показывает причину в своём окне после «<notes> пытается …» — поэтому она начинается с глагола.
     // Включаем только после успешной проверки отпечатка: так пользователь сразу видит, что это работает.
     static func enable() async -> Bool {
         let context = LAContext()
         let ok = (try? await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
-                                                     localizedReason: "входить в заметки по отпечатку")) ?? false
+                                                     localizedReason: "включить вход в <notes> по отпечатку пальца")) ?? false
         if ok { UserDefaults.standard.set(true, forKey: enabledKey) }
         return ok
     }

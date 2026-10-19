@@ -1,17 +1,20 @@
 import Carbon.HIToolbox
+import NotesCore
 
-// Глобальная горячая клавиша (по умолчанию ⌥ space) — работает, даже когда активно другое приложение.
+// Глобальная горячая клавиша надиктовки — работает, даже когда активно другое приложение.
 //
 // Через старый Carbon API, потому что он, в отличие от перехвата всех клавиш, не требует разрешения
 // «Универсальный доступ»: система сама сообщает только о нашей комбинации — нажали и отпустили.
 final class GlobalHotKey {
+    enum Failure: Error { case taken }
+
     private var hotKey: EventHotKeyRef?
     private var handler: EventHandlerRef?
     private let onPress: () -> Void
     private let onRelease: () -> Void
 
-    init(keyCode: Int = kVK_Space, modifiers: Int = optionKey,
-         onPress: @escaping () -> Void, onRelease: @escaping () -> Void) {
+    // Бросает .taken, если сочетание уже занято другим приложением: macOS отдаёт его только первому.
+    init(_ combo: HotKeyCombo, onPress: @escaping () -> Void, onRelease: @escaping () -> Void) throws {
         self.onPress = onPress
         self.onRelease = onRelease
         var types = [EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed)),
@@ -24,8 +27,13 @@ final class GlobalHotKey {
             return noErr
         }, types.count, &types, Unmanaged.passUnretained(self).toOpaque(), &handler)
         // 0x6E6F7465 — «note»: подпись, по которой система отличает наши клавиши от чужих.
-        RegisterEventHotKey(UInt32(keyCode), UInt32(modifiers), EventHotKeyID(signature: 0x6E6F_7465, id: 1),
-                            GetApplicationEventTarget(), 0, &hotKey)
+        let status = RegisterEventHotKey(UInt32(combo.keyCode), combo.carbonModifiers,
+                                         EventHotKeyID(signature: 0x6E6F_7465, id: 1),
+                                         GetApplicationEventTarget(), 0, &hotKey)
+        guard status == noErr else {
+            if let handler { RemoveEventHandler(handler) }
+            throw Failure.taken
+        }
     }
 
     deinit {

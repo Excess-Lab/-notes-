@@ -99,8 +99,8 @@ private extension OnboardingModel {
     func startGitHubLogin() {
         guard GitHubApp.clientID != nil else {
             let alert = NSAlert()
-            alert.messageText = "вход в github ещё не настроен"
-            alert.informativeText = "нужно зарегистрировать приложение на github и вписать client id в GitHubApp.swift. история пока остаётся на этом маке"
+            alert.messageText = "Вход в GitHub не настроен"
+            alert.informativeText = "Чтобы отправлять историю на GitHub, приложению нужен client id: его вписывают в GitHubApp.swift. Пока история остаётся только на этом Mac."
             alert.runModal()
             return
         }
@@ -278,14 +278,15 @@ enum DeviceCode {
 }
 
 // Выбор папки хранилища через системные окна Finder.
+// Тексты системных окон — обычными предложениями, с заглавной: это окна macOS, а не наш интерфейс.
 enum VaultPicker {
     // Предупреждение про iCloud Drive (CONTEXT.md): true — пользователь всё равно хочет эту папку.
     static func confirmICloud() -> Bool {
         let alert = NSAlert()
-        alert.messageText = "папка лежит в icloud drive"
-        alert.informativeText = "icloud синхронизирует историю git по кусочкам и может её сломать. лучше выбрать папку вне icloud"
-        alert.addButton(withTitle: "выбрать другую")
-        alert.addButton(withTitle: "всё равно использовать")
+        alert.messageText = "Папка лежит в iCloud Drive"
+        alert.informativeText = "iCloud синхронизирует историю git по частям и может её повредить. Лучше выбрать папку вне iCloud Drive."
+        alert.addButton(withTitle: "Выбрать другую")
+        alert.addButton(withTitle: "Всё равно использовать")
         return alert.runModal() == .alertSecondButtonReturn
     }
 
@@ -294,8 +295,8 @@ enum VaultPicker {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.prompt = "выбрать"
-        panel.message = "папка, где будут лежать заметки"
+        panel.prompt = "Выбрать"
+        panel.message = "Выбери папку, где будут лежать заметки."
         panel.begin { if $0 == .OK, let url = panel.url { done(url) } }
     }
 
@@ -303,8 +304,8 @@ enum VaultPicker {
         let panel = NSSavePanel()
         panel.nameFieldStringValue = "notes"
         panel.canCreateDirectories = true
-        panel.prompt = "создать"
-        panel.message = "новая папка для заметок"
+        panel.prompt = "Создать"
+        panel.message = "Новая папка для заметок. Её можно будет открыть и в Obsidian."
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             do {
