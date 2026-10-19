@@ -5,8 +5,8 @@ import NotesSpeech
 import os
 import SwiftUI
 
-// Надиктовка из любого приложения: держишь ⌥ space — пишем, отпустил — распознаём локально
-// и кладём текст в буфер обмена. Вставляет человек сам (⌘V) — так приложению не нужен доступ
+// Надиктовка из любого приложения: нажал ⌥ space — пишем, нажал ещё раз — распознаём локально
+// и кладём текст в буфер обмена (не «держи и говори»: так решил автор — руки свободны). Вставляет человек сам (⌘V) — так приложению не нужен доступ
 // к чужим окнам («Универсальный доступ»).
 @Observable
 final class DictationController {
@@ -57,10 +57,23 @@ final class DictationController {
 
     @discardableResult
     private func register(_ combo: HotKeyCombo) -> Bool {
-        hotKey = try? GlobalHotKey(combo, onPress: { [weak self] in self?.begin() },
-                                   onRelease: { [weak self] in Task { await self?.finish() } })
+        hotKey = try? GlobalHotKey(combo, onPress: { [weak self] in self?.toggle() })
         return hotKey != nil
     }
+
+    // Одно сочетание и включает, и выключает. Пока распознаём, нажатия игнорируем.
+    private func toggle() {
+        switch state {
+        case .idle, .copied: begin()
+        case .listening: Task { await finish() }
+        case .recognizing: break
+        }
+    }
+
+    // Забыли нажать второй раз — через 5 минут останавливаем сами: дальше распознавание было бы
+    // долгим, а запись — скорее всего случайной.
+    private static let maximumSeconds = 300
+    private var limit: Task<Void, Never>?
 
     private func begin() {
         guard state == .idle || state == .copied else { return }
@@ -79,6 +92,11 @@ final class DictationController {
             }
             state = .listening
             panel?.show()
+            limit = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(Self.maximumSeconds))
+                guard !Task.isCancelled else { return }
+                await self?.finish()
+            }
         } catch {
             log.error("микрофон не включился: \(String(describing: error), privacy: .public)")
             NSSound.beep()
@@ -87,6 +105,7 @@ final class DictationController {
 
     private func finish() async {
         guard state == .listening else { return }
+        limit?.cancel()
         let samples = recorder.stop()
         level = 0
         guard Double(samples.count) / Double(Transcribers.sampleRate) >= Self.minimumSeconds else {
