@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		000000000000000000A00001 /* NotesCore in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000A00003 /* NotesCore */; };
+		000000000000000000A00011 /* NotesSpeech in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000000A00013 /* NotesSpeech */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -27,6 +28,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				000000000000000000A00001 /* NotesCore in Frameworks */,
+				000000000000000000A00011 /* NotesSpeech in Frameworks */,
 			);
 		};
 /* End PBXFrameworksBuildPhase section */
@@ -67,6 +69,7 @@
 			name = "<notes>";
 			packageProductDependencies = (
 				000000000000000000A00003 /* NotesCore */,
+				000000000000000000A00013 /* NotesSpeech */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* <notes>.app */;
@@ -98,6 +101,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				000000000000000000A00002 /* XCLocalSwiftPackageReference "NotesCore" */,
+				000000000000000000A00012 /* XCLocalSwiftPackageReference "NotesSpeech" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -344,12 +348,20 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = NotesCore;
 		};
+		000000000000000000A00012 /* XCLocalSwiftPackageReference "NotesSpeech" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = NotesSpeech;
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		000000000000000000A00003 /* NotesCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = NotesCore;
+		};
+		000000000000000000A00013 /* NotesSpeech */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = NotesSpeech;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

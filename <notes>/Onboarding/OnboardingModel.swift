@@ -1,3 +1,4 @@
+import NotesSpeech
 import SwiftUI
 
 // Состояние первого входа. Шаги и ветки — по docs/ONBOARDING.md, номера совпадают с кадрами в Figma.
@@ -10,26 +11,6 @@ final class OnboardingModel {
         case welcome = 1, git, github, githubCode, githubDone, models, download, permissions, password
     }
 
-    enum SpeechModel: CaseIterable {
-        case gigaAM, whisperSmall, whisperLargeTurbo
-
-        var name: String {
-            switch self {
-            case .gigaAM: "GigaAM v3"
-            case .whisperSmall: "Whisper small"
-            case .whisperLargeTurbo: "Whisper large-v3 turbo"
-            }
-        }
-
-        var sizeMB: Double {
-            switch self {
-            case .gigaAM: 300
-            case .whisperSmall: 466
-            case .whisperLargeTurbo: 1600
-            }
-        }
-    }
-
     var phase: Phase = .loading
     var step: Step = .welcome
     // Папка хранилища, которую выбрали или создали на шаге 1.
@@ -38,10 +19,14 @@ final class OnboardingModel {
     var wantsGit = false
     // Полное имя репозитория на GitHub после входа, например makark/notes.
     var githubRepository: String?
-    // По умолчанию выбрана GigaAM: лучше всех понимает русский (CONTEXT.md).
-    var speechModel: SpeechModel = .gigaAM
-    // Доля скачанной модели, 0…1.
+    // Модель распознавания: выбор сразу сохраняется — его же берёт надиктовка.
+    var speechModel: SpeechModel = SpeechSettings.model {
+        didSet { SpeechSettings.model = speechModel }
+    }
+    // Доля скачанной модели, 0…1, и когда скачивание началось — для «осталось N мин».
     var downloadProgress: Double = 0
+    var downloadStarted: Date?
+    var downloadFailed = false
     // Меняется при каждом перезапуске, чтобы SwiftUI пересоздал сцену с нуля.
     var runID = UUID()
 
@@ -79,8 +64,9 @@ final class OnboardingModel {
         vaultURL = nil
         wantsGit = false
         githubRepository = nil
-        speechModel = .gigaAM
         downloadProgress = 0
+        downloadStarted = nil
+        downloadFailed = false
         runID = UUID()
     }
 

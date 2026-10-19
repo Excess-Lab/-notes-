@@ -14,6 +14,15 @@ import SwiftUI
             OnboardingView(model: onboarding)
                 // Папка уже выбрана и под git — история ведётся с первой секунды, даже пока открыт онбординг.
                 .task { if let vault = onboarding.vaultURL { SyncController.shared.start(vault: vault) } }
+                // Надиктовка работает с запуска приложения, из любого окна (⌥ space).
+                .task {
+                    DictationController.shared.start()
+                    #if DEBUG
+                    if let path = UserDefaults.standard.string(forKey: "dictationTestFile") {
+                        await DictationController.shared.debugRun(file: URL(fileURLWithPath: path))
+                    }
+                    #endif
+                }
                 // Макет только светлый. Без этого в тёмной теме системы стекло и заголовок темнеют.
                 .preferredColorScheme(.light)
         }

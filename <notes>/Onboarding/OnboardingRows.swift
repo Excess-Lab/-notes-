@@ -1,3 +1,4 @@
+import NotesSpeech
 import SwiftUI
 
 // Строки списков шагов 6–9. Размеры из Figma: капсула 440×53, поля 11/14, промежуток 12,
@@ -49,7 +50,7 @@ struct ModelPicker: View {
 
     var body: some View {
         VStack(spacing: 5) {
-            ForEach(OnboardingModel.SpeechModel.allCases, id: \.self) { option in
+            ForEach(SpeechModel.allCases, id: \.self) { option in
                 let selected = model.speechModel == option
                 GlassRow {
                     RowTexts(title: title(for: option), subtitle: subtitle(for: option),
@@ -66,7 +67,7 @@ struct ModelPicker: View {
         .offset(y: 183 - Layout.sheetTop)
     }
 
-    private func title(for option: OnboardingModel.SpeechModel) -> Text {
+    private func title(for option: SpeechModel) -> Text {
         switch option {
         case .gigaAM:
             Text("GigaAM v3 \(Text("(300 мб, лучше отключить впн)").foregroundStyle(.black.opacity(0.3)))").foregroundStyle(.black)
@@ -77,7 +78,7 @@ struct ModelPicker: View {
         }
     }
 
-    private func subtitle(for option: OnboardingModel.SpeechModel) -> String {
+    private func subtitle(for option: SpeechModel) -> String {
         switch option {
         // В макете под GigaAM подпись от Whisper («whisper small · 466 мб · 2 мин») — похоже на
         // остаток от копирования. Пишем про саму GigaAM; если подпись задумана, поменять здесь.
@@ -96,7 +97,7 @@ struct DownloadRow: View {
         GlassRow {
             DotIcon(glyph: .microphone, size: 18)
             RowTexts(title: Text("распознавание речи").foregroundStyle(Theme.ink),
-                     subtitle: "\(model.speechModel.name.lowercased()), \(remaining)")
+                     subtitle: "\(model.speechModel.displayName.lowercased()), \(remaining)")
             Spacer(minLength: 0)
             HStack(spacing: 8) {
                 ZStack(alignment: .leading) {
@@ -118,9 +119,13 @@ struct DownloadRow: View {
     }
 
     private var remaining: String {
+        if model.downloadFailed { return "не скачалось — проверь интернет" }
         if model.downloadProgress >= 1 { return "скачано" }
-        let minutes = max(1, Int((1 - model.downloadProgress) * OnboardingModel.demoDownloadMinutes.rounded(.up)))
-        return "осталось \(minutes) мин"
+        // Оценка по уже скачанному: сколько ушло на долю p, столько же уйдёт на остаток.
+        guard let started = model.downloadStarted, model.downloadProgress > 0.02 else { return "считаем время" }
+        let elapsed = Date().timeIntervalSince(started)
+        let left = elapsed * (1 - model.downloadProgress) / model.downloadProgress
+        return left < 60 ? "меньше минуты" : "осталось \(Int((left / 60).rounded(.up))) мин"
     }
 }
 
@@ -262,16 +267,20 @@ struct Keycap: View {
 }
 
 extension OnboardingModel {
-    // Сколько «минут» длится демо-скачивание. Настоящее скачивание моделей — этап 3 в ROADMAP,
-    // а пока прогресс просто идёт по таймеру, чтобы шаг 7 было видно в движении.
-    static let demoDownloadMinutes: Double = 2
-
+    // Качает выбранную модель в Application Support (NotesSpeech.ModelStore). Шаг 7 не ждёт конца:
+    // «дальше» можно нажать сразу, скачивание продолжится в фоне.
     func startDownload() {
+        let model = speechModel
         downloadProgress = 0
-        Task { @MainActor in
-            while downloadProgress < 1 {
-                try? await Task.sleep(for: .milliseconds(100))
-                downloadProgress = min(1, downloadProgress + 0.004)
+        downloadFailed = false
+        downloadStarted = Date()
+        Task {
+            do {
+                try await ModelStore.standard.download(model) { value in
+                    Task { @MainActor in self.downloadProgress = value }
+                }
+            } catch {
+                downloadFailed = true
             }
         }
     }

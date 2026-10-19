@@ -23,7 +23,7 @@ Open-source приложение для заметок под **macOS** в ду�
 - **данные** — папка-хранилище с `.md` файлами, которую выбирает пользователь
 - **git** — libgit2 напрямую через C API (пакет `ibrahimcetin/libgit2`, собирается из исходников): `git init`, коммиты, push с токеном в приватный `notes` после входа в GitHub по коду
 - **поиск** — эмбеддинги локально (встроенная `NLContextualEmbedding` или маленькая открытая модель — ещё не решено), индекс в SQLite в Application Support
-- **надиктовка** — локальный Whisper (WhisperKit или whisper.cpp — ещё не решено), модель скачивается по требованию
+- **надиктовка** — держишь ⌥ space → пишем микрофон → распознаём локально → текст в буфер. GigaAM v3 с пунктуацией через sherpa-onnx (Apache-2.0) и Whisper через WhisperKit (MIT); модели качаются по требованию
 - **календарь** — EventKit
 - **зависимости** — только Swift Package Manager и только открытые
 
@@ -38,6 +38,10 @@ Open-source приложение для заметок под **macOS** в ду�
 <notes>/Onboarding/           первый вход: сцена загрузки, шаги, строки списков, вход в GitHub
 <notes>/Vault/                папка хранилища (security-scoped bookmark), Touch ID
 <notes>/Fonts/                Martian Grotesk + OFL.txt
+<notes>/Dictation/            надиктовка: запись, хоткей ⌥ space, сфера поверх окон, выбор модели
+NotesSpeech/                  распознавание речи: каталог и скачивание моделей, GigaAM (sherpa-onnx), Whisper (WhisperKit)
+NotesSpeech/Vendor/           SherpaOnnx.xcframework — собирается скриптом, в git не лежит
+Scripts/fetch-sherpa-onnx.sh  скачивает готовую сборку sherpa-onnx, проверяет суммы, собирает xcframework
 NotesCore/                    логика без UI, Swift-пакет со своими тестами (`swift test`)
 NotesCore/.../GitVault.swift  git в папке: init, коммиты, remote, push
 NotesCore/.../GitVault+Pull.swift clone, fetch, pull и разбор конфликтов без потери текста
@@ -78,6 +82,13 @@ docs/ROADMAP.md           этапы работ
 встраивать и распространять можно, текст лицензии лежит рядом, `<notes>/Fonts/OFL.txt`, — не удалять.
 В приложении только нужные начертания: xWdUlt (логотип), xWdxBd (заголовки), StdRg и StdMd (текст).
 
+**Перед первой сборкой** — собрать sherpa-onnx (распознавание GigaAM). Бинарники ~100 МБ в git не лежат,
+скрипт качает их с релиза k2-fsa/sherpa-onnx и проверяет контрольные суммы:
+
+```bash
+./Scripts/fetch-sherpa-onnx.sh
+```
+
 ```bash
 open "<notes>.xcodeproj"
 ```
@@ -107,6 +118,10 @@ open "build/Build/Products/Debug/<notes>.app"
   id берётся из `CGWindowListCopyWindowInfo`). Для этого у Claude должно быть разрешение
   «Запись экрана» в настройках macOS.
 - Тестовое хранилище держи **вне** репозитория: в нём будут свои git-коммиты.
+- Проверить надиктовку без микрофона: положи WAV (16 кГц, 16 бит, моно) в контейнер приложения
+  (`~/Library/Containers/devplaceholder.WXQXCR6Q.-notes-/Data/tmp/`) и запусти с
+  `--args -dictationTestFile <путь>` — запись пройдёт весь путь до буфера обмена.
+- Окно не открылось, хотя приложение запущено — macOS «восстановила» ноль окон: запускай `open -F`.
 - Запуск сразу с шага онбординга: `open "build/Build/Products/Debug/<notes>.app" --args -onboardingStep 4` (10 — финал); ⌘] — следующий шаг.
 
 ---
@@ -132,6 +147,15 @@ open "build/Build/Products/Debug/<notes>.app"
 ```bash
 cd NotesCore && swift test
 ```
+
+Распознавание речи — в `NotesSpeech`. Тесты с настоящими моделями включаются переменными, потому что
+модели весят сотни мегабайт:
+
+```bash
+cd NotesSpeech && NOTES_GIGAAM_DIR=<папка распакованной GigaAM> swift test
+```
+
+`NOTES_WHISPER_TEST=1` дополнительно качает Whisper small (464 МБ) и распознаёт ту же запись.
 
 Сейчас покрыто: git в папке (init на ветке main, .gitignore, коммиты, пустые коммиты, push в
 локальный bare-репозиторий) и GitHub (разбор кода, ожидание, slow_down, истёкший код, отказ,
@@ -212,6 +236,10 @@ cd NotesCore && swift test
 - **Слои сверяй по JSON узла Figma**, а не по картинке: маски, поворот (`relativeTransform`),
   что лежит поверх чего. По картинке шапку сделали на всю высоту, а в макете она 66 px с маской.
 - Скругления углов сцены не нужны: у окна macOS свои углы.
+- **`installTap` в macOS 27 устарел.** Новый метод помечен NS_REFINED_FOR_SWIFT, а Swift-обёртки в SDK
+  нет: импортёр делает его бросающим с пустым параметром — `try input.__installTap(…, error: ()) { … }`.
+- **Колбэк записи звука идёт не с главного потока**, а в проекте всё по умолчанию на главном акторе.
+  Класс записи помечен `nonisolated`, данные под замком — иначе падение на проверке изоляции.
 
 **Figma через MCP (use_figma):**
 
