@@ -14,6 +14,8 @@ import SwiftUI
             OnboardingView(model: onboarding)
                 // Папка уже выбрана и под git — история ведётся с первой секунды, даже пока открыт онбординг.
                 .task { if let vault = onboarding.vaultURL { SyncController.shared.start(vault: vault) } }
+                // Закрываем заметки, когда Mac заблокировали или приложение долго не трогали.
+                .task { AppLock.shared.start(model: onboarding) }
                 // Надиктовка работает с запуска приложения, из любого окна (⌥ space).
                 .task {
                     DictationController.shared.start()

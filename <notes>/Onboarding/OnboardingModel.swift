@@ -32,13 +32,17 @@ final class OnboardingModel {
     var downloadFailed = false
     // Окно ввода пинкода поверх шага 9.
     var pinEntryShown = false
+    // Лист входа уже поднят: после загрузки при запуске или сразу, если заблокировали во время работы.
+    var lockReady = false
     // Меняется при каждом перезапуске, чтобы SwiftUI пересоздал сцену с нуля.
     var runID = UUID()
 
     init() {
         vaultURL = VaultStore.restore()
-        if UserDefaults.standard.bool(forKey: Self.completedKey), PinStore().isSet || BiometricLock.isEnabled {
-            phase = .locked
+        // Перезапуск сразу после работы пускает без пинкода (LockPolicy), иначе — вход.
+        if UserDefaults.standard.bool(forKey: Self.completedKey), Self.lockConfigured {
+            let needs = LockPolicy.needsUnlockAtLaunch(lastSeenUnlocked: LockMemory().lastSeenUnlocked)
+            phase = needs ? .locked : .unlocked
         }
         #if DEBUG
         // Запуск сразу с нужного шага, без загрузки: `open <notes>.app --args -onboardingStep 4`.
@@ -56,6 +60,35 @@ final class OnboardingModel {
         #endif
     }
 
+    // Есть чем закрываться: пинкод или Touch ID.
+    static var lockConfigured: Bool { PinStore().isSet || BiometricLock.isEnabled }
+
+    // Mac заблокировали, он уснул или приложение долго не трогали (AppLock).
+    func lock() {
+        guard phase == .unlocked else { return }
+        pinEntryShown = false
+        withAnimation(.smooth(duration: 0.8)) {
+            lockReady = true
+            phase = .locked
+        }
+    }
+
+    func unlock() {
+        LockMemory().lastSeenUnlocked = Date()
+        withAnimation(.smooth(duration: 0.8)) { phase = .unlocked }
+    }
+
+    // «забыл пинкод»: хозяин Mac подтвердил себя — паузу снимаем и даём задать новый пинкод.
+    func resetPin() {
+        Task {
+            guard await BiometricLock.verifyOwner() else { return }
+            var limiter = LockMemory().limiter
+            limiter.reset()
+            LockMemory().limiter = limiter
+            withAnimation(.smooth(duration: 0.5)) { pinEntryShown = true }
+        }
+    }
+
     func go(to step: Step) {
         withAnimation(.smooth(duration: 0.8)) { self.step = step }
     }
@@ -71,6 +104,7 @@ final class OnboardingModel {
 
     func restart() {
         phase = .loading
+        lockReady = false
         step = .welcome
         vaultURL = nil
         wantsGit = false

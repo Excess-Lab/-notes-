@@ -32,11 +32,10 @@ private struct LoadingScene: View {
     @State private var logoVisible = false
     @State private var contentVisible = false
     @State private var finaleVisible = false
-    @State private var unlockVisible = false
 
     // Лист поднят: на шагах и при входе после загрузки (вход выглядит как шаг).
     private var isSteps: Bool {
-        model.phase == .steps || model.phase == .unlocked || (model.phase == .locked && unlockVisible)
+        model.phase == .steps || model.phase == .unlocked || (model.phase == .locked && model.lockReady)
     }
     private var isFinished: Bool { model.phase == .finished }
     // Логотип в шапке: на шагах, при входе с карточкой и после входа.
@@ -80,8 +79,10 @@ private struct LoadingScene: View {
                 if model.pinEntryShown {
                     ZStack(alignment: .topLeading) {
                         Color.white.opacity(0.45)
-                        PinEntrySheet { _ in
+                        PinEntrySheet { saved in
                             withAnimation(.smooth(duration: 0.5)) { model.pinEntryShown = false }
+                            // Новый пинкод задали после «забыл пинкод» — это и есть вход.
+                            if saved, model.phase == .locked { model.unlock() }
                         }
                         .offset(x: 130, y: 130)
                     }
@@ -160,7 +161,7 @@ private struct LoadingScene: View {
         if model.phase == .locked, reduceMotion {
             slatWidth = Layout.finalSlatWidth
             logoVisible = true
-            unlockVisible = true
+            model.lockReady = true
             contentVisible = true
             return
         }
@@ -172,7 +173,7 @@ private struct LoadingScene: View {
         try? await Task.sleep(for: .seconds(2.0))
         if model.phase == .locked || model.phase == .unlocked {
             // Логотип уезжает в шапку, карточка входа проявляется на его месте.
-            withAnimation(.smooth(duration: 1.3)) { unlockVisible = true }
+            withAnimation(.smooth(duration: 1.3)) { model.lockReady = true }
             try? await Task.sleep(for: .seconds(0.35))
             contentVisible = true
             return
@@ -215,9 +216,7 @@ private struct StepSheet: View {
             // Ввод создаётся, только когда лист поднят: иначе он ловил бы цифры и звал Touch ID
             // ещё во время загрузки.
             if contentVisible {
-                UnlockStep {
-                    withAnimation(.smooth(duration: 0.8)) { model.phase = .unlocked }
-                }
+                UnlockStep(paused: model.pinEntryShown, onForgot: model.resetPin, onUnlock: model.unlock)
                 .id("unlock")
             }
         case .unlocked:

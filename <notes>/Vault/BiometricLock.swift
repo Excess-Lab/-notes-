@@ -23,6 +23,13 @@ enum BiometricLock {
         return ok
     }
 
+    // «забыл пинкод»: проверяем, что это хозяин Mac — паролем от учётной записи или Touch ID.
+    // Окно macOS: «<notes> пытается сбросить пинкод».
+    static func verifyOwner() async -> Bool {
+        (try? await LAContext().evaluatePolicy(.deviceOwnerAuthentication,
+                                                localizedReason: "сбросить пинкод")) ?? false
+    }
+
     // Вход при запуске. Окно macOS: «<notes> пытается открыть заметки».
     static func unlock() async -> Bool {
         let context = LAContext()
