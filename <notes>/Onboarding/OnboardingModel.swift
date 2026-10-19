@@ -1,3 +1,4 @@
+import NotesCore
 import NotesSpeech
 import SwiftUI
 
@@ -5,7 +6,9 @@ import SwiftUI
 @Observable
 final class OnboardingModel {
     // loading — сцена загрузки, steps — лист с шагами, finished — «все готово» на стекле.
-    enum Phase { case loading, steps, finished }
+    // locked — повторный запуск с пинкодом или Touch ID: та же загрузка, потом карточка входа;
+    // unlocked — вход пройден (основного экрана пока нет, остаются планки с логотипом).
+    enum Phase { case loading, steps, finished, locked, unlocked }
 
     enum Step: Int, CaseIterable {
         case welcome = 1, git, github, githubCode, githubDone, models, download, permissions, password
@@ -34,17 +37,22 @@ final class OnboardingModel {
 
     init() {
         vaultURL = VaultStore.restore()
+        if UserDefaults.standard.bool(forKey: Self.completedKey), PinStore().isSet || BiometricLock.isEnabled {
+            phase = .locked
+        }
         #if DEBUG
         // Запуск сразу с нужного шага, без загрузки: `open <notes>.app --args -onboardingStep 4`.
         // 10 — финальный экран. Нужно, чтобы снимать каждый шаг для сверки с Figma.
         let start = UserDefaults.standard.integer(forKey: "onboardingStep")
         if start == 10 {
             phase = .finished
+        } else if start == 11 {
+            phase = .locked
         } else if let step = Step(rawValue: start) {
             phase = .steps
             self.step = step
         }
-        pinEntryShown = UserDefaults.standard.string(forKey: "pinPreview") != nil
+        pinEntryShown = step == .password && phase == .steps && UserDefaults.standard.string(forKey: "pinPreview") != nil
         #endif
     }
 
@@ -77,7 +85,7 @@ final class OnboardingModel {
     func debugNext() {
         switch phase {
         case .loading: withAnimation(.smooth(duration: 1.3)) { phase = .steps }
-        case .finished: restart()
+        case .finished, .locked, .unlocked: restart()
         case .steps:
             if let next = Step(rawValue: step.rawValue + 1) { go(to: next) } else { finish() }
         }

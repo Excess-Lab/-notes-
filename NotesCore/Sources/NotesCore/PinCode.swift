@@ -49,6 +49,36 @@ public struct PinEntry: Equatable, Sendable {
     }
 }
 
+// Ввод пинкода при запуске: четвёртая цифра сразу проверяется. Неверный — ячейки пустеют,
+// а «неверный пинкод» висит до первой новой цифры.
+public struct PinUnlock: Equatable, Sendable {
+    public enum Stage: Equatable, Sendable { case enter, wrong, unlocked }
+
+    public private(set) var stage: Stage = .enter
+    public private(set) var digits: [Int] = []
+
+    public init() {}
+
+    public mutating func type(_ character: Character, verify: (String) -> Bool) {
+        guard stage != .unlocked, let digit = character.wholeNumberValue, character.isASCII,
+              digits.count < PinEntry.length else { return }
+        if stage == .wrong { stage = .enter }
+        digits.append(digit)
+        guard digits.count == PinEntry.length else { return }
+        if verify(digits.map(String.init).joined()) {
+            stage = .unlocked
+        } else {
+            digits = []
+            stage = .wrong
+        }
+    }
+
+    public mutating func deleteBackward() {
+        guard stage != .unlocked, !digits.isEmpty else { return }
+        digits.removeLast()
+    }
+}
+
 // Пинкод храним не сам, а его производную: PBKDF2-SHA256 с солью. Четыре цифры перебираются
 // быстро при любом хеше, поэтому настоящая защита — Связка ключей, а хеш нужен, чтобы пинкод
 // не лежал открытым текстом даже там.

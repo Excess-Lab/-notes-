@@ -22,4 +22,13 @@ enum BiometricLock {
         if ok { UserDefaults.standard.set(true, forKey: enabledKey) }
         return ok
     }
+
+    // Вход при запуске. Окно macOS: «<notes> пытается открыть заметки».
+    static func unlock() async -> Bool {
+        let context = LAContext()
+        // Без этого в системном окне появилась бы кнопка «Ввести пароль» от учётки Mac — у нас свой пинкод.
+        context.localizedFallbackTitle = ""
+        return (try? await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+                                                  localizedReason: "открыть заметки")) ?? false
+    }
 }

@@ -44,6 +44,27 @@ struct PinCodeTests {
         #expect(entry.digits == [1])
     }
 
+    @Test("при входе верный пинкод открывает")
+    func unlockWithRightPin() {
+        let hash = PinHash(pin: "2580")
+        var unlock = PinUnlock()
+        for character in "2580" { unlock.type(character, verify: hash.matches) }
+        #expect(unlock.stage == .unlocked)
+    }
+
+    // Иначе после ошибки в ячейках оставались бы старые цифры, и пятая просто терялась.
+    @Test("при входе неверный пинкод очищает ячейки, новая цифра начинает заново")
+    func unlockWithWrongPin() {
+        let hash = PinHash(pin: "2580")
+        var unlock = PinUnlock()
+        for character in "2581" { unlock.type(character, verify: hash.matches) }
+        #expect(unlock.stage == .wrong)
+        #expect(unlock.digits.isEmpty)
+        unlock.type("2", verify: hash.matches)
+        #expect(unlock.stage == .enter)
+        #expect(unlock.digits == [2])
+    }
+
     @Test("хеш проверяет свой пинкод и не принимает чужой")
     func hashMatches() {
         let hash = PinHash(pin: "0420")

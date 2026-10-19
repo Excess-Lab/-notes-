@@ -32,9 +32,17 @@ private struct LoadingScene: View {
     @State private var logoVisible = false
     @State private var contentVisible = false
     @State private var finaleVisible = false
+    @State private var unlockVisible = false
 
-    private var isSteps: Bool { model.phase == .steps }
+    // Лист поднят: на шагах и при входе после загрузки (вход выглядит как шаг).
+    private var isSteps: Bool {
+        model.phase == .steps || model.phase == .unlocked || (model.phase == .locked && unlockVisible)
+    }
     private var isFinished: Bool { model.phase == .finished }
+    // Логотип в шапке: на шагах, при входе с карточкой и после входа.
+    private var logoInHeader: Bool {
+        isSteps
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -63,6 +71,7 @@ private struct LoadingScene: View {
 
                 finale
                     .position(x: size.width / 2, y: 0)
+
             }
             // Пинкод поверх всего окна (кадры 9.1–9.3): под ним шаг размыт и высветлен —
             // в Figma Background blur 12 и белый 45 %.
@@ -96,16 +105,15 @@ private struct LoadingScene: View {
             .kerning(Theme.tracking(-5, size: 30))
             .foregroundStyle(.black)
             // В шапке логотип вдвое меньше (15 вместо 30). На финале он улетает вверх и гаснет.
-            .scaleEffect(isSteps || isFinished ? 0.5 : (logoVisible ? 1 : 0.92))
+            .scaleEffect(logoInHeader || isFinished ? 0.5 : (logoVisible ? 1 : 0.92))
             .opacity(logoVisible && !isFinished ? 1 : 0)
             .blur(radius: logoVisible && !isFinished ? 0 : 10)
     }
 
     private func logoY(in size: CGSize) -> CGFloat {
         switch model.phase {
-        case .loading: size.height / 2
-        case .steps: Layout.logoTop
         case .finished: -Layout.logoTop
+        default: logoInHeader ? Layout.logoTop : size.height / 2
         }
     }
 
@@ -142,10 +150,17 @@ private struct LoadingScene: View {
             finaleVisible = true
             return
         }
-        if reduceMotion || model.phase == .steps {
+        if (reduceMotion && model.phase != .locked) || model.phase == .steps {
             slatWidth = Layout.finalSlatWidth
             logoVisible = true
             model.phase = .steps
+            contentVisible = true
+            return
+        }
+        if model.phase == .locked, reduceMotion {
+            slatWidth = Layout.finalSlatWidth
+            logoVisible = true
+            unlockVisible = true
             contentVisible = true
             return
         }
@@ -155,6 +170,13 @@ private struct LoadingScene: View {
 
         // Пока настоящей загрузки нет, держим сцену фиксированное время.
         try? await Task.sleep(for: .seconds(2.0))
+        if model.phase == .locked || model.phase == .unlocked {
+            // Логотип уезжает в шапку, карточка входа проявляется на его месте.
+            withAnimation(.smooth(duration: 1.3)) { unlockVisible = true }
+            try? await Task.sleep(for: .seconds(0.35))
+            contentVisible = true
+            return
+        }
         withAnimation(.smooth(duration: 1.3)) { model.phase = .steps }
         // Текст начинает проявляться, пока лист ещё едет, — без паузы и без рывка.
         try? await Task.sleep(for: .seconds(0.35))
@@ -179,11 +201,30 @@ private struct StepSheet: View {
                 )
                 .shadow(color: .black.opacity(0.07), radius: 10, y: -2)
 
-            OnboardingStepContent(model: model)
-                .id(model.step)
+            content
                 // Старый шаг уходит в размытие, новый из него проявляется.
                 .transition(.blurReplace)
                 .reveal(contentVisible)
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        switch model.phase {
+        case .locked:
+            // Ввод создаётся, только когда лист поднят: иначе он ловил бы цифры и звал Touch ID
+            // ещё во время загрузки.
+            if contentVisible {
+                UnlockStep {
+                    withAnimation(.smooth(duration: 0.8)) { model.phase = .unlocked }
+                }
+                .id("unlock")
+            }
+        case .unlocked:
+            // После входа лист пустой — основного экрана пока нет.
+            Color.clear.id("unlocked")
+        default:
+            OnboardingStepContent(model: model).id(model.step)
         }
     }
 }

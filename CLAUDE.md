@@ -35,7 +35,7 @@ Open-source приложение для заметок под **macOS** в ду�
 <notes>/Theme.swift           цвета и шрифты из макета, регистрация шрифтов
 <notes>/DotIcon.swift         точечные иконки (битмапы как в Figma)
 <notes>/GitHubApp.swift       client id приложения на GitHub для входа по коду
-<notes>/Onboarding/           первый вход: сцена загрузки, шаги, строки списков, вход в GitHub
+<notes>/Onboarding/           первый вход: сцена загрузки, шаги, строки списков, вход в GitHub, пинкод и вход по нему
 <notes>/Vault/                папка хранилища (security-scoped bookmark), Touch ID
 <notes>/Fonts/                Martian Grotesk + OFL.txt
 <notes>/Dictation/            надиктовка: запись, хоткей ⌥ space, сфера поверх окон, выбор модели
@@ -126,7 +126,8 @@ open "build/Build/Products/Debug/<notes>.app"
 - Окно не открылось, хотя приложение запущено — macOS «восстановила» ноль окон: запускай `open -F`.
 - Окно пинкода в нужном состоянии: `--args -onboardingStep 9 -pinPreview "1234 1"` (набранные цифры,
   пробел пропускается; 8 одинаковых по четыре — сохранит пинкод, потом `security delete-generic-password -s notes.pin`).
-- Запуск сразу с шага онбординга: `open "build/Build/Products/Debug/<notes>.app" --args -onboardingStep 4` (10 — финал); ⌘] — следующий шаг.
+- Запуск сразу с шага онбординга: `open "build/Build/Products/Debug/<notes>.app" --args -onboardingStep 4` (10 — финал,
+  11 — вход по пинкоду; с `-pinPreview 0000` — сразу набранные цифры); ⌘] — следующий шаг.
 
 ---
 
@@ -246,6 +247,11 @@ cd NotesSpeech && NOTES_GIGAAM_DIR=<папка распакованной GigaAM
 - Скругления углов сцены не нужны: у окна macOS свои углы.
 - **`installTap` в macOS 27 устарел.** Новый метод помечен NS_REFINED_FOR_SWIFT, а Swift-обёртки в SDK
   нет: импортёр делает его бросающим с пустым параметром — `try input.__installTap(…, error: ()) { … }`.
+- **После пересборки приложение «зависает» на чтении пинкода или токена GitHub.** Это окно macOS
+  «<notes> хочет использовать данные из Связки ключей» с запросом пароля. Сборка подписана ad-hoc (без
+  команды разработчика), и для Связки ключей каждая пересборка — новое приложение. Пароль за автора
+  не вводим: удаляем тестовую запись (`security delete-generic-password -s notes.pin`) и сохраняем её
+  заново той же сборкой. Насовсем лечится командой (Team) в Signing & Capabilities.
 - **Колбэк записи звука идёт не с главного потока**, а в проекте всё по умолчанию на главном акторе.
   Класс записи помечен `nonisolated`, данные под замком — иначе падение на проверке изоляции.
 
