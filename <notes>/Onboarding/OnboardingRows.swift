@@ -1,3 +1,4 @@
+import NotesCore
 import NotesSpeech
 import SwiftUI
 
@@ -165,18 +166,26 @@ struct PermissionRows: View {
     }
 }
 
-// Шаг 9. Окно ввода пинкода автор ещё рисует, поэтому «настроить» у пинкода пока ничего не делает.
-// Pass-key — вход по Touch ID: работает уже сейчас.
+// Шаг 9. «настроить» у пинкода открывает окно ввода поверх шага (PinEntrySheet).
+// Pass-key — вход по Touch ID.
 struct PasswordRows: View {
+    let model: OnboardingModel
     @State private var biometricsOn = BiometricLock.isEnabled
+    @State private var pinSet = PinStore().isSet
 
     var body: some View {
         VStack(spacing: 5) {
             GlassRow {
                 RowTexts(title: Text("пинкод").foregroundStyle(Theme.ink), subtitle: "4 символа")
                 Spacer(minLength: 0)
-                Button("настроить") {}
+                if pinSet {
+                    GrantedLabel(text: "включено")
+                } else {
+                    Button("настроить") {
+                        withAnimation(.smooth(duration: 0.5)) { model.pinEntryShown = true }
+                    }
                     .buttonStyle(WhitePillStyle())
+                }
             }
             GlassRow(height: 50) {
                 Text("pass-key")
@@ -200,6 +209,8 @@ struct PasswordRows: View {
             }
         }
         .offset(x: 48 - 60, y: 157 - Layout.sheetTop)
+        // Окно пинкода закрылось — перечитываем, сохранили ли.
+        .onChange(of: model.pinEntryShown) { _, shown in if !shown { pinSet = PinStore().isSet } }
     }
 }
 

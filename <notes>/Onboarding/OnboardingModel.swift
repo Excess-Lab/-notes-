@@ -27,6 +27,8 @@ final class OnboardingModel {
     var downloadProgress: Double = 0
     var downloadStarted: Date?
     var downloadFailed = false
+    // Окно ввода пинкода поверх шага 9.
+    var pinEntryShown = false
     // Меняется при каждом перезапуске, чтобы SwiftUI пересоздал сцену с нуля.
     var runID = UUID()
 
@@ -42,6 +44,7 @@ final class OnboardingModel {
             phase = .steps
             self.step = step
         }
+        pinEntryShown = UserDefaults.standard.string(forKey: "pinPreview") != nil
         #endif
     }
 

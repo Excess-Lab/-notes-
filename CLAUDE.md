@@ -48,6 +48,7 @@ NotesCore/.../GitVault+Pull.swift clone, fetch, pull и разбор конфл�
 NotesCore/.../GitHub.swift    вход по коду (Device Flow), создание приватного notes
 NotesCore/.../TokenStore.swift токен GitHub в Связке ключей
 NotesCore/.../Sync.swift      коммит накопившегося, подпись коммита, отправка раз в сутки
+NotesCore/.../PinCode.swift   пинкод: ввод «придумай → повтори», PBKDF2-хеш с солью в Связке ключей
 NotesCore/.../HotKeyCombo.swift сочетание надиктовки: подпись «⌥ space», проверка, хранение
 NotesCore/.../FolderWatcher.swift слежка за папкой (FSEvents), .git пропускаем — для поиска
 <notes>/Vault/SyncController.swift раз в час: коммит и проверка, не пора ли отправлять
@@ -123,6 +124,8 @@ open "build/Build/Products/Debug/<notes>.app"
   (`~/Library/Containers/devplaceholder.WXQXCR6Q.-notes-/Data/tmp/`) и запусти с
   `--args -dictationTestFile <путь>` — запись пройдёт весь путь до буфера обмена.
 - Окно не открылось, хотя приложение запущено — macOS «восстановила» ноль окон: запускай `open -F`.
+- Окно пинкода в нужном состоянии: `--args -onboardingStep 9 -pinPreview "1234 1"` (набранные цифры,
+  пробел пропускается; 8 одинаковых по четыре — сохранит пинкод, потом `security delete-generic-password -s notes.pin`).
 - Запуск сразу с шага онбординга: `open "build/Build/Products/Debug/<notes>.app" --args -onboardingStep 4` (10 — финал); ⌘] — следующий шаг.
 
 ---
@@ -163,6 +166,7 @@ cd NotesSpeech && NOTES_GIGAAM_DIR=<папка распакованной GigaAM
 создание notes и уже существующий notes), синхронизация (подпись коммита, пустых коммитов нет,
 отправка раз в сутки и только если есть что отправлять), слежка за папкой и pull с двумя «Маками»
 (догнать сервер, слияние, конфликт — обе версии, правка сильнее удаления, второй Мак с чужой историей)
+пинкод (придумать и повторить, несовпадение, только цифры, хеш с солью)
 и горячая клавиша (подпись, порядок ⌃⌥⇧⌘, без модификатора нельзя, системные сочетания, хранение). Сеть в тестах
 подменяется (`HTTPClient`), в GitHub не ходим; «сервер» для push — bare-репозиторий во временной папке.
 

@@ -56,7 +56,7 @@ struct OnboardingStepContent: View {
                        text: nil,
                        primary: ("дальше", { model.finish() }),
                        primaryY: 359) {
-                PasswordRows()
+                PasswordRows(model: model)
             }
         }
     }

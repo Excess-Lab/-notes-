@@ -64,6 +64,21 @@ private struct LoadingScene: View {
                 finale
                     .position(x: size.width / 2, y: 0)
             }
+            // Пинкод поверх всего окна (кадры 9.1–9.3): под ним шаг размыт и высветлен —
+            // в Figma Background blur 12 и белый 45 %.
+            .blur(radius: model.pinEntryShown ? 6 : 0)
+            .overlay {
+                if model.pinEntryShown {
+                    ZStack(alignment: .topLeading) {
+                        Color.white.opacity(0.45)
+                        PinEntrySheet { _ in
+                            withAnimation(.smooth(duration: 0.5)) { model.pinEntryShown = false }
+                        }
+                        .offset(x: 130, y: 130)
+                    }
+                    .transition(.opacity.combined(with: .blurReplace))
+                }
+            }
         }
         .clipped()
         .task { await run() }
@@ -191,12 +206,13 @@ struct CoralCapsuleStyle: ButtonStyle {
 // Мелкая серая ссылка под кнопкой («пропустить», «назад»): Std Rg 8, прозрачность 20 %.
 struct QuietLinkStyle: ButtonStyle {
     var size: CGFloat = 8
+    var opacity: Double = 0.2
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(Martian.body.font(size))
             .kerning(Theme.tracking(-7, size: size))
-            .foregroundStyle(.black.opacity(configuration.isPressed ? 0.4 : 0.2))
+            .foregroundStyle(.black.opacity(configuration.isPressed ? opacity + 0.2 : opacity))
             .contentShape(Rectangle())
     }
 }
