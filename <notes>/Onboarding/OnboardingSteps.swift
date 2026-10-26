@@ -166,7 +166,7 @@ struct StepLayout<Middle: View>: View {
                 Text(text)
                     .font(Martian.body.font(13))
                     .kerning(Theme.tracking(-7, size: 13))
-                    .foregroundStyle(.black.opacity(0.3))
+                    .foregroundStyle(Theme.fg.opacity(0.3))
                     .multilineTextAlignment(.center)
                     .frame(width: 380)
                     .offset(y: 137 - Layout.sheetTop)
@@ -222,6 +222,8 @@ struct DeviceCodeCapsule: View {
             caption.offset(y: 281 - 207)
         }
         .offset(y: 207 - Layout.sheetTop)
+        // В тёмном кадре «код гитхаба(4)» капсула с кодом остаётся светлой.
+        .environment(\.colorScheme, .light)
         .onAppear {
             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) { glow = true }
         }

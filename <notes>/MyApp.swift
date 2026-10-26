@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main struct MyApp: App {
@@ -5,6 +6,12 @@ import SwiftUI
 
     init() {
         FontRegistrar.registerBundledFonts()
+        #if DEBUG
+        // Снимать тёмную тему, не переключая систему: `--args -appearance dark`.
+        if UserDefaults.standard.string(forKey: "appearance") == "dark" {
+            NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        }
+        #endif
     }
 
     var body: some Scene {
@@ -28,8 +35,6 @@ import SwiftUI
                     }
                     #endif
                 }
-                // Макет только светлый. Без этого в тёмной теме системы стекло и заголовок темнеют.
-                .preferredColorScheme(.light)
         }
         .windowResizability(.contentSize)
         .commands {

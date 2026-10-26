@@ -17,10 +17,10 @@ struct GlassRow<Content: View>: View {
             .frame(width: 440, height: height, alignment: .leading)
             .background {
                 Capsule()
-                    .fill(LinearGradient(colors: [.black.opacity(0.045), .black.opacity(0.018), .clear],
+                    .fill(LinearGradient(colors: [Theme.fg.opacity(0.045), Theme.fg.opacity(0.018), .clear],
                                          startPoint: .leading, endPoint: .trailing))
                     .overlay(Capsule().strokeBorder(
-                        LinearGradient(colors: [.white, .white.opacity(0)], startPoint: .top, endPoint: .bottom),
+                        LinearGradient(colors: [Theme.edge, Theme.edge.opacity(0)], startPoint: .top, endPoint: .bottom),
                         lineWidth: 1))
                     .blur(radius: 0.6)
             }
@@ -40,7 +40,7 @@ private struct RowTexts: View {
             Text(subtitle)
                 .font(Martian.body.font(11))
                 .kerning(Theme.tracking(-7, size: 11))
-                .foregroundStyle(.black.opacity(subtitleOpacity))
+                .foregroundStyle(Theme.fg.opacity(subtitleOpacity))
         }
     }
 }
@@ -71,11 +71,11 @@ struct ModelPicker: View {
     private func title(for option: SpeechModel) -> Text {
         switch option {
         case .gigaAM:
-            Text("GigaAM v3 \(Text("(300 мб, лучше отключить впн)").foregroundStyle(.black.opacity(0.3)))").foregroundStyle(.black)
+            Text("GigaAM v3 \(Text("(300 мб, лучше отключить впн)").foregroundStyle(Theme.fg.opacity(0.3)))").foregroundStyle(Theme.fg)
         case .whisperSmall:
-            Text("Whisper small (466 мб)").foregroundStyle(.black)
+            Text("Whisper small (466 мб)").foregroundStyle(Theme.fg)
         case .whisperLargeTurbo:
-            Text("Whisper large-v3 turbo \(Text("(1,6 гб.)").foregroundStyle(.black.opacity(0.3)))").foregroundStyle(.black)
+            Text("Whisper large-v3 turbo \(Text("(1,6 гб.)").foregroundStyle(Theme.fg.opacity(0.3)))").foregroundStyle(Theme.fg)
         }
     }
 
@@ -102,14 +102,14 @@ struct DownloadRow: View {
             Spacer(minLength: 0)
             HStack(spacing: 8) {
                 ZStack(alignment: .leading) {
-                    Capsule().fill(Color(white: 249 / 255))
+                    Capsule().fill(Theme.sheet)
                     Capsule().fill(Theme.coral)
                         .frame(width: 90 * model.downloadProgress)
                 }
                 .frame(width: 90, height: 6)
                 Text("\(Int(model.downloadProgress * 100))%")
                     .font(Martian.body.font(11))
-                    .foregroundStyle(.black.opacity(0.3))
+                    .foregroundStyle(Theme.fg.opacity(0.3))
                     .monospacedDigit()
                     // «100%» шире, чем «42%»: без этого в 30 pt знак процента переносился на вторую строку.
                     .lineLimit(1)
@@ -207,7 +207,7 @@ struct PasswordRows: View {
                     Text("нет touch id")
                         .font(Martian.body.font(13))
                         .kerning(Theme.tracking(-7, size: 13))
-                        .foregroundStyle(.black.opacity(0.3))
+                        .foregroundStyle(Theme.fg.opacity(0.3))
                 }
             }
         }
@@ -241,8 +241,8 @@ struct WhitePillStyle: ButtonStyle {
             .foregroundStyle(Theme.ink)
             .padding(.vertical, 6)
             .padding(.horizontal, 14)
-            .background(Capsule().fill(.white.opacity(configuration.isPressed ? 0.8 : 0.55)))
-            .background(Capsule().fill(.white).blur(radius: 2).opacity(0.6))
+            .background(Capsule().fill(Theme.bg.opacity(configuration.isPressed ? 0.8 : 0.55)))
+            .background(Capsule().fill(Theme.bg).blur(radius: 2).opacity(0.6))
     }
 }
 
@@ -252,7 +252,7 @@ struct QuietPillStyle: ButtonStyle {
         configuration.label
             .font(Martian.body.font(13))
             .kerning(Theme.tracking(-7, size: 13))
-            .foregroundStyle(.black.opacity(configuration.isPressed ? 0.5 : 0.3))
+            .foregroundStyle(Theme.fg.opacity(configuration.isPressed ? 0.5 : 0.3))
             .padding(.vertical, 6)
             .padding(.horizontal, 14)
             .contentShape(Capsule())
@@ -266,10 +266,10 @@ struct Keycap: View {
         Text(text)
             .font(Martian.body.font(11))
             .kerning(Theme.tracking(-7, size: 11))
-            .foregroundStyle(.black.opacity(0.55))
+            .foregroundStyle(Theme.fg.opacity(0.55))
             .padding(.vertical, 2)
             .padding(.horizontal, 6)
-            .background(RoundedRectangle(cornerRadius: 4).fill(.white.opacity(0.8)))
+            .background(RoundedRectangle(cornerRadius: 4).fill(Theme.bg.opacity(0.8)))
     }
 }
 

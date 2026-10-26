@@ -32,7 +32,7 @@ struct UnlockStep: View {
                 Text(subtitle(wait: wait))
                     .font(Martian.body.font(13))
                     .kerning(Theme.tracking(-7, size: 13))
-                    .foregroundStyle(unlock.stage == .wrong || wait != nil ? Theme.coral : .black.opacity(0.3))
+                    .foregroundStyle(unlock.stage == .wrong || wait != nil ? Theme.coral : Theme.fg.opacity(0.3))
                     .contentTransition(.opacity)
                     .offset(y: 137 - Layout.sheetTop)
                 if hasPin {

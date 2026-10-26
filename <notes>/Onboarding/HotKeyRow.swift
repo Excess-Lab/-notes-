@@ -20,7 +20,7 @@ struct HotKeyRow: View {
                 Text(hint ?? (recording ? "нажми сочетание, esc — отмена" : "надиктовка из любого приложения"))
                     .font(Martian.body.font(11))
                     .kerning(Theme.tracking(-7, size: 11))
-                    .foregroundStyle(hint == nil ? .black.opacity(0.3) : Theme.coral)
+                    .foregroundStyle(hint == nil ? Theme.fg.opacity(0.3) : Theme.coral)
                     .contentTransition(.opacity)
             }
             Spacer(minLength: 0)

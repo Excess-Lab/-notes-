@@ -8,7 +8,7 @@ struct OnboardingView: View {
         LoadingScene(model: model)
             .id(model.runID)
             .frame(width: Layout.window.width, height: Layout.window.height)
-            .background(.white)
+            .background(Theme.bg)
     }
 }
 
@@ -78,7 +78,7 @@ private struct LoadingScene: View {
             .overlay {
                 if model.pinEntryShown {
                     ZStack(alignment: .topLeading) {
-                        Color.white.opacity(0.45)
+                        Theme.bg.opacity(0.45)
                         PinEntrySheet { saved in
                             withAnimation(.smooth(duration: 0.5)) { model.pinEntryShown = false }
                             // Новый пинкод задали после «забыл пинкод» — это и есть вход.
@@ -104,7 +104,7 @@ private struct LoadingScene: View {
         Text("<notes>")
             .font(Martian.logo.font(30))
             .kerning(Theme.tracking(-5, size: 30))
-            .foregroundStyle(.black)
+            .foregroundStyle(Theme.fg)
             // В шапке логотип вдвое меньше (15 вместо 30). На финале он улетает вверх и гаснет.
             .scaleEffect(logoInHeader || isFinished ? 0.5 : (logoVisible ? 1 : 0.92))
             .opacity(logoVisible && !isFinished ? 1 : 0)
@@ -124,11 +124,11 @@ private struct LoadingScene: View {
             Text("все готово")
                 .font(Martian.logo.font(30))
                 .kerning(Theme.tracking(-5, size: 30))
-                .foregroundStyle(.black)
+                .foregroundStyle(Theme.fg)
             Text("листай вниз")
                 .font(Martian.body.font(11))
                 .kerning(Theme.tracking(-7, size: 11))
-                .foregroundStyle(.black.opacity(0.3))
+                .foregroundStyle(Theme.fg.opacity(0.3))
         }
         .opacity(finaleVisible ? 1 : 0)
         .blur(radius: finaleVisible ? 0 : 14)
@@ -195,10 +195,10 @@ private struct StepSheet: View {
             // Заливка листа из макета: #F9F9F9 с прозрачностью 20 %. Ниже шапки под ним белый фон окна.
             // Поверх затухания шапки у стекла свой край: светлый кант по кромке и лёгкая тень на шапку.
             RoundedRectangle(cornerRadius: 18)
-                .fill(Color(white: 249 / 255).opacity(0.2))
+                .fill(Theme.sheet.opacity(0.2))
                 .overlay(
                     RoundedRectangle(cornerRadius: 18)
-                        .strokeBorder(.white.opacity(0.9), lineWidth: 1)
+                        .strokeBorder(Theme.edge.opacity(0.9), lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.07), radius: 10, y: -2)
 
@@ -233,12 +233,12 @@ struct CoralCapsuleStyle: ButtonStyle {
         configuration.label
             .font(Martian.body.font(13))
             .kerning(Theme.tracking(-7, size: 13))
-            .foregroundStyle(.white)
+            .foregroundStyle(Theme.onPrimary)
             .padding(.vertical, 10)
             .padding(.horizontal, 15)
             // В Figma у кнопки стоит Glass, но выглядит она ровной коралловой капсулой.
             // Системное стекло давало глянцевый обод и темнило цвет, поэтому только заливка.
-            .background(Capsule().fill(Theme.coral.opacity(0.99)))
+            .background(Capsule().fill(Theme.primary.opacity(0.99)))
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
     }
 }
@@ -252,7 +252,7 @@ struct QuietLinkStyle: ButtonStyle {
         configuration.label
             .font(Martian.body.font(size))
             .kerning(Theme.tracking(-7, size: size))
-            .foregroundStyle(.black.opacity(configuration.isPressed ? opacity + 0.2 : opacity))
+            .foregroundStyle(Theme.fg.opacity(configuration.isPressed ? opacity + 0.2 : opacity))
             .contentShape(Rectangle())
     }
 }

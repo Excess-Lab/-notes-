@@ -17,8 +17,10 @@ struct GlassSlats: View, Animatable {
 
     // Шахматка 16 клеток на ширину окна (текстура 256 px растянута на 560), цвета сняты со скриншота Figma.
     private static let cellsAcross: CGFloat = 16
-    private static let dark = Color(white: 0.902)
-    private static let light = Color(white: 0.965)
+    // В тёмной теме шахматка почти чёрная (сняты с кадра 99:10847).
+    private static let dark = Color(light: Color(white: 0.902), dark: Color(white: 0.012))
+    private static let light = Color(light: Color(white: 0.965), dark: Color(white: 0.05))
+    private static let glint = Color(light: .white.opacity(0.7), dark: .white.opacity(0.12))
     // Во сколько раз планка увеличивает шахматку под собой по горизонтали.
     private static let magnification: CGFloat = 1.8
     // Матовость стекла — radius 4 у эффекта Glass в Figma.
@@ -63,7 +65,7 @@ struct GlassSlats: View, Animatable {
                 }
                 // Блик по левому краю планки — как кромка стекла в макете.
                 context.fill(Path(CGRect(x: left, y: 0, width: 1, height: size.height)),
-                             with: .color(.white.opacity(0.7)))
+                             with: .color(Self.glint))
                 left += width
             }
         }

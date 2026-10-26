@@ -139,6 +139,8 @@ struct PinCard: View {
             .contentTransition(.opacity)
         }
         .frame(width: 300, height: 180)
+        // В тёмных кадрах карточка пинкода остаётся светлой — как в макете.
+        .environment(\.colorScheme, .light)
     }
 }
 
@@ -158,7 +160,7 @@ struct PinCells: View {
                     // в SwiftUI умножается на прозрачность заливки и на 4,5 % её не видно.
                     // Тень 8 в Figma — radius 4 в SwiftUI.
                     Circle()
-                        .fill(Color(white: 0.955)
+                        .fill(Color(light: Color(white: 0.955), dark: Color(white: 0.1))
                             .shadow(.inner(color: Theme.coral.opacity(index == current ? 0.6 : 0), radius: 4, y: 2)))
                     Circle()
                         .strokeBorder(Theme.coral, lineWidth: isError ? 1 : 0)
