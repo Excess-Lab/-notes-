@@ -43,9 +43,14 @@ open "build/Build/Products/Debug/<notes>.app"
   «Запись экрана» в настройках macOS.
 - Тестовое хранилище держи **вне** репозитория: в нём будут свои git-коммиты.
 - Проверить надиктовку без микрофона: положи WAV (16 кГц, 16 бит, моно) в контейнер приложения
-  (`~/Library/Containers/devplaceholder.WXQXCR6Q.-notes-/Data/tmp/`) и запусти с
+  (`~/Library/Containers/makarkabanov/Data/tmp/`) и запусти с
   `--args -dictationTestFile <путь>` — запись пройдёт весь путь до буфера обмена.
 - Окно не открылось, хотя приложение запущено — macOS «восстановила» ноль окон: запускай `open -F`.
+- Главный экран на тестовой папке (настоящие заметки не трогаем): `--args -testVault YES`, сразу заметка —
+  `-notesOpen "проекты/план приложения.md"`, сразу поиск — `-notesSearch синхронизация`.
+- Самопроверка главного экрана — запуск бинарника из терминала, печатает ok / FAIL по каждому действию:
+  `"build/Build/Products/Debug/<notes>.app/Contents/MacOS/<notes>" -testVault YES -notesSelfTest YES -ApplePersistenceIgnoreState YES`.
+  Без последнего флага macOS «восстанавливает» ноль окон, и проверка не стартует.
 - Тёмная тема без переключения системы: `--args -appearance dark`.
 - Сфера надиктовки без микрофона: `--args -orbPreview listening` (или `recognizing`, `copied`).
   Тестовый WAV в `tmp` контейнера macOS со временем чистит, а терминал с подписью командой туда не пишет.

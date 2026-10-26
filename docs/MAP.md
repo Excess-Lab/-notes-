@@ -20,6 +20,10 @@
 - `<notes>/Onboarding/Permissions.swift` — статусы и запросы доступа к микрофону и календарю.
 - `<notes>/Onboarding/PinEntrySheet.swift` — окно пинкода поверх шага, ячейки, клавиши.
 - `<notes>/Onboarding/UnlockStep.swift` — вход: пинкод, Touch ID, пауза после ошибок, «забыл пинкод».
+- `<notes>/Notes/NotesModel.swift` — состояние главного экрана: выбор, автосохранение, правки снаружи, поиск, самопроверка.
+- `<notes>/Notes/NotesWindow.swift` — главный экран: шапка, боковая панель, лист содержимого, кнопки.
+- `<notes>/Notes/NoteViews.swift` — заметка, обзор папок с карточками, строки, поиск поверх.
+- `<notes>/Notes/MarkdownEditor.swift` — редактор текста заметки (NSTextView) с оформлением заголовков.
 - `<notes>/Vault/VaultStore.swift` — папка хранилища: выбор, security-scoped bookmark, iCloud.
 - `<notes>/Vault/BiometricLock.swift` — Touch ID: включить, войти, подтвердить хозяина для сброса пинкода.
 - `<notes>/Vault/SyncController.swift` — раз в час: коммит, pull, отправка раз в сутки.
@@ -39,6 +43,7 @@
 - `NotesCore/Sources/NotesCore/GitHub.swift` — вход по коду (Device Flow), создание приватного `notes`.
 - `NotesCore/Sources/NotesCore/TokenStore.swift` — записи в Связке ключей, пересоздание старых без запросов.
 - `NotesCore/Sources/NotesCore/Sync.swift` — подпись коммита, расписание отправки, движок синхронизации.
+- `NotesCore/Sources/NotesCore/NoteLibrary.swift` — заметки в папке: дерево, чтение и запись, создание, переименование, поиск по тексту.
 - `NotesCore/Sources/NotesCore/FolderWatcher.swift` — слежка за папкой (FSEvents), `.git` пропускаем.
 - `NotesCore/Sources/NotesCore/HotKeyCombo.swift` — сочетание надиктовки: подпись, проверка, хранение.
 - `NotesCore/Sources/NotesCore/PinCode.swift` — пинкод: ввод, проверка при входе, хеш, хранение.
