@@ -1,0 +1,54 @@
+{
+  "fill": "none",
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name-specializations": [
+            {
+              "value": "logo-black.png"
+            },
+            {
+              "appearance": "dark",
+              "value": "logo-white.png"
+            }
+          ],
+          "name": "logo",
+          "glass": false
+        }
+      ],
+      "name": "logo",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.4
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    },
+    {
+      "layers": [
+        {
+          "glass": false,
+          "image-name-specializations": [
+            {
+              "value": "bg-light.png"
+            },
+            {
+              "appearance": "dark",
+              "value": "bg-dark.png"
+            }
+          ],
+          "name": "slats"
+        }
+      ],
+      "name": "slats"
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}
