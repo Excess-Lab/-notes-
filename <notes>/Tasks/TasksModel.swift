@@ -184,3 +184,28 @@ import NotesCore
         return store.events(matching: predicate).sorted { $0.startDate < $1.startDate }
     }
 }
+
+#if DEBUG
+extension CalendarSync {
+    // Живая проверка с настоящим Календарём: задача с уникальным названием → событие → «готово» → удалено.
+    func selfTest(_ log: (String, Bool) -> Void) {
+        log("доступ к календарю есть", hasAccess)
+        guard hasAccess else { return }
+        let note = URL(fileURLWithPath: "/calendar-selftest/проверка.md")
+        let title = "<notes> проверка \(UUID().uuidString.prefix(6))"
+        let due = Date().addingTimeInterval(86_400)
+        let when = NoteTasks.format(due, withTime: true)
+        guard let open = NoteTasks.parse("- [ ] \(title) 📅 \(when)", note: note, index: 0),
+              let done = NoteTasks.parse("- [x] \(title) 📅 \(when)", note: note, index: 0) else { return log("разбор задачи", false) }
+        let wasEnabled = enabled
+        enabled = true
+        defer { enabled = wasEnabled }
+        sync([open])
+        let id = links[open.key]
+        let event = id.flatMap { store.event(withIdentifier: $0) }
+        log("событие создано в «\(tasksCalendar?.title ?? "—")»", event?.title == title && event?.calendar == tasksCalendar)
+        sync([done])
+        log("после «готово» событие удалено", id.flatMap { store.event(withIdentifier: $0) } == nil && links[open.key] == nil)
+    }
+}
+#endif

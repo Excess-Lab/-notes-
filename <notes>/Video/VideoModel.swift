@@ -70,7 +70,7 @@ import NotesSpeech
 
     // MARK: - Очередь
 
-    static let types = ["mp4", "mov", "m4v", "m4a", "mp3", "wav", "aac"]
+    static let types = ["mp4", "mov", "m4v", "m4a", "mp3", "wav", "aac", "aiff", "aif", "caf"]
 
     func choose() {
         let panel = NSOpenPanel()
@@ -167,3 +167,41 @@ extension VideoModel.Item {
     // Имя файла без расширения — так и в заголовке, и в названии заметки.
     var title: String { (name as NSString).deletingPathExtension }
 }
+
+#if DEBUG
+extension VideoModel {
+    // Живая проверка расшифровки: речь синтезирует сам Mac в файл внутри контейнера (песочница его пускает),
+    // дальше — весь путь: очередь, нарезка, распознавание выбранной моделью.
+    func selfTest(_ log: @escaping (String, Bool) -> Void) async {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("проверка расшифровки.caf")
+        let synth = AVSpeechSynthesizer()
+        let utterance = AVSpeechUtterance(string: "Привет. Это проверка расшифровки видео. Синхронизацию делаем через гит раз в час.")
+        utterance.voice = AVSpeechSynthesisVoice(language: "ru-RU")
+        var file: AVAudioFile?
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            var finished = false
+            synth.write(utterance) { buffer in
+                guard let pcm = buffer as? AVAudioPCMBuffer else { return }
+                if pcm.frameLength == 0 {
+                    if !finished { finished = true; done.resume() }
+                    return
+                }
+                if file == nil { file = try? AVAudioFile(forWriting: url, settings: pcm.format.settings) }
+                try? file?.write(from: pcm)
+            }
+        }
+        file = nil
+        log("речь записана в файл", FileManager.default.fileExists(atPath: url.path))
+        add([url])
+        for _ in 0..<120 {
+            if let item = items.first(where: { $0.name == url.lastPathComponent }), item.status == .done || item.status == .failed { break }
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        guard let item = items.first(where: { $0.name == url.lastPathComponent }) else { return log("файл не попал в очередь", false) }
+        let text = transcript(item.id)?.text ?? ""
+        log("расшифровано: «\(text)»", item.status == .done && text.lowercased().contains("расшифров"))
+        log("метки времени есть", (transcript(item.id)?.segments.first?.start ?? -1) == 0)
+        remove(item.id)
+    }
+}
+#endif

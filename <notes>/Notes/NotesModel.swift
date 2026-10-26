@@ -237,6 +237,10 @@ extension NotesModel {
             let disk = (try? String(contentsOf: bread.note, encoding: .utf8)) ?? ""
             check("отметка «готово» записалась в файл", disk.contains("- [x] Купить хлеб"))
         }
+        if UserDefaults.standard.bool(forKey: "liveSelfTest") {
+            CalendarSync.shared.selfTest(check)
+            await video.selfTest(check)
+        }
         exit(0)
     }
 }
