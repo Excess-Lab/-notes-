@@ -164,6 +164,23 @@ final class DictationController {
     }
 
     #if DEBUG
+    // Сфера в нужном состоянии без микрофона и модели: `--args -orbPreview listening` (или recognizing,
+    // copied). При «listening» громкость качается сама — чтобы снять, как сфера отвечает на голос.
+    func debugShowOrb(_ name: String) async {
+        switch name {
+        case "recognizing": state = .recognizing
+        case "copied": state = .copied
+        default: state = .listening
+        }
+        panel?.show()
+        let start = Date()
+        while state == .listening {
+            let t = Date().timeIntervalSince(start)
+            level = Float(0.5 + 0.5 * sin(t * 5)) * Float(0.4 + 0.6 * abs(sin(t * 1.3)))
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     // Прогон без микрофона и без клавиш: запись из WAV-файла (16 кГц, 16 бит, моно) идёт тем же путём —
     // сфера слушает (громкость из файла), распознаёт, кладёт текст в буфер, показывает галочку.
     // Запуск: `open <notes>.app --args -dictationTestFile /путь/к/файлу.wav`.
@@ -246,6 +263,5 @@ private struct OrbHost: View {
             .blur(radius: visible ? 0 : 8)
             .animation(.spring(duration: 0.35, bounce: 0.25), value: visible)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .preferredColorScheme(.light)
     }
 }

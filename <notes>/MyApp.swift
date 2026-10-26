@@ -20,6 +20,9 @@ import SwiftUI
                 .task {
                     DictationController.shared.start()
                     #if DEBUG
+                    if let name = UserDefaults.standard.string(forKey: "orbPreview") {
+                        await DictationController.shared.debugShowOrb(name)
+                    }
                     if let path = UserDefaults.standard.string(forKey: "dictationTestFile") {
                         await DictationController.shared.debugRun(file: URL(fileURLWithPath: path))
                     }
