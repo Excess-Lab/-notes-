@@ -1,0 +1,59 @@
+# Карта проекта: что где лежит
+
+Каждый файл кода — одной строкой. `DocsTests` падает, если файл есть в коде, но его нет здесь, или
+наоборот: новый файл — сразу строкой сюда, удалённый — убрать. Подробности — в заглавном комментарии
+самого файла.
+
+## Приложение (`<notes>/`)
+
+- `<notes>/MyApp.swift` — точка входа (@main): окно, запуск синхронизации, входа и надиктовки, меню «Отладка».
+- `<notes>/Theme.swift` — цвета и шрифты из макета, регистрация шрифтов Martian Grotesk.
+- `<notes>/DotIcon.swift` — точечные иконки (битмапы как в Figma).
+- `<notes>/GitHubApp.swift` — client id приложения на GitHub для входа по коду.
+- `<notes>/Onboarding/OnboardingView.swift` — сцена: загрузка, планки, лист, логотип, финал, вход, окно пинкода поверх.
+- `<notes>/Onboarding/OnboardingModel.swift` — состояние первого входа и входа: фаза, шаг, блокировка, сброс пинкода.
+- `<notes>/Onboarding/OnboardingSteps.swift` — содержимое шагов 1–9 и общий каркас шага.
+- `<notes>/Onboarding/OnboardingRows.swift` — строки списков шагов 6–9: модели, скачивание, разрешения, пароль.
+- `<notes>/Onboarding/GlassSlats.swift` — стеклянные планки шапки, нарисованные вручную.
+- `<notes>/Onboarding/GitHubLogin.swift` — вход в GitHub по коду: опрос, создание `notes`, первая отправка.
+- `<notes>/Onboarding/HotKeyRow.swift` — строка «горячая клавиша»: запись нового сочетания.
+- `<notes>/Onboarding/Permissions.swift` — статусы и запросы доступа к микрофону и календарю.
+- `<notes>/Onboarding/PinEntrySheet.swift` — окно пинкода поверх шага, ячейки, клавиши.
+- `<notes>/Onboarding/UnlockStep.swift` — вход: пинкод, Touch ID, пауза после ошибок, «забыл пинкод».
+- `<notes>/Vault/VaultStore.swift` — папка хранилища: выбор, security-scoped bookmark, iCloud.
+- `<notes>/Vault/BiometricLock.swift` — Touch ID: включить, войти, подтвердить хозяина для сброса пинкода.
+- `<notes>/Vault/SyncController.swift` — раз в час: коммит, pull, отправка раз в сутки.
+- `<notes>/Vault/AppLock.swift` — умный вход: блокировка и сон Mac, 15 минут в фоне, отметка для перезапуска.
+- `<notes>/Dictation/DictationController.swift` — надиктовка: хоткей, запись, распознавание, буфер, сфера.
+- `<notes>/Dictation/GlobalHotKey.swift` — глобальный хоткей через Carbon, без «Универсального доступа».
+- `<notes>/Dictation/AudioRecorder.swift` — запись микрофона в 16 кГц моно.
+- `<notes>/Dictation/DictationOrb.swift` — сфера с волнами от громкости и галочкой.
+- `<notes>/Dictation/SpeechSettings.swift` — какая модель выбрана, подписи моделей.
+- `<notes>/Dictation/ModelDownloads.swift` — одно скачивание модели на всё приложение и окно «скачать модель?».
+
+## Логика без интерфейса (`NotesCore/`)
+
+- `NotesCore/Package.swift` — пакет и зависимость libgit2.
+- `NotesCore/Sources/NotesCore/GitVault.swift` — git в папке: init, `.gitignore`, коммиты, remote, push.
+- `NotesCore/Sources/NotesCore/GitVault+Pull.swift` — clone, fetch, pull, конфликты без потери текста.
+- `NotesCore/Sources/NotesCore/GitHub.swift` — вход по коду (Device Flow), создание приватного `notes`.
+- `NotesCore/Sources/NotesCore/TokenStore.swift` — записи в Связке ключей, пересоздание старых без запросов.
+- `NotesCore/Sources/NotesCore/Sync.swift` — подпись коммита, расписание отправки, движок синхронизации.
+- `NotesCore/Sources/NotesCore/FolderWatcher.swift` — слежка за папкой (FSEvents), `.git` пропускаем.
+- `NotesCore/Sources/NotesCore/HotKeyCombo.swift` — сочетание надиктовки: подпись, проверка, хранение.
+- `NotesCore/Sources/NotesCore/PinCode.swift` — пинкод: ввод, проверка при входе, хеш, хранение.
+- `NotesCore/Sources/NotesCore/LockPolicy.swift` — когда спрашивать пинкод, пауза после ошибок.
+- `NotesCore/Tests/NotesCoreTests/*.swift` — тесты: git, GitHub, синхронизация, pull, хоткей, пинкод, вход, документация.
+
+## Распознавание речи (`NotesSpeech/`)
+
+- `NotesSpeech/Package.swift` — пакет: sherpa-onnx (готовая сборка) и WhisperKit.
+- `NotesSpeech/Sources/NotesSpeech/SpeechModel.swift` — каталог моделей, скачивание, проверка суммы.
+- `NotesSpeech/Sources/NotesSpeech/Transcriber.swift` — распознавание: GigaAM через sherpa-onnx, Whisper.
+- `NotesSpeech/Tests/NotesSpeechTests/SpeechTests.swift` — тесты с настоящими моделями (включаются переменными).
+
+## Прочее
+
+- `Scripts/fetch-sherpa-onnx.sh` — скачивает sherpa-onnx, проверяет суммы, собирает xcframework.
+- `notes.entitlements` — права, которых нет в настройках сборки (bookmarks).
+- `<notes>.xcodeproj` — проект Xcode, пакеты подключены локально.
