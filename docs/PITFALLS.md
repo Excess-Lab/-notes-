@@ -34,6 +34,12 @@
 - **`.drawingGroup()` ломает материалы.** Слой рисуется отдельно и не видит, что под окном: размытие
   стола (`.ultraThinMaterial`) пропадает. В `drawingGroup` — только своё рисование (кольца), материал — снаружи.
 
+- **Иконка `.icon` собирается руками, но `ictool` не тот.** `/usr/bin/ictool` из Xcode — это actool,
+  он не умеет рендерить. Нужный лежит в `Icon Composer.app/Contents/Executables/ictool`
+  (`--export-image --platform macOS --rendition Default|Dark`). Тёмный вариант слоя пишется только так:
+  `"image-name-specializations": [{"value": "свет.png"}, {"appearance": "dark", "value": "тьма.png"}]` —
+  без записи по умолчанию и с отдельным `image-name` тёмная просто не включается.
+
 **Figma через MCP (use_figma):**
 
 - **Цвет из переменной рендерится по «сырому» цвету.** `setBoundVariableForPaint` поверх
@@ -45,4 +51,6 @@
 - **`resize()` у авто-лейаута ставит FIXED.** Карточка папки схлопнулась до 10px. После `resize`
   заново ставь `primaryAxisSizingMode = 'AUTO'`.
 - **Локальные шрифты Figma через MCP не видит**, только свои (Google Fonts, SF Pro).
+- **`get_screenshot` не увеличивает**: кадр 284 px отдаётся 284 px при любом `maxDimension`. Для 1024 —
+  временная копия кадра, `rescale(1024/284)`, снимок, копию удалить.
 - **Проверять надо `get_screenshot`, а не `node.screenshot()`.** Внутренний скриншот рендерит стекло иначе.

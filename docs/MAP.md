@@ -55,5 +55,6 @@
 ## Прочее
 
 - `Scripts/fetch-sherpa-onnx.sh` — скачивает sherpa-onnx, проверяет суммы, собирает xcframework.
+- `<notes>/AppIcon.icon` — иконка приложения (Icon Composer): слой планок и слой надписи, светлая и тёмная.
 - `notes.entitlements` — права, которых нет в настройках сборки (bookmarks).
 - `<notes>.xcodeproj` — проект Xcode, пакеты подключены локально.
