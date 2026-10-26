@@ -8,6 +8,7 @@ final class OnboardingModel {
     // loading — сцена загрузки, steps — лист с шагами, finished — «все готово» на стекле.
     // locked — повторный запуск с пинкодом или Touch ID: та же загрузка, потом карточка входа;
     // unlocked — вход пройден (основного экрана пока нет, остаются планки с логотипом).
+    // unlocked — вход пройден: главный экран заметок (NotesWindow).
     enum Phase { case loading, steps, finished, locked, unlocked }
 
     enum Step: Int, CaseIterable {
@@ -40,8 +41,10 @@ final class OnboardingModel {
     init() {
         vaultURL = VaultStore.restore()
         // Перезапуск сразу после работы пускает без пинкода (LockPolicy), иначе — вход.
-        if UserDefaults.standard.bool(forKey: Self.completedKey), Self.lockConfigured {
-            let needs = LockPolicy.needsUnlockAtLaunch(lastSeenUnlocked: LockMemory().lastSeenUnlocked)
+        // Первый вход пройден — сразу заметки; с пинкодом или Touch ID — сначала вход (LockPolicy).
+        if UserDefaults.standard.bool(forKey: Self.completedKey), vaultURL != nil {
+            let needs = Self.lockConfigured
+                && LockPolicy.needsUnlockAtLaunch(lastSeenUnlocked: LockMemory().lastSeenUnlocked)
             phase = needs ? .locked : .unlocked
         }
         #if DEBUG
@@ -56,9 +59,38 @@ final class OnboardingModel {
             phase = .steps
             self.step = step
         }
+        // `-testVault` — главный экран на тестовой папке в контейнере приложения: настоящие заметки
+        // при проверках не трогаем. `-notesOpen проекты/план приложения.md`, `-notesSearch запрос` — сразу туда.
+        if UserDefaults.standard.bool(forKey: "testVault") {
+            vaultURL = Self.makeTestVault()
+            phase = .unlocked
+        }
         pinEntryShown = step == .password && phase == .steps && UserDefaults.standard.string(forKey: "pinPreview") != nil
         #endif
     }
+
+    #if DEBUG
+    static func makeTestVault() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("test-vault", isDirectory: true)
+        try? FileManager.default.removeItem(at: base)
+        let notes: [String: String] = [
+            "проекты/план приложения.md": "Нативное приложение для заметок под Mac. Всё хранится локально в обычных .md файлах, синхронизация — через git.\n\n## Что делаем\n\n— заметки в Markdown\n— автосинхронизация через репозиторий\n— поиск по смыслу\n— надиктовка по хоткею\n— задачи в Apple Calendar\n\nКанбан не делаем. Дизайн — сам.",
+            "проекты/идеи.md": "Сделать так, чтобы всё работало офлайн и потом догоняло.",
+            "проекты/созвоны.md": "Обсудили, как переносить заметки между устройствами без облака.",
+            "личное/книги.md": "Прочитать до конца года.",
+            "Созвоны/12 октября.md": "Синхронизация с телефоном: открыть репозиторий в Working Copy.",
+            "Книги/список.md": "Норвежский лес", "Идеи для видео/первое.md": "Как я пишу заметки",
+            "Входящие.md": "купить хлеб", "Список покупок.md": "молоко, хлеб",
+        ]
+        for (path, text) in notes {
+            let url = base.appendingPathComponent(path)
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? text.write(to: url, atomically: true, encoding: .utf8)
+        }
+        return base
+    }
+    #endif
 
     // Есть чем закрываться: пинкод или Touch ID.
     static var lockConfigured: Bool { PinStore().isSet || BiometricLock.isEnabled }

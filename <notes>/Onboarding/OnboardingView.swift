@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 // Окно первого входа 560×440. Сейчас здесь загрузка и шаг 1, остальные шаги — дальше по ONBOARDING.md.
@@ -134,6 +135,10 @@ private struct LoadingScene: View {
         .blur(radius: finaleVisible ? 0 : 14)
         .scaleEffect(finaleVisible ? 1 : 1.04)
         .offset(y: 202 + 25)
+        // «листай вниз» — прокрутка вниз (или клик) открывает заметки.
+        .background(ScrollDownCatcher(active: isFinished) {
+            withAnimation(.smooth(duration: 0.8)) { model.phase = .unlocked }
+        })
         .onChange(of: isFinished) { _, finished in
             guard finished else { finaleVisible = false; return }
             Task {
@@ -270,4 +275,25 @@ private extension View {
 
 #Preview {
     OnboardingView(model: OnboardingModel())
+}
+
+// Ловит прокрутку колёсиком или трекпадом вниз и клик — на финальном экране «листай вниз».
+private struct ScrollDownCatcher: View {
+    let active: Bool
+    let action: () -> Void
+    @State private var monitor: Any?
+
+    var body: some View {
+        Color.clear
+            .onChange(of: active, initial: true) { _, active in
+                if let monitor { NSEvent.removeMonitor(monitor) }
+                monitor = nil
+                guard active else { return }
+                monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseUp]) { event in
+                    if event.type == .leftMouseUp || event.scrollingDeltaY < -3 { action() }
+                    return event
+                }
+            }
+            .onDisappear { if let monitor { NSEvent.removeMonitor(monitor) } }
+    }
 }

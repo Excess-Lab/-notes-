@@ -62,6 +62,9 @@ final class DictationController {
     }
 
     // Одно сочетание и включает, и выключает. Пока распознаём, нажатия игнорируем.
+    // Кнопка микрофона на главном экране — то же, что хоткей.
+    func toggleFromApp() { toggle() }
+
     private func toggle() {
         switch state {
         case .idle, .copied: begin()

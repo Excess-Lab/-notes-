@@ -1,3 +1,4 @@
+import NotesCore
 import AppKit
 import SwiftUI
 
@@ -18,7 +19,7 @@ import SwiftUI
         // Обычная полоса заголовка macOS: кнопки окна слева, по центру «<notes>».
         // Сцена 560×440 из макета идёт под ней.
         WindowGroup("<notes>") {
-            OnboardingView(model: onboarding)
+            RootView(onboarding: onboarding)
                 // Папка уже выбрана и под git — история ведётся с первой секунды, даже пока открыт онбординг.
                 .task { if let vault = onboarding.vaultURL { SyncController.shared.start(vault: vault) } }
                 // Закрываем заметки, когда Mac заблокировали или приложение долго не трогали.
@@ -45,6 +46,41 @@ import SwiftUI
                 Button("Следующий шаг") { onboarding.debugNext() }
                     .keyboardShortcut("]")
             }
+        }
+    }
+}
+
+// Первый вход и вход по пинкоду — окно 560×440; после входа — заметки 1200×760.
+private struct RootView: View {
+    let onboarding: OnboardingModel
+    @State private var notes: NotesModel?
+
+    var body: some View {
+        Group {
+            if onboarding.phase == .unlocked, let notes {
+                NotesWindow(model: notes)
+                    .transition(.opacity)
+            } else {
+                OnboardingView(model: onboarding)
+            }
+        }
+        .animation(.smooth(duration: 0.6), value: onboarding.phase == .unlocked)
+        // Модель заметок — одна на окно: создаём, когда есть папка хранилища.
+        .onChange(of: onboarding.vaultURL, initial: true) { _, vault in
+            guard let vault, notes?.library.root != vault.standardizedFileURL else { return }
+            let model = NotesModel(vault: vault)
+            #if DEBUG
+            if let path = UserDefaults.standard.string(forKey: "notesOpen") {
+                let url = vault.appendingPathComponent(path)
+                model.open(path.hasSuffix(".md") ? .note(url) : .folder(url))
+            }
+            if let query = UserDefaults.standard.string(forKey: "notesSearch") {
+                model.searchShown = true
+                model.query = query
+            }
+            #endif
+            notes = model
+            if UserDefaults.standard.bool(forKey: "notesSelfTest") { Task { await model.selfTest() } }
         }
     }
 }

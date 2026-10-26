@@ -17,6 +17,8 @@ final class SyncController {
     private static let lastPushKey = "lastPush"
     private let log = Logger(subsystem: "notes", category: "sync")
     private var engine: SyncEngine?
+    // Когда последний раз прошёл цикл синхронизации — для «синхронизировано 2 мин назад» в шапке.
+    private(set) var lastSync: Date?
     private var loop: Task<Void, Never>?
 
     // Запускаем, только если папка уже git-репозиторий: без «инициализировать» историю не ведём.
@@ -44,6 +46,19 @@ final class SyncController {
         }
         await pull()
         await pushIfDue()
+        lastSync = Date()
+    }
+
+    // Подпись в шапке главного экрана.
+    func status(now: Date) -> String {
+        guard engine != nil else { return "без git — история не ведётся" }
+        guard let lastSync else { return "синхронизируем…" }
+        let minutes = Int(now.timeIntervalSince(lastSync) / 60)
+        switch minutes {
+        case ..<1: return "синхронизировано только что"
+        case ..<60: return "синхронизировано \(minutes) мин назад"
+        default: return "синхронизировано \(minutes / 60) ч назад"
+        }
     }
 
     // Первую отправку делает вход в GitHub — с неё и отсчитываем сутки.

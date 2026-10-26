@@ -1,0 +1,306 @@
+import NotesCore
+import SwiftUI
+
+// Главный экран — секция «Заметки» в Figma (16:7138): кадры «заметка» (7:34), «все заметки» (79:11295)
+// и поиск поверх (79:12603). Окно 1200×760, все координаты — из кадров.
+enum NotesLayout {
+    static let window = CGSize(width: 1200, height: 760)
+    static let header: CGFloat = 92
+    static let gray = Color(red: 134 / 255, green: 134 / 255, blue: 139 / 255)
+    static let line = Color(light: Color(red: 227 / 255, green: 227 / 255, blue: 232 / 255), dark: .white.opacity(0.1))
+}
+
+struct NotesWindow: View {
+    @Bindable var model: NotesModel
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            screen
+                // Под поиском экран размыт и чуть затемнён — как в кадре, а не залит серым.
+                .blur(radius: model.searchShown ? 8 : 0)
+                .allowsHitTesting(!model.searchShown)
+
+            if model.searchShown {
+                SearchOverlay(model: model)
+                    .transition(.opacity.combined(with: .blurReplace))
+            }
+        }
+        .frame(width: NotesLayout.window.width, height: NotesLayout.window.height, alignment: .topLeading)
+        .background(Theme.bg)
+        .animation(.smooth(duration: 0.3), value: model.searchShown)
+        .onDisappear { model.flush() }
+    }
+
+    private var screen: some View {
+        ZStack(alignment: .topLeading) {
+            // Шапка из планок, как на первом входе, только 92 px и во всю ширину.
+            GlassSlats(slatWidth: Layout.finalSlatWidth)
+                .frame(height: NotesLayout.header)
+
+            TopBar(model: model)
+
+            // Боковая панель и лист содержимого — отдельные стеклянные листы под шапкой.
+            GlassSheet(radius: 14)
+                .frame(width: 247, height: 668)
+                .offset(x: 17, y: 92)
+            Sidebar(model: model)
+                .frame(width: 247, height: 668, alignment: .topLeading)
+                .offset(x: 17, y: 92)
+
+            GlassSheet(radius: 18)
+                .frame(width: 906, height: 668)
+                .offset(x: 279, y: 92)
+            // Обрезаем до сдвига: после .offset обрезка шла по старому месту, и правый край листа пропадал.
+            Content(model: model)
+                .frame(width: 906, height: 668, alignment: .topLeading)
+                .clipped()
+                .offset(x: 279, y: 92)
+        }
+        .frame(width: NotesLayout.window.width, height: NotesLayout.window.height, alignment: .topLeading)
+    }
+}
+
+// Стеклянный лист: #F9F9F9 20 % и светлый кант, как лист шагов первого входа.
+struct GlassSheet: View {
+    var radius: CGFloat
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: radius)
+            .fill(Theme.sheet.opacity(0.2))
+            .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(Theme.edge.opacity(0.9), lineWidth: 1))
+            .shadow(color: .black.opacity(0.07), radius: 10, y: -2)
+    }
+}
+
+// Капсула в шапке: #F9F9F9 20 % со стеклом, скругление 18.
+private struct HeaderGroup<Content: View>: View {
+    let width: CGFloat
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            RoundedRectangle(cornerRadius: 18)
+                .fill(Theme.sheet.opacity(0.2))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18))
+                .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(Theme.edge.opacity(0.6), lineWidth: 1))
+            content()
+        }
+        .frame(width: width, height: 48)
+    }
+}
+
+private struct TopBar: View {
+    let model: NotesModel
+    @State private var sync = SyncController.shared
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            HeaderGroup(width: 417) {
+                Text("<notes>")
+                    .font(Martian.logo.font(15))
+                    .kerning(Theme.tracking(-5, size: 15))
+                    .foregroundStyle(Theme.fg)
+                    .offset(x: 15)
+                Button { model.searchShown = true } label: {
+                    HStack(spacing: 6) {
+                        DotIcon(glyph: .search)
+                        Text("поиск")
+                            .font(Martian.body.font(13))
+                            .kerning(Theme.tracking(-7, size: 13))
+                            .foregroundStyle(NotesLayout.gray)
+                        Spacer(minLength: 0)
+                        Keycap(text: "⌘K")
+                    }
+                    .padding(.leading, 10)
+                    .padding(.trailing, 10)
+                    .frame(width: 256, height: 30)
+                    .background(Capsule().fill(Theme.bg.opacity(0.5)))
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .keyboardShortcut("k", modifiers: .command)
+                .offset(x: 146)
+            }
+            .offset(x: 17, y: 15)
+
+            // Разделы задач, календаря и видео ещё не сделаны: в макете «задачи» яркие, но пока они
+            // ведут в никуда — все три приглушены (30 %, как неактивные в кадре) и не нажимаются.
+            HeaderGroup(width: 315) {
+                HStack(spacing: 10) {
+                    section("задачи", .taskDone)
+                    section("календарь", .calendar)
+                    section("видео", .video)
+                }
+                .offset(x: 11)
+            }
+            .offset(x: 449, y: 15)
+
+            HeaderGroup(width: 235) {
+                HStack(spacing: 6) {
+                    DotIcon(glyph: .git)
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
+                        Text(sync.status(now: context.date))
+                            .font(Martian.body.font(11))
+                            .kerning(Theme.tracking(-7, size: 11))
+                            .foregroundStyle(Theme.fg)
+                            .lineLimit(1)
+                    }
+                }
+                .opacity(0.4)
+                .offset(x: 16)
+            }
+            .offset(x: 780, y: 15)
+        }
+    }
+
+    private func section(_ title: String, _ glyph: DotGlyph) -> some View {
+        HStack(spacing: 8) {
+            DotIcon(glyph: glyph)
+            Text(title)
+                .font(Martian.body.font(13))
+                .kerning(Theme.tracking(-7, size: 13))
+                .foregroundStyle(Theme.ink)
+        }
+        .padding(.horizontal, 8)
+        .frame(height: 26)
+        .opacity(0.3)
+        .help("раздел ещё в работе")
+    }
+}
+
+private struct Sidebar: View {
+    let model: NotesModel
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Button { model.open(.folder(model.library.root)) } label: {
+                Text("заметки")
+                    .font(Martian.body.font(11))
+                    .kerning(Theme.tracking(-7, size: 11))
+                    .foregroundStyle(Theme.fg.opacity(0.2))
+            }
+            .buttonStyle(.plain)
+            .padding(.leading, 10)
+            .padding(.top, 12)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 2) {
+                    FolderRows(model: model, folder: model.tree, depth: 0)
+                }
+                .padding(.horizontal, 10)
+                .padding(.top, 15)
+                .padding(.bottom, 20)
+            }
+            .scrollIndicators(.never)
+        }
+    }
+}
+
+// Папки и заметки одного уровня; раскрытая папка показывает свои строки со сдвигом 18.
+private struct FolderRows: View {
+    let model: NotesModel
+    let folder: NoteLibrary.Folder
+    let depth: Int
+
+    var body: some View {
+        ForEach(folder.folders) { child in
+            SidebarRow(glyph: .folder, title: child.name, depth: depth,
+                       selected: model.selection == .folder(child.url)) {
+                model.toggle(child.url)
+                model.open(.folder(child.url))
+            }
+            if model.expanded.contains(child.url) {
+                FolderRows(model: model, folder: child, depth: depth + 1)
+            }
+        }
+        ForEach(folder.notes) { note in
+            SidebarRow(glyph: .file, title: note.title, depth: depth,
+                       selected: model.selection == .note(note.url)) {
+                model.open(.note(note.url))
+            }
+        }
+    }
+}
+
+// Строка боковой панели (компонент «сайдбар/строка»): 227×26, скругление 8, выбранная — чёрный 7 %.
+private struct SidebarRow: View {
+    let glyph: DotGlyph
+    let title: String
+    let depth: Int
+    let selected: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                DotIcon(glyph: glyph)
+                // Имя файла — то, что ввёл человек: регистр не трогаем.
+                Text(title)
+                    .font(Martian.body.font(13))
+                    .kerning(Theme.tracking(-7, size: 13))
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                Spacer(minLength: 0)
+            }
+            .padding(.leading, 8 + CGFloat(depth) * 18)
+            .padding(.trailing, 8)
+            .frame(height: 26)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.fg.opacity(selected ? 0.07 : 0)))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct Content: View {
+    let model: NotesModel
+
+    var body: some View {
+        ZStack(alignment: .topLeading) {
+            Group {
+                if let note = model.openNote {
+                    NoteEditor(model: model, url: note).id(note)
+                } else {
+                    FolderOverview(model: model, folder: model.currentFolder)
+                }
+            }
+            .padding(.top, 51)
+
+            Text(model.breadcrumb)
+                .font(Martian.body.font(13))
+                .kerning(Theme.tracking(-7, size: 13))
+                .foregroundStyle(NotesLayout.gray)
+                .lineLimit(1)
+                .padding(.horizontal, 15)
+                .frame(height: 36)
+                .background(Capsule().fill(Theme.bg.opacity(0.2)))
+                .offset(x: 15, y: 15)
+
+            HStack(spacing: 8) {
+                IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
+                IconButton(glyph: .newNote, help: "новая заметка") { model.newNote() }
+                    .keyboardShortcut("n", modifiers: .command)
+            }
+            .offset(x: 1098 - 279, y: 109 - 92)
+        }
+    }
+}
+
+// Круглая кнопка 32×32 с иконкой (компонент «кнопка/иконка»): белый 45 %, мягкая тень.
+private struct IconButton: View {
+    let glyph: DotGlyph
+    let help: String
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            DotIcon(glyph: glyph)
+                .frame(width: 32, height: 32)
+                .background(Circle().fill(Theme.bg.opacity(0.45)))
+                .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+    }
+}
