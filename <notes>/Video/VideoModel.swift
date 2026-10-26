@@ -1,0 +1,169 @@
+import AppKit
+import AVFoundation
+import NotesCore
+import NotesSpeech
+
+// Расшифровка видео и аудио: очередь файлов, распознавание по одному той же моделью, что надиктовка,
+// результат — в Application Support (не в хранилище). В заметки — только по «сохранить как заметку».
+@Observable final class VideoModel {
+    enum Filter: String, CaseIterable {
+        case all = "все расшифровки", working = "в работе", queued = "в очереди", done = "готово"
+    }
+
+    struct Item: Codable, Identifiable, Hashable {
+        enum Status: String, Codable { case queued, working, done, failed }
+        let id: UUID
+        let name: String
+        let bytes: Int64
+        var duration: Double
+        var status: Status
+        var progress: Double
+        let added: Date
+        var words: Int
+    }
+
+    let library: NoteLibrary
+    private(set) var items: [Item] = []
+    var filter: Filter = .all
+    var open: UUID?
+    private(set) var transcripts: [UUID: Transcript] = [:]
+    // Файлы, которые человек выбрал или бросил в этом запуске: доступ к ним песочница даёт до выхода.
+    private var sources: [UUID: URL] = [:]
+    private var running = false
+
+    private static let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("transcripts", isDirectory: true)
+    private static var indexURL: URL { folder.appendingPathComponent("index.json") }
+
+    init(library: NoteLibrary) {
+        self.library = library
+        try? FileManager.default.createDirectory(at: Self.folder, withIntermediateDirectories: true)
+        items = (try? JSONDecoder().decode([Item].self, from: Data(contentsOf: Self.indexURL))) ?? []
+        // Файл из прошлого запуска недоступен: песочница не помнит выбранные тогда файлы. Честно помечаем.
+        for index in items.indices where items[index].status != .done { items[index].status = .failed }
+        save()
+    }
+
+    var crumb: String {
+        if let open, let item = items.first(where: { $0.id == open }) { return "видео / " + item.title }
+        return "видео"
+    }
+
+    func count(_ filter: Filter) -> Int { items.filter { matches($0, filter) }.count }
+    var visible: [Item] { items.filter { matches($0, filter) } }
+
+    private func matches(_ item: Item, _ filter: Filter) -> Bool {
+        switch filter {
+        case .all: true
+        case .working: item.status == .working
+        case .queued: item.status == .queued
+        case .done: item.status == .done
+        }
+    }
+
+    func transcript(_ id: UUID) -> Transcript? {
+        if let cached = transcripts[id] { return cached }
+        let loaded = try? JSONDecoder().decode(Transcript.self, from: Data(contentsOf: Self.folder.appendingPathComponent("\(id).json")))
+        transcripts[id] = loaded
+        return loaded
+    }
+
+    // MARK: - Очередь
+
+    static let types = ["mp4", "mov", "m4v", "m4a", "mp3", "wav", "aac"]
+
+    func choose() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = Self.types.compactMap { .init(filenameExtension: $0) }
+        panel.message = "Выбери видео или аудио — расшифровка пройдёт прямо на этом Mac."
+        guard panel.runModal() == .OK else { return }
+        add(panel.urls)
+    }
+
+    func add(_ urls: [URL]) {
+        for url in urls where Self.types.contains(url.pathExtension.lowercased()) {
+            let id = UUID()
+            let bytes = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+            sources[id] = url
+            items.insert(Item(id: id, name: url.lastPathComponent, bytes: bytes, duration: 0, status: .queued,
+                              progress: 0, added: Date(), words: 0), at: 0)
+        }
+        save()
+        Task { await run() }
+    }
+
+    func remove(_ id: UUID) {
+        items.removeAll { $0.id == id }
+        try? FileManager.default.removeItem(at: Self.folder.appendingPathComponent("\(id).json"))
+        if open == id { open = nil }
+        save()
+    }
+
+    private func run() async {
+        guard !running else { return }
+        let model = SpeechSettings.model
+        guard ModelStore.standard.isInstalled(model) else {
+            ModelDownloadOffer.present(model, hotKey: DictationController.shared.combo.display)
+            return
+        }
+        running = true
+        defer { running = false }
+        while let index = items.firstIndex(where: { $0.status == .queued }) {
+            let id = items[index].id
+            guard let url = sources[id] else { update(id) { $0.status = .failed }; continue }
+            update(id) { $0.status = .working; $0.progress = 0 }
+            do {
+                let engine = try await Transcribers.make(model)
+                let pieces = try await MediaTranscription.transcribe(url: url, engine: engine) { [model = self] progress, duration in
+                    Task { @MainActor in model.update(id) { $0.progress = progress; $0.duration = duration } }
+                }
+                let transcript = Transcript(segments: pieces.map { .init(start: $0.start, end: $0.end, text: $0.text) })
+                try JSONEncoder().encode(transcript).write(to: Self.folder.appendingPathComponent("\(id).json"))
+                transcripts[id] = transcript
+                update(id) { $0.status = .done; $0.progress = 1; $0.words = transcript.wordCount }
+            } catch {
+                update(id) { $0.status = .failed }
+            }
+        }
+    }
+
+    private func update(_ id: UUID, _ change: (inout Item) -> Void) {
+        guard let index = items.firstIndex(where: { $0.id == id }) else { return }
+        change(&items[index])
+        save()
+    }
+
+    private func save() {
+        try? JSONEncoder().encode(items).write(to: Self.indexURL)
+    }
+
+    // MARK: - Действия с готовой расшифровкой
+
+    func saveAsNote(_ id: UUID) -> URL? {
+        guard let item = items.first(where: { $0.id == id }), let transcript = transcript(id) else { return nil }
+        guard let url = try? library.createNote(in: library.root, title: item.title) else { return nil }
+        try? library.write(transcript.markdown(title: item.title), to: url)
+        return url
+    }
+
+    func copy(_ id: UUID) {
+        guard let transcript = transcript(id) else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(transcript.text, forType: .string)
+    }
+
+    func exportSRT(_ id: UUID) {
+        guard let item = items.first(where: { $0.id == id }), let transcript = transcript(id) else { return }
+        let panel = NSSavePanel()
+        panel.nameFieldStringValue = item.title + ".srt"
+        panel.message = "Куда сохранить субтитры?"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        try? transcript.srt.write(to: url, atomically: true, encoding: .utf8)
+    }
+}
+
+extension VideoModel.Item {
+    // Имя файла без расширения — так и в заголовке, и в названии заметки.
+    var title: String { (name as NSString).deletingPathExtension }
+}

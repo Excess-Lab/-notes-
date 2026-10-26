@@ -5,13 +5,14 @@ import SwiftUI
 // Строка «горячая клавиша» на шаге 8: показывает сочетание и записывает новое по «изменить».
 // Запись — через локальный монитор клавиш: окно наше и в фокусе, разрешения не нужны.
 struct HotKeyRow: View {
+    var width: CGFloat = 440
     @State private var combo = DictationController.shared.combo
     @State private var recording = false
     @State private var hint: String?
     @State private var monitor: Any?
 
     var body: some View {
-        GlassRow {
+        GlassRow(width: width) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("горячая клавиша")
                     .font(Martian.body.font(13))

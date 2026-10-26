@@ -6,7 +6,7 @@ import PackageDescription
 // Перед первой сборкой: ./Scripts/fetch-sherpa-onnx.sh (собирает Vendor/SherpaOnnx.xcframework).
 let package = Package(
     name: "NotesSpeech",
-    platforms: [.macOS(.v15)],
+    platforms: [.macOS("27.0")],
     products: [
         .library(name: "NotesSpeech", targets: ["NotesSpeech"]),
     ],

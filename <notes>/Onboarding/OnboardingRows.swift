@@ -9,12 +9,13 @@ import SwiftUI
 // которая растворяется к правому краю, и светлый кант по верхней кромке.
 struct GlassRow<Content: View>: View {
     var height: CGFloat = 53
+    var width: CGFloat = 440
     @ViewBuilder var content: () -> Content
 
     var body: some View {
         HStack(spacing: 12, content: content)
             .padding(.horizontal, 14)
-            .frame(width: 440, height: height, alignment: .leading)
+            .frame(width: width, height: height, alignment: .leading)
             .background {
                 Capsule()
                     .fill(LinearGradient(colors: [Theme.fg.opacity(0.045), Theme.fg.opacity(0.018), .clear],

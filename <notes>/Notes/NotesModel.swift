@@ -21,7 +21,29 @@ import SwiftUI
     // Номер последней правки: запись через полсекунды делает только последняя из них.
     private var editGeneration = 0
 
+    // Раздел окна: шапка переключает заметки, задачи, календарь и видео; настройки — по ⌘,.
+    enum Section: Hashable { case notes, tasks, calendar, video, settings }
+    var section: Section = .notes
+    let tasks: TasksModel
+    let video: VideoModel
+
+    enum SettingsPage: String, CaseIterable {
+        case sync = "синхронизация", dictation = "надиктовка", search = "поиск", lock = "вход", calendar = "календарь"
+        var glyph: DotGlyph {
+            switch self {
+            case .sync: .git
+            case .dictation: .microphone
+            case .search: .search
+            case .lock: .check
+            case .calendar: .calendar
+            }
+        }
+    }
+    var settingsPage: SettingsPage = .sync
+
     var searchShown = false
+    // Окно пинкода из настроек («задать» / «сменить»).
+    var pinEntryShown = false
     var query = "" { didSet { runSearch() } }
     private(set) var hits: [NoteLibrary.Hit] = []
     var highlighted = 0
@@ -34,6 +56,8 @@ import SwiftUI
         library = NoteLibrary(root: vault)
         tree = library.tree()
         selection = .folder(library.root)
+        tasks = TasksModel(library: library)
+        video = VideoModel(library: library)
         // Слежка идёт не на главном потоке: оттуда только сигнал, а разбираемся уже на главном.
         watcher = FolderWatcher(folder: vault) {
             NotificationCenter.default.post(name: NotesModel.changed, object: nil)
@@ -58,6 +82,7 @@ import SwiftUI
 
     func open(_ selection: Selection) {
         flush()
+        section = .notes
         self.selection = selection
         if case .note(let url) = selection {
             let loaded = (try? library.read(url)) ?? ""
@@ -136,6 +161,7 @@ import SwiftUI
     // заметку перечитываем, только если в ней нет несохранённых правок.
     private func externalChange() {
         reloadTree()
+        tasks.reload()
         guard let url = openNote, text == savedText else { return }
         guard FileManager.default.fileExists(atPath: url.path) else { return open(.folder(library.root)) }
         if let disk = try? library.read(url), disk != savedText {
@@ -201,6 +227,16 @@ extension NotesModel {
         try? "снаружи".write(to: library.root.appendingPathComponent("проверка.md"), atomically: true, encoding: .utf8)
         try? await Task.sleep(for: .seconds(2))
         check("правка снаружи подхватилась", text == "снаружи")
+
+        tasks.reload()
+        check("задачи собраны из заметок (6)", tasks.tasks.count == 6)
+        check("группы: сегодня 2, неделя 2, без даты 1, готово 1",
+              tasks.count(.today) == 2 && tasks.count(.week) == 2 && tasks.count(.noDate) == 1 && tasks.count(.done) == 1)
+        if let bread = tasks.tasks.first(where: { $0.title == "Купить хлеб" }) {
+            tasks.toggle(bread)
+            let disk = (try? String(contentsOf: bread.note, encoding: .utf8)) ?? ""
+            check("отметка «готово» записалась в файл", disk.contains("- [x] Купить хлеб"))
+        }
         exit(0)
     }
 }

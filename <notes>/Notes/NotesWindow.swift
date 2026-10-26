@@ -1,3 +1,4 @@
+import EventKit
 import NotesCore
 import SwiftUI
 
@@ -17,12 +18,19 @@ struct NotesWindow: View {
         ZStack(alignment: .topLeading) {
             screen
                 // Под поиском экран размыт и чуть затемнён — как в кадре, а не залит серым.
-                .blur(radius: model.searchShown ? 8 : 0)
-                .allowsHitTesting(!model.searchShown)
+                .blur(radius: model.searchShown || model.pinEntryShown ? 8 : 0)
+                .allowsHitTesting(!model.searchShown && !model.pinEntryShown)
 
             if model.searchShown {
                 SearchOverlay(model: model)
                     .transition(.opacity.combined(with: .blurReplace))
+            }
+            if model.pinEntryShown {
+                ZStack {
+                    Theme.bg.opacity(0.45)
+                    PinEntrySheet { _ in model.pinEntryShown = false }
+                }
+                .transition(.opacity.combined(with: .blurReplace))
             }
         }
         .frame(width: NotesLayout.window.width, height: NotesLayout.window.height, alignment: .topLeading)
@@ -43,7 +51,7 @@ struct NotesWindow: View {
             GlassSheet(radius: 14)
                 .frame(width: 247, height: 668)
                 .offset(x: 17, y: 92)
-            Sidebar(model: model)
+            SectionSidebar(model: model)
                 .frame(width: 247, height: 668, alignment: .topLeading)
                 .offset(x: 17, y: 92)
 
@@ -51,7 +59,7 @@ struct NotesWindow: View {
                 .frame(width: 906, height: 668)
                 .offset(x: 279, y: 92)
             // Обрезаем до сдвига: после .offset обрезка шла по старому месту, и правый край листа пропадал.
-            Content(model: model)
+            SectionContent(model: model)
                 .frame(width: 906, height: 668, alignment: .topLeading)
                 .clipped()
                 .offset(x: 279, y: 92)
@@ -96,11 +104,14 @@ private struct TopBar: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             HeaderGroup(width: 417) {
-                Text("<notes>")
-                    .font(Martian.logo.font(15))
-                    .kerning(Theme.tracking(-5, size: 15))
-                    .foregroundStyle(Theme.fg)
-                    .offset(x: 15)
+                Button { model.section = .notes } label: {
+                    Text("<notes>")
+                        .font(Martian.logo.font(15))
+                        .kerning(Theme.tracking(-5, size: 15))
+                        .foregroundStyle(Theme.fg)
+                }
+                .buttonStyle(.plain)
+                .offset(x: 15)
                 Button { model.searchShown = true } label: {
                     HStack(spacing: 6) {
                         DotIcon(glyph: .search)
@@ -127,9 +138,9 @@ private struct TopBar: View {
             // ведут в никуда — все три приглушены (30 %, как неактивные в кадре) и не нажимаются.
             HeaderGroup(width: 315) {
                 HStack(spacing: 10) {
-                    section("задачи", .taskDone)
-                    section("календарь", .calendar)
-                    section("видео", .video)
+                    section("задачи", .taskDone, .tasks)
+                    section("календарь", .calendar, .calendar)
+                    section("видео", .video, .video)
                 }
                 .offset(x: 11)
             }
@@ -153,22 +164,32 @@ private struct TopBar: View {
         }
     }
 
-    private func section(_ title: String, _ glyph: DotGlyph) -> some View {
-        HStack(spacing: 8) {
-            DotIcon(glyph: glyph)
-            Text(title)
-                .font(Martian.body.font(13))
-                .kerning(Theme.tracking(-7, size: 13))
-                .foregroundStyle(Theme.ink)
+    // Раздел в шапке: выбранный — ярко на белом 10 %, остальные — 30 %, как в кадрах. Повторный клик
+    // по выбранному возвращает к заметкам.
+    private func section(_ title: String, _ glyph: DotGlyph, _ target: NotesModel.Section) -> some View {
+        let active = model.section == target
+        return Button {
+            model.flush()
+            model.section = active ? .notes : target
+        } label: {
+            HStack(spacing: 8) {
+                DotIcon(glyph: glyph)
+                Text(title)
+                    .font(Martian.body.font(13))
+                    .kerning(Theme.tracking(-7, size: 13))
+                    .foregroundStyle(Theme.ink)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 26)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bg.opacity(active ? 0.1 : 0)))
+            .opacity(active ? 1 : 0.3)
+            .contentShape(Rectangle())
         }
-        .padding(.horizontal, 8)
-        .frame(height: 26)
-        .opacity(0.3)
-        .help("раздел ещё в работе")
+        .buttonStyle(.plain)
     }
 }
 
-private struct Sidebar: View {
+struct NotesSidebar: View {
     let model: NotesModel
 
     var body: some View {
@@ -223,10 +244,11 @@ private struct FolderRows: View {
 }
 
 // Строка боковой панели (компонент «сайдбар/строка»): 227×26, скругление 8, выбранная — чёрный 7 %.
-private struct SidebarRow: View {
+struct SidebarRow: View {
     let glyph: DotGlyph
     let title: String
-    let depth: Int
+    var depth = 0
+    var count: Int? = nil
     let selected: Bool
     let action: () -> Void
 
@@ -241,6 +263,12 @@ private struct SidebarRow: View {
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                if let count {
+                    Text("\(count)")
+                        .font(Martian.body.font(11))
+                        .kerning(Theme.tracking(-7, size: 11))
+                        .foregroundStyle(NotesLayout.gray)
+                }
             }
             .padding(.leading, 8 + CGFloat(depth) * 18)
             .padding(.trailing, 8)
@@ -252,21 +280,29 @@ private struct SidebarRow: View {
     }
 }
 
-private struct Content: View {
+// Лист раздела: сверху капсула с путём и две кнопки (надиктовка, новая заметка), под ними — сам раздел.
+struct SectionContent: View {
     let model: NotesModel
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             Group {
-                if let note = model.openNote {
-                    NoteEditor(model: model, url: note).id(note)
-                } else {
-                    FolderOverview(model: model, folder: model.currentFolder)
+                switch model.section {
+                case .notes:
+                    if let note = model.openNote {
+                        NoteEditor(model: model, url: note).id(note)
+                    } else {
+                        FolderOverview(model: model, folder: model.currentFolder)
+                    }
+                case .tasks: TasksScreen(model: model.tasks)
+                case .calendar: CalendarScreen(tasks: model.tasks)
+                case .video: VideoScreen(model: model)
+                case .settings: SettingsScreen(model: model)
                 }
             }
             .padding(.top, 51)
 
-            Text(model.breadcrumb)
+            Text(crumb)
                 .font(Martian.body.font(13))
                 .kerning(Theme.tracking(-7, size: 13))
                 .foregroundStyle(NotesLayout.gray)
@@ -284,10 +320,84 @@ private struct Content: View {
             .offset(x: 1098 - 279, y: 109 - 92)
         }
     }
+
+    private var crumb: String {
+        switch model.section {
+        case .notes: model.breadcrumb
+        case .tasks: "задачи / " + model.tasks.filter.rawValue
+        case .calendar: "календарь"
+        case .video: model.video.crumb
+        case .settings: "настройки / " + model.settingsPage.rawValue
+        }
+    }
+}
+
+// Боковая панель своего раздела: дерево заметок, фильтры задач, календари, видео, страницы настроек.
+struct SectionSidebar: View {
+    let model: NotesModel
+
+    var body: some View {
+        switch model.section {
+        case .notes: NotesSidebar(model: model)
+        case .tasks:
+            SidebarList(title: "задачи") {
+                ForEach(TasksModel.Filter.allCases, id: \.self) { filter in
+                    SidebarRow(glyph: filter == .inCalendar ? .calendar : filter == .done ? .taskDone : .task,
+                               title: filter.rawValue, count: model.tasks.count(filter),
+                               selected: model.tasks.filter == filter) { model.tasks.filter = filter }
+                }
+            }
+        case .calendar:
+            SidebarList(title: "календари") {
+                ForEach(model.tasks.calendar.calendars, id: \.calendarIdentifier) { calendar in
+                    SidebarRow(glyph: .calendar, title: calendar.title,
+                               selected: calendar.calendarIdentifier == model.tasks.calendar.tasksCalendar?.calendarIdentifier) {}
+                }
+            }
+        case .video:
+            SidebarList(title: "видео") {
+                ForEach(VideoModel.Filter.allCases, id: \.self) { filter in
+                    SidebarRow(glyph: filter == .done ? .taskDone : .video, title: filter.rawValue,
+                               count: model.video.count(filter), selected: model.video.filter == filter) {
+                        model.video.filter = filter
+                        model.video.open = nil
+                    }
+                }
+            }
+        case .settings:
+            SidebarList(title: "настройки") {
+                ForEach(NotesModel.SettingsPage.allCases, id: \.self) { page in
+                    SidebarRow(glyph: page.glyph, title: page.rawValue, selected: model.settingsPage == page) {
+                        model.settingsPage = page
+                    }
+                }
+            }
+        }
+    }
+}
+
+struct SidebarList<Rows: View>: View {
+    let title: String
+    @ViewBuilder var rows: () -> Rows
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title)
+                .font(Martian.body.font(11))
+                .kerning(Theme.tracking(-7, size: 11))
+                .foregroundStyle(Theme.fg.opacity(0.2))
+                .padding(.leading, 10)
+                .padding(.top, 12)
+            VStack(alignment: .leading, spacing: 2) { rows() }
+                .padding(.horizontal, 10)
+                .padding(.top, 15)
+            Spacer(minLength: 0)
+        }
+    }
 }
 
 // Круглая кнопка 32×32 с иконкой (компонент «кнопка/иконка»): белый 45 %, мягкая тень.
-private struct IconButton: View {
+struct IconButton: View {
     let glyph: DotGlyph
     let help: String
     let action: () -> Void

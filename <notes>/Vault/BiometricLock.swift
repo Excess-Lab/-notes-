@@ -23,6 +23,8 @@ enum BiometricLock {
         return ok
     }
 
+    static func disable() { UserDefaults.standard.set(false, forKey: enabledKey) }
+
     // «забыл пинкод»: проверяем, что это хозяин Mac — паролем от учётной записи или Touch ID.
     // Окно macOS: «<notes> пытается сбросить пинкод».
     static func verifyOwner() async -> Bool {

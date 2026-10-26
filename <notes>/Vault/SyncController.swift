@@ -49,6 +49,19 @@ final class SyncController {
         lastSync = Date()
     }
 
+    var isRunning: Bool { engine != nil }
+    static var lastPush: Date? { UserDefaults.standard.object(forKey: lastPushKey) as? Date }
+
+    // «отправить сейчас» в настройках: коммит накопившегося и отправка, не дожидаясь суток.
+    func pushNow() async -> Bool {
+        guard let engine, let token = await Self.token() else { return false }
+        _ = try? await engine.commitNow()
+        let sent = (try? await engine.pushIfDue(token: token, lastPush: .distantPast)) ?? false
+        if sent { Self.markPushed() }
+        lastSync = Date()
+        return sent
+    }
+
     // Подпись в шапке главного экрана.
     func status(now: Date) -> String {
         guard engine != nil else { return "без git — история не ведётся" }

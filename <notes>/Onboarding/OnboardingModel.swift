@@ -61,7 +61,11 @@ final class OnboardingModel {
         }
         // `-testVault` — главный экран на тестовой папке в контейнере приложения: настоящие заметки
         // при проверках не трогаем. `-notesOpen проекты/план приложения.md`, `-notesSearch запрос` — сразу туда.
+        if UserDefaults.standard.bool(forKey: "calendarCleanup") {
+            FileHandle.standardError.write(Data("удалено тестовых событий: \(CalendarSync.shared.removeTestEvents())\n".utf8))
+        }
         if UserDefaults.standard.bool(forKey: "testVault") {
+            CalendarSync.shared.enabled = false
             vaultURL = Self.makeTestVault()
             phase = .unlocked
         }
@@ -70,6 +74,10 @@ final class OnboardingModel {
     }
 
     #if DEBUG
+    static func day(_ offset: Int) -> String {
+        NoteTasks.format(Calendar.current.date(byAdding: .day, value: offset, to: Date())!, withTime: false)
+    }
+
     static func makeTestVault() -> URL {
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("test-vault", isDirectory: true)
@@ -81,7 +89,8 @@ final class OnboardingModel {
             "личное/книги.md": "Прочитать до конца года.",
             "Созвоны/12 октября.md": "Синхронизация с телефоном: открыть репозиторий в Working Copy.",
             "Книги/список.md": "Норвежский лес", "Идеи для видео/первое.md": "Как я пишу заметки",
-            "Входящие.md": "купить хлеб", "Список покупок.md": "молоко, хлеб",
+            "Входящие.md": "- [ ] Купить хлеб 📅 \(Self.day(3))\n- [ ] Записать видео про заметки\n- [x] Выбрать модель распознавания",
+            "проекты/дела.md": "- [ ] Созвониться с командой 📅 \(Self.day(0)) 15:00\n- [ ] Собрать иконку приложения 📅 \(Self.day(2)) 9:00\n- [ ] Дописать план приложения 📅 \(Self.day(0))", "Список покупок.md": "молоко, хлеб",
         ]
         for (path, text) in notes {
             let url = base.appendingPathComponent(path)

@@ -40,6 +40,11 @@ import SwiftUI
         .windowResizability(.contentSize)
         .commands {
             // Чтобы смотреть анимацию загрузки много раз подряд, не перезапуская приложение.
+            // Настройки — по ⌘, как в любом приложении Mac: открываются разделом главного окна.
+            CommandGroup(replacing: .appSettings) {
+                Button("Настройки…") { NotificationCenter.default.post(name: .openSettings, object: nil) }
+                    .keyboardShortcut(",")
+            }
             CommandMenu("Отладка") {
                 Button("Повторить загрузку") { onboarding.restart() }
                     .keyboardShortcut("r")
@@ -65,6 +70,15 @@ private struct RootView: View {
             }
         }
         .animation(.smooth(duration: 0.6), value: onboarding.phase == .unlocked)
+        .onReceive(NotificationCenter.default.publisher(for: .openSettings)) { _ in
+            notes?.section = .settings
+        }
+        // Новую папку хранилища выбрали в настройках — пересоздаём заметки и синхронизацию на ней.
+        .onReceive(NotificationCenter.default.publisher(for: .vaultChosen)) { note in
+            guard let url = note.object as? URL else { return }
+            onboarding.vaultURL = url
+            SyncController.shared.start(vault: url)
+        }
         // Модель заметок — одна на окно: создаём, когда есть папка хранилища.
         .onChange(of: onboarding.vaultURL, initial: true) { _, vault in
             guard let vault, notes?.library.root != vault.standardizedFileURL else { return }
@@ -73,6 +87,17 @@ private struct RootView: View {
             if let path = UserDefaults.standard.string(forKey: "notesOpen") {
                 let url = vault.appendingPathComponent(path)
                 model.open(path.hasSuffix(".md") ? .note(url) : .folder(url))
+            }
+            // `-notesSection tasks|calendar|video|settings`, `-settingsPage вход` — сразу в раздел.
+            switch UserDefaults.standard.string(forKey: "notesSection") {
+            case "tasks": model.section = .tasks
+            case "calendar": model.section = .calendar
+            case "video": model.section = .video
+            case "settings": model.section = .settings
+            default: break
+            }
+            if let page = UserDefaults.standard.string(forKey: "settingsPage").flatMap(NotesModel.SettingsPage.init) {
+                model.settingsPage = page
             }
             if let query = UserDefaults.standard.string(forKey: "notesSearch") {
                 model.searchShown = true
@@ -83,4 +108,8 @@ private struct RootView: View {
             if UserDefaults.standard.bool(forKey: "notesSelfTest") { Task { await model.selfTest() } }
         }
     }
+}
+
+extension Notification.Name {
+    static let openSettings = Notification.Name("notes.openSettings")
 }
