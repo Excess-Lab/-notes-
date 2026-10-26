@@ -51,6 +51,8 @@ open "build/Build/Products/Debug/<notes>.app"
 - Самопроверка главного экрана — запуск бинарника из терминала, печатает ok / FAIL по каждому действию:
   `"build/Build/Products/Debug/<notes>.app/Contents/MacOS/<notes>" -testVault YES -notesSelfTest YES -ApplePersistenceIgnoreState YES`.
   Без последнего флага macOS «восстанавливает» ноль окон, и проверка не стартует.
+- Сразу в раздел: `-notesSection tasks|calendar|video|settings`, страница настроек — `-settingsPage вход`.
+  С `-testVault` календарь не синхронизируется — настоящий Календарь не трогаем.
 - Тёмная тема без переключения системы: `--args -appearance dark`.
 - Сфера надиктовки без микрофона: `--args -orbPreview listening` (или `recognizing`, `copied`).
   Тестовый WAV в `tmp` контейнера macOS со временем чистит, а терминал с подписью командой туда не пишет.

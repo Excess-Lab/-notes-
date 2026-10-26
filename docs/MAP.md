@@ -24,6 +24,11 @@
 - `<notes>/Notes/NotesWindow.swift` — главный экран: шапка, боковая панель, лист содержимого, кнопки.
 - `<notes>/Notes/NoteViews.swift` — заметка, обзор папок с карточками, строки, поиск поверх.
 - `<notes>/Notes/MarkdownEditor.swift` — редактор текста заметки (NSTextView) с оформлением заголовков.
+- `<notes>/Tasks/TasksModel.swift` — задачи из заметок, фильтры, отметка; синхронизация с Apple Calendar (EventKit).
+- `<notes>/Tasks/TasksScreen.swift` — экраны задач и календаря (неделя, день, месяц).
+- `<notes>/Video/VideoModel.swift` — очередь расшифровок, хранение вне хранилища, заметка, копия, .srt.
+- `<notes>/Video/VideoScreen.swift` — список видео с зоной для файла и экран расшифровки.
+- `<notes>/Settings/SettingsScreen.swift` — пять страниц настроек на настоящих данных.
 - `<notes>/Vault/VaultStore.swift` — папка хранилища: выбор, security-scoped bookmark, iCloud.
 - `<notes>/Vault/BiometricLock.swift` — Touch ID: включить, войти, подтвердить хозяина для сброса пинкода.
 - `<notes>/Vault/SyncController.swift` — раз в час: коммит, pull, отправка раз в сутки.
@@ -44,6 +49,8 @@
 - `NotesCore/Sources/NotesCore/TokenStore.swift` — записи в Связке ключей, пересоздание старых без запросов.
 - `NotesCore/Sources/NotesCore/Sync.swift` — подпись коммита, расписание отправки, движок синхронизации.
 - `NotesCore/Sources/NotesCore/NoteLibrary.swift` — заметки в папке: дерево, чтение и запись, создание, переименование, поиск по тексту.
+- `NotesCore/Sources/NotesCore/NoteTasks.swift` — задачи из строк заметок: разбор, отметка, группы, план синхронизации с календарём.
+- `NotesCore/Sources/NotesCore/Transcript.swift` — расшифровка: куски с временем, .srt, заметка Markdown.
 - `NotesCore/Sources/NotesCore/FolderWatcher.swift` — слежка за папкой (FSEvents), `.git` пропускаем.
 - `NotesCore/Sources/NotesCore/HotKeyCombo.swift` — сочетание надиктовки: подпись, проверка, хранение.
 - `NotesCore/Sources/NotesCore/PinCode.swift` — пинкод: ввод, проверка при входе, хеш, хранение.
@@ -54,7 +61,9 @@
 
 - `NotesSpeech/Package.swift` — пакет: sherpa-onnx (готовая сборка) и WhisperKit.
 - `NotesSpeech/Sources/NotesSpeech/SpeechModel.swift` — каталог моделей, скачивание, проверка суммы.
+- `NotesSpeech/Sources/NotesSpeech/MediaTranscription.swift` — звук из видео и аудио → 16 кГц, куски по 20 с, распознавание.
 - `NotesSpeech/Sources/NotesSpeech/Transcriber.swift` — распознавание: GigaAM через sherpa-onnx, Whisper.
+- `NotesSpeech/Tests/NotesSpeechTests/*.swift` — тесты: с настоящими моделями (включаются переменными) и нарезка файла с заглушкой.
 - `NotesSpeech/Tests/NotesSpeechTests/SpeechTests.swift` — тесты с настоящими моделями (включаются переменными).
 
 ## Прочее
