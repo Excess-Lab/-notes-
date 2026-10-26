@@ -46,6 +46,7 @@ open "build/Build/Products/Debug/<notes>.app"
   (`~/Library/Containers/devplaceholder.WXQXCR6Q.-notes-/Data/tmp/`) и запусти с
   `--args -dictationTestFile <путь>` — запись пройдёт весь путь до буфера обмена.
 - Окно не открылось, хотя приложение запущено — macOS «восстановила» ноль окон: запускай `open -F`.
+- Тёмная тема без переключения системы: `--args -appearance dark`.
 - Сфера надиктовки без микрофона: `--args -orbPreview listening` (или `recognizing`, `copied`).
   Тестовый WAV в `tmp` контейнера macOS со временем чистит, а терминал с подписью командой туда не пишет.
 - Окно пинкода в нужном состоянии: `--args -onboardingStep 9 -pinPreview "1234 1"` (набранные цифры,
