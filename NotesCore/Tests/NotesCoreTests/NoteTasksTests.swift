@@ -70,4 +70,19 @@ struct NoteTasksTests {
         #expect(actions.contains(.delete(key: "\(note.path)|Готово", eventID: "e3")))
         #expect(actions.count == 3)
     }
+
+    // Иначе новая задача склеивалась бы с последней строкой заметки.
+    @Test("задача из календаря дописывается новой строкой и читается обратно")
+    func append() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("append-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let lib = NoteLibrary(root: root)
+        let url = root.appendingPathComponent("Входящие.md")
+        try "купить хлеб".write(to: url, atomically: true, encoding: .utf8)
+        let due = Date(timeIntervalSince1970: 1_792_000_000)
+        try NoteTasks.append("Созвон", due: due, hasTime: true, to: url, library: lib)
+        let tasks = NoteTasks.all(in: lib)
+        #expect(try lib.read(url).hasPrefix("купить хлеб\n- [ ] Созвон 📅 "))
+        #expect(tasks.first?.title == "Созвон" && tasks.first?.hasTime == true)
+    }
 }

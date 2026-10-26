@@ -41,6 +41,13 @@ import NotesCore
         }
     }
 
+    // Добавить из календаря: в «Входящие.md» в корне хранилища, дальше — обычная синхронизация.
+    func add(_ title: String, due: Date, hasTime: Bool) {
+        try? NoteTasks.append(title, due: due, hasTime: hasTime,
+                              to: library.root.appendingPathComponent("Входящие.md"), library: library)
+        reload()
+    }
+
     func toggle(_ task: NoteTask) {
         do {
             try NoteTasks.setDone(task, !task.done, library: library)

@@ -105,6 +105,8 @@ struct CalendarScreen: View {
     enum Mode: String, CaseIterable { case day = "день", week = "неделя", month = "месяц" }
     @State private var mode: Mode = .week
     @State private var anchor = Date()
+    // Задача, которую сейчас вписывают: время начала.
+    @State private var draft: Date?
 
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -127,6 +129,14 @@ struct CalendarScreen: View {
                         .foregroundStyle(NotesLayout.gray)
                 }
                 Spacer()
+                // Плюс — новая задача на ближайший час сегодня (или на выбранный день).
+                Button {
+                    mode = mode == .month ? .day : mode
+                    let hour = Calendar.current.component(.hour, from: Date()) + 1
+                    draft = Calendar.current.date(bySettingHour: min(max(hour, 9), 16), minute: 0, second: 0,
+                                                  of: mode == .day ? anchor : Date())
+                } label: { IconButtonLabel(glyph: .plus) }
+                    .buttonStyle(.plain).help("новая задача").padding(.trailing, 8).padding(.top, 2)
                 HStack(spacing: 2) {
                     ForEach(Mode.allCases, id: \.self) { item in
                         Button { mode = item } label: { ModeChip(title: item.rawValue, on: mode == item) }
@@ -143,9 +153,9 @@ struct CalendarScreen: View {
             if tasks.calendar.hasAccess {
                 Group {
                     switch mode {
-                    case .day: DayGrid(days: [calendar.startOfDay(for: anchor)], tasks: tasks)
-                    case .week: DayGrid(days: week, tasks: tasks)
-                    case .month: MonthGrid(month: anchor, calendar: calendar, tasks: tasks)
+                    case .day: DayGrid(days: [calendar.startOfDay(for: anchor)], tasks: tasks, draft: $draft)
+                    case .week: DayGrid(days: week, tasks: tasks, draft: $draft)
+                    case .month: MonthGrid(month: anchor, calendar: calendar, tasks: tasks) { anchor = $0; mode = .day }
                     }
                 }
                 .padding(.top, 30)
@@ -207,6 +217,9 @@ private struct ModeChip: View {
 private struct DayGrid: View {
     let days: [Date]
     let tasks: TasksModel
+    @Binding var draft: Date?
+    @State private var title = ""
+    @FocusState private var focused: Bool
     private let gutter: CGFloat = 44, hour: CGFloat = 50, first = 9, hours = 8
 
     var body: some View {
@@ -230,12 +243,39 @@ private struct DayGrid: View {
                     .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
                     .offset(y: 44 + CGFloat(h) * hour - 6)
             }
+            // Клик по пустому месту — задача на этот час, с шагом полчаса.
+            Color.clear.contentShape(Rectangle())
+                .frame(width: 832 - gutter, height: CGFloat(hours) * hour)
+                .offset(x: gutter, y: 44)
+                .onTapGesture { point in
+                    let column = min(Int(point.x / colW), days.count - 1)
+                    let half = (point.y / (hour / 2)).rounded(.down) / 2
+                    draft = Calendar.current.date(byAdding: .minute, value: Int((Double(first) + half) * 60), to: days[column])
+                }
             ForEach(events, id: \.eventIdentifier) { event in
                 if let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: event.startDate) }) {
                     EventBlock(event: event, task: tasks.calendar.isTaskEvent(event))
                         .frame(width: colW - 6, height: height(event))
                         .offset(x: gutter + CGFloat(column) * colW + 3, y: 44 + top(event) + 3)
                 }
+            }
+        }
+        .overlay(alignment: .topLeading) {
+            if let start = draft, let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: start) }) {
+                let parts = Calendar.current.dateComponents([.hour, .minute], from: start)
+                // Вписываемая задача — тот же коралловый блок, что у задач в календаре.
+                TextField("что сделать?", text: $title)
+                    .textFieldStyle(.plain).font(Martian.body.font(11)).foregroundStyle(Theme.ink)
+                    .focused($focused)
+                    .onSubmit { tasks.add(title, due: start, hasTime: true); title = ""; draft = nil }
+                    .onKeyPress(.escape) { title = ""; draft = nil; return .handled }
+                    .padding(.horizontal, 8)
+                    .frame(width: colW - 6, height: hour - 6, alignment: .topLeading)
+                    .padding(.top, 5)
+                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.coral.opacity(0.12)))
+                    .offset(x: gutter + CGFloat(column) * colW + 3,
+                            y: 44 + (CGFloat((parts.hour ?? first) - first) + CGFloat(parts.minute ?? 0) / 60) * hour + 3)
+                    .onAppear { focused = true }
             }
         }
         .frame(width: 832, height: 44 + CGFloat(hours) * hour, alignment: .topLeading)
@@ -279,6 +319,7 @@ private struct MonthGrid: View {
     let month: Date
     let calendar: Calendar
     let tasks: TasksModel
+    let openDay: (Date) -> Void
 
     var body: some View {
         let start = calendar.dateInterval(of: .weekOfYear, for: calendar.dateInterval(of: .month, for: month)!.start)!.start
@@ -303,6 +344,8 @@ private struct MonthGrid: View {
                 .frame(height: 70, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 10).fill(Theme.fg.opacity(0.03)))
+                .contentShape(Rectangle())
+                .onTapGesture { openDay(day) }
             }
         }
         .frame(width: 832)

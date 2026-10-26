@@ -397,6 +397,18 @@ struct SidebarList<Rows: View>: View {
 }
 
 // Круглая кнопка 32×32 с иконкой (компонент «кнопка/иконка»): белый 45 %, мягкая тень.
+// Иконка в круглой кнопке 32×32 — без действия, чтобы ставить в свои Button.
+struct IconButtonLabel: View {
+    let glyph: DotGlyph
+    var body: some View {
+        DotIcon(glyph: glyph)
+            .frame(width: 32, height: 32)
+            .background(Circle().fill(Theme.bg.opacity(0.45)))
+            .shadow(color: .black.opacity(0.06), radius: 4, y: 1)
+            .contentShape(Circle())
+    }
+}
+
 struct IconButton: View {
     let glyph: DotGlyph
     let help: String

@@ -75,6 +75,15 @@ public enum NoteTasks {
 
     public enum EditError: Error { case changedOnDisk }
 
+    // Задача из календаря: строка дописывается в конец заметки (заметку создаём, если её нет).
+    public static func append(_ title: String, due: Date, hasTime: Bool, to url: URL, library: NoteLibrary) throws {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty else { return }
+        var text = (try? library.read(url)) ?? ""
+        if !text.isEmpty && !text.hasSuffix("\n") { text += "\n" }
+        try library.write(text + "- [ ] \(clean) \(marker) \(format(due, withTime: hasTime))\n", to: url)
+    }
+
     // Отметить задачу (не)сделанной — правим только её строку. Если файл с тех пор поменяли и строки
     // уже нет на месте, ничего не трогаем: иначе можно испортить чужую правку.
     public static func setDone(_ task: NoteTask, _ done: Bool, library: NoteLibrary) throws {
