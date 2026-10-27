@@ -115,7 +115,9 @@ private struct RootView: View {
             }
             #endif
             notes = model
+            #if DEBUG
             if UserDefaults.standard.bool(forKey: "notesSelfTest") { Task { await model.selfTest() } }
+            #endif
         }
     }
 }
