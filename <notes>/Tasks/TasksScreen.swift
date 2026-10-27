@@ -348,49 +348,38 @@ private struct MonthGrid: View {
     }
 }
 
-// Новая задача из календаря: название, день, время или «весь день», длительность. Добавляется строкой
-// во «Входящие.md» и уходит в Apple Calendar. Своего кадра нет — системные поля в нашем шрифте.
+// Новая задача из календаря — как быстрое событие в Календаре Apple: сразу печатаешь название, Enter — готово.
+// Под названием одна строка: когда (можно поменять) и «весь день». Длительность — из настроек календаря.
 private struct NewTaskPopover: View {
     let start: Date
     let add: (String, Date, Bool) -> Void
     @State private var title = ""
     @State private var date = Date()
     @State private var allDay = false
-    @State private var minutes = CalendarSync.shared.minutes
     @FocusState private var focused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             TextField("новая задача", text: $title)
                 .textFieldStyle(.plain)
-                .font(Martian.heading.font(15))
+                .font(Martian.heading.font(17))
                 .focused($focused)
                 .onSubmit(save)
-            DatePicker("день", selection: $date, displayedComponents: allDay ? [.date] : [.date, .hourAndMinute])
-                .font(Martian.body.font(13))
-            Toggle("весь день", isOn: $allDay).font(Martian.body.font(13))
-            if !allDay {
-                Picker("длительность", selection: $minutes) {
-                    ForEach([15, 30, 60, 90, 120], id: \.self) { Text("\($0) мин").tag($0) }
-                }
-                .font(Martian.body.font(13))
+            HStack(spacing: 8) {
+                DatePicker("", selection: $date, displayedComponents: allDay ? [.date] : [.date, .hourAndMinute])
+                    .labelsHidden().datePickerStyle(.field).font(Martian.body.font(13))
+                Toggle("весь день", isOn: $allDay).toggleStyle(.checkbox).font(Martian.body.font(13))
             }
-            HStack {
-                Spacer()
-                Button("добавить", action: save)
-                    .buttonStyle(CoralCapsuleStyle())
-                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .keyboardShortcut(.defaultAction)
-            }
+            Text("enter — добавить, esc — закрыть")
+                .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
         }
-        .padding(16)
-        .frame(width: 280)
+        .padding(14)
+        .frame(width: 300, alignment: .leading)
         .onAppear { date = start; focused = true }
     }
 
     private func save() {
         guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        CalendarSync.shared.minutes = minutes
         add(title, date, !allDay)
     }
 }

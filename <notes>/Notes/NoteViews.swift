@@ -82,7 +82,8 @@ struct FolderOverview: View {
     @State private var naming = false
     @State private var newName = ""
 
-    private let columns = Array(repeating: GridItem(.fixed(184), spacing: 28, alignment: .topLeading), count: 4)
+    // Сколько папок в ряд — сколько влезает: окно тянется.
+    private let columns = [GridItem(.adaptive(minimum: 184, maximum: 184), spacing: 28, alignment: .topLeading)]
 
     var body: some View {
         ScrollView {
@@ -124,8 +125,9 @@ struct FolderOverview: View {
                     .padding(.top, 6)
                 }
             }
-            .frame(width: 832, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.leading, 56 + 2)
+            .padding(.trailing, 56)
             .padding(.top, 36)
             .padding(.bottom, 40)
         }
@@ -283,7 +285,8 @@ struct SearchOverlay: View {
                 .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 30)))
             .clipShape(RoundedRectangle(cornerRadius: 30))
             .shadow(color: .black.opacity(0.15), radius: 30, y: 10)
-            .offset(x: 260, y: 238)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 238)
         }
         .onAppear { focused = true }
     }

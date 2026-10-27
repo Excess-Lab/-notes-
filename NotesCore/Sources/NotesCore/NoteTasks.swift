@@ -69,7 +69,7 @@ public enum NoteTasks {
 
     public static func all(in library: NoteLibrary) -> [NoteTask] {
         library.allNotes(in: library.tree()).flatMap { note in
-            (try? library.read(note.url)).map { tasks(in: $0, note: note.url) } ?? []
+            library.text(of: note).map { tasks(in: $0, note: note.url) } ?? []
         }
     }
 

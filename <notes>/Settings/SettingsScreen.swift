@@ -27,7 +27,9 @@ struct SettingsScreen: View {
                 case .dictation: DictationPage()
                 case .search: SearchPage()
                 case .lock: LockPage(model: model)
-                case .calendar: CalendarPage(sync: model.tasks.calendar, reload: model.tasks.reload)
+                case .calendar:
+                    CalendarPage(sync: model.tasks.calendar, reload: model.tasks.reload)
+                    FolderPicks(folders: model.tree.folders.map(\.name), sync: model.tasks.calendar, reload: model.tasks.reload)
                 }
             }
             .frame(width: 832, alignment: .leading)
@@ -240,4 +242,28 @@ private struct CalendarPage: View {
 
 extension Notification.Name {
     static let vaultChosen = Notification.Name("notes.vaultChosen")
+}
+
+// Из каких папок задачи уходят в календарь — по строке на папку верхнего уровня.
+private struct FolderPicks: View {
+    let folders: [String]
+    let sync: CalendarSync
+    let reload: () -> Void
+    @State private var excluded: Set<String> = []
+
+    var body: some View {
+        Text("папки в календаре")
+            .font(Martian.body.font(15)).foregroundStyle(Theme.ink).padding(.top, 26)
+        ForEach(folders, id: \.self) { name in
+            SettingRow(title: name) {
+                Toggle("", isOn: Binding(get: { !excluded.contains(name) }, set: { on in
+                    if on { excluded.remove(name) } else { excluded.insert(name) }
+                    sync.excludedFolders = excluded
+                    reload()
+                }))
+                .toggleStyle(.switch).tint(Theme.coral).labelsHidden()
+            }
+        }
+        .onAppear { excluded = sync.excludedFolders }
+    }
 }

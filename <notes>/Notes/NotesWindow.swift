@@ -33,13 +33,17 @@ struct NotesWindow: View {
                 .transition(.opacity.combined(with: .blurReplace))
             }
         }
-        .frame(width: NotesLayout.window.width, height: NotesLayout.window.height, alignment: .topLeading)
+        // Окно тянется: минимум — размер кадра 1200×760.
+        .frame(minWidth: NotesLayout.window.width, maxWidth: .infinity,
+               minHeight: NotesLayout.window.height, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.bg)
         .animation(.smooth(duration: 0.3), value: model.searchShown)
         .onDisappear { model.flush() }
     }
 
     private var screen: some View {
+        GeometryReader { geo in
+        let w = geo.size.width, h = geo.size.height
         ZStack(alignment: .topLeading) {
             // Шапка из планок, как на первом входе, только 92 px и во всю ширину.
             GlassSlats(slatWidth: Layout.finalSlatWidth)
@@ -49,22 +53,22 @@ struct NotesWindow: View {
 
             // Боковая панель и лист содержимого — отдельные стеклянные листы под шапкой.
             GlassSheet(radius: 14)
-                .frame(width: 247, height: 668)
+                .frame(width: 247, height: h - 92)
                 .offset(x: 17, y: 92)
             SectionSidebar(model: model)
-                .frame(width: 247, height: 668, alignment: .topLeading)
+                .frame(width: 247, height: h - 92, alignment: .topLeading)
                 .offset(x: 17, y: 92)
 
             GlassSheet(radius: 18)
-                .frame(width: 906, height: 668)
+                .frame(width: w - 294, height: h - 92)
                 .offset(x: 279, y: 92)
             // Обрезаем до сдвига: после .offset обрезка шла по старому месту, и правый край листа пропадал.
             SectionContent(model: model)
-                .frame(width: 906, height: 668, alignment: .topLeading)
+                .frame(width: w - 294, height: h - 92, alignment: .topLeading)
                 .clipped()
                 .offset(x: 279, y: 92)
         }
-        .frame(width: NotesLayout.window.width, height: NotesLayout.window.height, alignment: .topLeading)
+        }
     }
 }
 
@@ -317,7 +321,9 @@ struct SectionContent: View {
                 IconButton(glyph: .newNote, help: "новая заметка") { model.newNote() }
                     .keyboardShortcut("n", modifiers: .command)
             }
-            .offset(x: 1098 - 279, y: 109 - 92)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .padding(.trailing, 15)
+            .offset(y: 109 - 92)
         }
     }
 

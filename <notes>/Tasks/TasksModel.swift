@@ -22,7 +22,8 @@ import NotesCore
 
     func reload() {
         tasks = NoteTasks.all(in: library)
-        calendar.sync(tasks)
+        // В календарь — только задачи из выбранных папок (настройки → календарь).
+        calendar.sync(tasks.filter { calendar.includes(library.breadcrumb(for: $0.note)) })
     }
 
     func count(_ filter: Filter) -> Int { tasks.filter { matches($0, filter) }.count }
@@ -111,6 +112,16 @@ import NotesCore
     var minutes: Int {
         get { UserDefaults.standard.object(forKey: Self.durationKey) as? Int ?? 30 }
         set { UserDefaults.standard.set(newValue, forKey: Self.durationKey) }
+    }
+
+    // Папки верхнего уровня, задачи из которых в календарь не идут. Заметки без папки идут всегда.
+    var excludedFolders: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "calendarExcludedFolders") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "calendarExcludedFolders") }
+    }
+
+    func includes(_ path: [String]) -> Bool {
+        path.count < 2 || !excludedFolders.contains(path[0])
     }
 
     func isLinked(_ task: NoteTask) -> Bool { links[task.key] != nil }

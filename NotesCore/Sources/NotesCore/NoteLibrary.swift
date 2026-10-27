@@ -58,6 +58,15 @@ public struct NoteLibrary: Sendable {
 
     public func read(_ url: URL) throws -> String { try String(contentsOf: url, encoding: .utf8) }
 
+    // Текст для поиска и задач: с диска — только если файл поменялся. Раньше каждое изменение в папке
+    // и каждая буква в поиске перечитывали все заметки целиком.
+    public func text(of note: Note) -> String? {
+        if let hit = TextCache.shared.get(note.url, modified: note.modified) { return hit }
+        guard let text = try? read(note.url) else { return nil }
+        TextCache.shared.set(note.url, modified: note.modified, text: text)
+        return text
+    }
+
     // Пишем атомарно: при сбое посреди записи на диске остаётся старая версия, а не половина заметки.
     public func write(_ text: String, to url: URL) throws {
         try text.write(to: url, atomically: true, encoding: .utf8)
@@ -113,7 +122,7 @@ public struct NoteLibrary: Sendable {
         guard !words.isEmpty else { return [] }
         var hits: [Hit] = []
         for note in allNotes(in: tree()) {
-            guard let text = try? read(note.url) else { continue }
+            guard let text = text(of: note) else { continue }
             let title = Self.normalize(note.title)
             let body = Self.normalize(text)
             guard words.allSatisfy({ title.contains($0) || body.contains($0) }) else { continue }
@@ -142,5 +151,19 @@ public struct NoteLibrary: Sendable {
     // «312 слов» под заголовком заметки.
     public static func wordCount(_ text: String) -> Int {
         text.split { $0.isWhitespace || $0.isNewline }.filter { $0.contains { $0.isLetter || $0.isNumber } }.count
+    }
+}
+
+final class TextCache: @unchecked Sendable {
+    static let shared = TextCache()
+    private var items: [URL: (Date, String)] = [:]
+    private let lock = NSLock()
+
+    func get(_ url: URL, modified: Date) -> String? {
+        lock.withLock { items[url].flatMap { $0.0 == modified ? $0.1 : nil } }
+    }
+
+    func set(_ url: URL, modified: Date, text: String) {
+        lock.withLock { items[url] = (modified, text) }
     }
 }
