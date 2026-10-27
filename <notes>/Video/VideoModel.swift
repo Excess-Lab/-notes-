@@ -122,6 +122,8 @@ import NotesSpeech
                 try JSONEncoder().encode(transcript).write(to: Self.folder.appendingPathComponent("\(id).json"))
                 transcripts[id] = transcript
                 update(id) { $0.status = .done; $0.progress = 1; $0.words = transcript.wordCount }
+                // Расшифровка сразу ложится заметкой в хранилище: «расшифровки/<имя>.md» с метаданными.
+                _ = writeNote(id)
             } catch {
                 update(id) { $0.status = .failed }
             }
@@ -140,10 +142,17 @@ import NotesSpeech
 
     // MARK: - Действия с готовой расшифровкой
 
-    func saveAsNote(_ id: UUID) -> URL? {
+    // Заметка расшифровки: если уже есть — открываем её, а не плодим копию.
+    func saveAsNote(_ id: UUID) -> URL? { writeNote(id) }
+
+    private func writeNote(_ id: UUID) -> URL? {
         guard let item = items.first(where: { $0.id == id }), let transcript = transcript(id) else { return nil }
-        guard let url = try? library.createNote(in: library.root, title: item.title) else { return nil }
-        try? library.write(transcript.markdown(title: item.title), to: url)
+        let folder = library.root.appendingPathComponent("расшифровки", isDirectory: true)
+        let url = folder.appendingPathComponent(item.title + ".md")
+        if FileManager.default.fileExists(atPath: url.path) { return url }
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try? library.write(transcript.note(title: item.title, source: item.name, added: item.added,
+                                           duration: item.duration, model: SpeechSettings.model.displayName), to: url)
         return url
     }
 
@@ -201,6 +210,9 @@ extension VideoModel {
         let text = transcript(item.id)?.text ?? ""
         log("расшифровано: «\(text)»", item.status == .done && text.lowercased().contains("расшифров"))
         log("метки времени есть", (transcript(item.id)?.segments.first?.start ?? -1) == 0)
+        let note = library.root.appendingPathComponent("расшифровки/\(item.title).md")
+        let saved = (try? String(contentsOf: note, encoding: .utf8)) ?? ""
+        log("заметка в хранилище с метаданными", saved.hasPrefix("---\nисточник: ") && saved.contains("модель: "))
         remove(item.id)
     }
 }

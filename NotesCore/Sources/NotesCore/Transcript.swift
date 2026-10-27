@@ -38,6 +38,24 @@ public struct Transcript: Codable, Hashable, Sendable {
         }.joined(separator: "\n")
     }
 
+    // Заметка с метаданными во frontmatter — блоке «---» в начале, который понимают редакторы Markdown:
+    // откуда расшифровка, когда загрузили, сколько длится, чем распознано.
+    public func note(title: String, source: String, added: Date, duration: Double, model: String) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        return """
+        ---
+        источник: \(source)
+        загружено: \(formatter.string(from: added))
+        длительность: \(Self.clock(duration))
+        модель: \(model)
+        слов: \(wordCount)
+        ---
+
+        """ + "\n" + markdown(title: title)
+    }
+
     // Заметка: заголовок — имя файла, дальше строки с меткой времени. Обычный Markdown.
     public func markdown(title: String) -> String {
         "# \(title)\n\n" + segments.map { "**\(Self.clock($0.start))** \($0.text)" }.joined(separator: "\n\n") + "\n"

@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import NotesCore
 
@@ -19,5 +20,14 @@ struct TranscriptTests {
         #expect(transcript.markdown(title: "Созвон") == "# Созвон\n\n**00:00** Так, всех слышно?\n\n**1:02:05** Окей, до встречи.\n")
         #expect(Transcript.clock(751) == "12:31")
         #expect(transcript.wordCount == 6)
+    }
+
+    // Иначе по заметке не понять, откуда расшифровка и когда её сделали.
+    @Test("заметка расшифровки с метаданными во frontmatter")
+    func noteWithMeta() {
+        let added = Date(timeIntervalSince1970: 0)
+        let text = transcript.note(title: "Созвон", source: "созвон.mp4", added: added, duration: 3731, model: "GigaAM v3")
+        #expect(text.hasPrefix("---\nисточник: созвон.mp4\nзагружено: "))
+        #expect(text.contains("длительность: 1:02:11\nмодель: GigaAM v3\nслов: 6\n---\n\n# Созвон"))
     }
 }

@@ -102,6 +102,8 @@ private struct TaskRow: View {
 // задачи из заметок — коралловые. Переключатель «день / неделя / месяц» как в поиске.
 struct CalendarScreen: View {
     let tasks: TasksModel
+    // Загруженные на расшифровку видео — серой строкой в день загрузки.
+    var uploads: [VideoModel.Item] = []
     enum Mode: String, CaseIterable { case day = "день", week = "неделя", month = "месяц" }
     @State private var mode: Mode = .week
     @State private var anchor = Date()
@@ -153,8 +155,8 @@ struct CalendarScreen: View {
             if tasks.calendar.hasAccess {
                 Group {
                     switch mode {
-                    case .day: DayGrid(days: [calendar.startOfDay(for: anchor)], tasks: tasks, draft: $draft)
-                    case .week: DayGrid(days: week, tasks: tasks, draft: $draft)
+                    case .day: DayGrid(days: [calendar.startOfDay(for: anchor)], tasks: tasks, uploads: uploads, draft: $draft)
+                    case .week: DayGrid(days: week, tasks: tasks, uploads: uploads, draft: $draft)
                     case .month: MonthGrid(month: anchor, calendar: calendar, tasks: tasks) { anchor = $0; mode = .day }
                     }
                 }
@@ -217,6 +219,7 @@ private struct ModeChip: View {
 private struct DayGrid: View {
     let days: [Date]
     let tasks: TasksModel
+    let uploads: [VideoModel.Item]
     @Binding var draft: Date?
     private let gutter: CGFloat = 44, hour: CGFloat = 50, first = 9, hours = 8
 
@@ -240,6 +243,17 @@ private struct DayGrid: View {
                 Text("\(first + h):00")
                     .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
                     .offset(y: 44 + CGFloat(h) * hour - 6)
+            }
+            ForEach(Array(days.enumerated()), id: \.offset) { index, day in
+                let count = uploads.filter { Calendar.current.isDate($0.added, inSameDayAs: day) }.count
+                if count > 0 {
+                    HStack(spacing: 4) {
+                        DotIcon(glyph: .video, size: 12, color: NotesLayout.gray)
+                        Text("\(count) \(NoteEditor.plural(count, "видео", "видео", "видео"))")
+                            .font(Martian.body.font(10)).foregroundStyle(NotesLayout.gray)
+                    }
+                    .offset(x: gutter + CGFloat(index) * colW + 44, y: 18)
+                }
             }
             // Клик по пустому месту — задача на этот час, с шагом полчаса.
             Color.clear.contentShape(Rectangle())

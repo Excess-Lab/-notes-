@@ -299,7 +299,7 @@ struct SectionContent: View {
                         FolderOverview(model: model, folder: model.currentFolder)
                     }
                 case .tasks: TasksScreen(model: model.tasks)
-                case .calendar: CalendarScreen(tasks: model.tasks)
+                case .calendar: CalendarScreen(tasks: model.tasks, uploads: model.video.items)
                 case .video: VideoScreen(model: model)
                 case .settings: SettingsScreen(model: model)
                 }
