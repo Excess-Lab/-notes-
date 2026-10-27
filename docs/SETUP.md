@@ -56,6 +56,7 @@ open "build/Build/Products/Debug/<notes>.app"
   Событие в календаре создаётся и сразу удаляется — следов не остаётся.
 - Сразу в раздел: `-notesSection tasks|calendar|video|settings`, страница настроек — `-settingsPage вход`.
   С `-testVault` календарь не синхронизируется — настоящий Календарь не трогаем.
+- Плавная смена темы: `--args -themeFlipTest YES` — через 3 с приложение само меняет тему.
 - Тёмная тема без переключения системы: `--args -appearance dark`.
 - Сфера надиктовки без микрофона: `--args -orbPreview listening` (или `recognizing`, `copied`).
   Тестовый WAV в `tmp` контейнера macOS со временем чистит, а терминал с подписью командой туда не пишет.

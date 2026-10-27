@@ -7,6 +7,7 @@
 ## Приложение (`<notes>/`)
 
 - `<notes>/MyApp.swift` — точка входа (@main): окно, запуск синхронизации, входа и надиктовки, меню «Отладка».
+- `<notes>/ThemeCrossfade.swift` — плавная смена светлой и тёмной темы: снимок старой темы растворяется.
 - `<notes>/Theme.swift` — цвета и шрифты из макета, регистрация шрифтов Martian Grotesk.
 - `<notes>/DotIcon.swift` — точечные иконки (битмапы как в Figma).
 - `<notes>/GitHubApp.swift` — client id приложения на GitHub для входа по коду.
