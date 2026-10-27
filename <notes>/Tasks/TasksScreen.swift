@@ -218,8 +218,6 @@ private struct DayGrid: View {
     let days: [Date]
     let tasks: TasksModel
     @Binding var draft: Date?
-    @State private var title = ""
-    @FocusState private var focused: Bool
     private let gutter: CGFloat = 44, hour: CGFloat = 50, first = 9, hours = 8
 
     var body: some View {
@@ -263,19 +261,17 @@ private struct DayGrid: View {
         .overlay(alignment: .topLeading) {
             if let start = draft, let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: start) }) {
                 let parts = Calendar.current.dateComponents([.hour, .minute], from: start)
-                // Вписываемая задача — тот же коралловый блок, что у задач в календаре.
-                TextField("что сделать?", text: $title)
-                    .textFieldStyle(.plain).font(Martian.body.font(11)).foregroundStyle(Theme.ink)
-                    .focused($focused)
-                    .onSubmit { tasks.add(title, due: start, hasTime: true); title = ""; draft = nil }
-                    .onKeyPress(.escape) { title = ""; draft = nil; return .handled }
-                    .padding(.horizontal, 8)
-                    .frame(width: colW - 6, height: hour - 6, alignment: .topLeading)
-                    .padding(.top, 5)
-                    .background(RoundedRectangle(cornerRadius: 10).fill(Theme.coral.opacity(0.12)))
+                // Метка на выбранном часе, а над ней — окно новой задачи, как быстрое событие в Календаре Apple.
+                RoundedRectangle(cornerRadius: 10).fill(Theme.coral.opacity(0.12))
+                    .frame(width: colW - 6, height: hour - 6)
                     .offset(x: gutter + CGFloat(column) * colW + 3,
                             y: 44 + (CGFloat((parts.hour ?? first) - first) + CGFloat(parts.minute ?? 0) / 60) * hour + 3)
-                    .onAppear { focused = true }
+                    .popover(isPresented: Binding(get: { draft != nil }, set: { if !$0 { draft = nil } }), arrowEdge: .trailing) {
+                        NewTaskPopover(start: start) { title, due, hasTime in
+                            tasks.add(title, due: due, hasTime: hasTime)
+                            draft = nil
+                        }
+                    }
             }
         }
         .frame(width: 832, height: 44 + CGFloat(hours) * hour, alignment: .topLeading)
@@ -349,5 +345,52 @@ private struct MonthGrid: View {
             }
         }
         .frame(width: 832)
+    }
+}
+
+// Новая задача из календаря: название, день, время или «весь день», длительность. Добавляется строкой
+// во «Входящие.md» и уходит в Apple Calendar. Своего кадра нет — системные поля в нашем шрифте.
+private struct NewTaskPopover: View {
+    let start: Date
+    let add: (String, Date, Bool) -> Void
+    @State private var title = ""
+    @State private var date = Date()
+    @State private var allDay = false
+    @State private var minutes = CalendarSync.shared.minutes
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            TextField("новая задача", text: $title)
+                .textFieldStyle(.plain)
+                .font(Martian.heading.font(15))
+                .focused($focused)
+                .onSubmit(save)
+            DatePicker("день", selection: $date, displayedComponents: allDay ? [.date] : [.date, .hourAndMinute])
+                .font(Martian.body.font(13))
+            Toggle("весь день", isOn: $allDay).font(Martian.body.font(13))
+            if !allDay {
+                Picker("длительность", selection: $minutes) {
+                    ForEach([15, 30, 60, 90, 120], id: \.self) { Text("\($0) мин").tag($0) }
+                }
+                .font(Martian.body.font(13))
+            }
+            HStack {
+                Spacer()
+                Button("добавить", action: save)
+                    .buttonStyle(CoralCapsuleStyle())
+                    .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .frame(width: 280)
+        .onAppear { date = start; focused = true }
+    }
+
+    private func save() {
+        guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        CalendarSync.shared.minutes = minutes
+        add(title, date, !allDay)
     }
 }
