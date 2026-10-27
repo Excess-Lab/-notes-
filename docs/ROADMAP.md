@@ -6,7 +6,7 @@
 - [x] Оставить в Xcode-проекте только macOS (сейчас шаблон мультиплатформенный: iOS / macOS / visionOS).
 - [ ] Выбрать название и нормальный bundle identifier.
 - [x] `.gitignore` для Xcode (`xcuserdata/` и т.п.)
-- [ ] Лицензия, README.
+- [x] Лицензия (MIT). README — потом.
 - [x] Каркас тестов (Swift Testing, пакет NotesCore).
 
 ## 1. Заметки
