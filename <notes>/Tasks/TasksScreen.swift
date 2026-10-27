@@ -215,92 +215,119 @@ private struct ModeChip: View {
     }
 }
 
-// Колонки дней с часами 9:00–17:00 (раньше и позже — прижаты к краям).
+// Колонки дней на сутки 0:00–23:59 с прокруткой, открываются на 8:00. Пересекающиеся события стоят
+// рядом, а не друг на друге (раньше всё после 17:00 прижималось к низу и налезало).
 private struct DayGrid: View {
     let days: [Date]
     let tasks: TasksModel
     let uploads: [VideoModel.Item]
     @Binding var draft: Date?
-    private let gutter: CGFloat = 44, hour: CGFloat = 50, first = 9, hours = 8
+    private let gutter: CGFloat = 44, hour: CGFloat = 44, head: CGFloat = 44
 
     var body: some View {
         let colW = (832 - gutter) / CGFloat(days.count)
         let events = tasks.calendar.events(from: days[0], to: Calendar.current.date(byAdding: .day, value: 1, to: days.last!)!)
-        ZStack(alignment: .topLeading) {
-            ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                let today = Calendar.current.isDateInToday(day)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(day.formatted(.dateTime.weekday(.abbreviated).locale(Locale(identifier: "ru_RU"))).lowercased())
-                        .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
-                    Text("\(Calendar.current.component(.day, from: day))")
-                        .font(Martian.heading.font(15)).foregroundStyle(today ? Theme.coral : Theme.ink)
-                }
-                .offset(x: gutter + CGFloat(index) * colW + 6)
-            }
-            ForEach(0..<hours, id: \.self) { h in
-                Rectangle().fill(NotesLayout.line).frame(width: 832 - gutter, height: 1)
-                    .offset(x: gutter, y: 44 + CGFloat(h) * hour)
-                Text("\(first + h):00")
-                    .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
-                    .offset(y: 44 + CGFloat(h) * hour - 6)
-            }
-            ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                let count = uploads.filter { Calendar.current.isDate($0.added, inSameDayAs: day) }.count
-                if count > 0 {
-                    HStack(spacing: 4) {
-                        DotIcon(glyph: .video, size: 12, color: NotesLayout.gray)
-                        Text("\(count) \(NoteEditor.plural(count, "видео", "видео", "видео"))")
-                            .font(Martian.body.font(10)).foregroundStyle(NotesLayout.gray)
-                    }
-                    .offset(x: gutter + CGFloat(index) * colW + 44, y: 18)
-                }
-            }
-            // Клик по пустому месту — задача на этот час, с шагом полчаса.
-            Color.clear.contentShape(Rectangle())
-                .frame(width: 832 - gutter, height: CGFloat(hours) * hour)
-                .offset(x: gutter, y: 44)
-                .onTapGesture { point in
-                    let column = min(Int(point.x / colW), days.count - 1)
-                    let half = (point.y / (hour / 2)).rounded(.down) / 2
-                    draft = Calendar.current.date(byAdding: .minute, value: Int((Double(first) + half) * 60), to: days[column])
-                }
-            ForEach(events, id: \.eventIdentifier) { event in
-                if let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: event.startDate) }) {
-                    EventBlock(event: event, task: tasks.calendar.isTaskEvent(event))
-                        .frame(width: colW - 6, height: height(event))
-                        .offset(x: gutter + CGFloat(column) * colW + 3, y: 44 + top(event) + 3)
-                }
-            }
-        }
-        .overlay(alignment: .topLeading) {
-            if let start = draft, let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: start) }) {
-                let parts = Calendar.current.dateComponents([.hour, .minute], from: start)
-                // Метка на выбранном часе, а над ней — окно новой задачи, как быстрое событие в Календаре Apple.
-                RoundedRectangle(cornerRadius: 10).fill(Theme.coral.opacity(0.12))
-                    .frame(width: colW - 6, height: hour - 6)
-                    .offset(x: gutter + CGFloat(column) * colW + 3,
-                            y: 44 + (CGFloat((parts.hour ?? first) - first) + CGFloat(parts.minute ?? 0) / 60) * hour + 3)
-                    .popover(isPresented: Binding(get: { draft != nil }, set: { if !$0 { draft = nil } }), arrowEdge: .trailing) {
-                        NewTaskPopover(start: start) { title, due, hasTime in
-                            tasks.add(title, due: due, hasTime: hasTime)
-                            draft = nil
+        let lanes = Self.lanes(events)
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(days.enumerated()), id: \.offset) { index, day in
+                    let today = Calendar.current.isDateInToday(day)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(day.formatted(.dateTime.weekday(.abbreviated).locale(Locale(identifier: "ru_RU"))).lowercased())
+                            .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+                        HStack(spacing: 6) {
+                            Text("\(Calendar.current.component(.day, from: day))")
+                                .font(Martian.heading.font(15)).foregroundStyle(today ? Theme.coral : Theme.ink)
+                            let count = uploads.filter { Calendar.current.isDate($0.added, inSameDayAs: day) }.count
+                            if count > 0 {
+                                DotIcon(glyph: .video, size: 12, color: NotesLayout.gray).help("видео на расшифровку: \(count)")
+                            }
                         }
                     }
+                    .offset(x: gutter + CGFloat(index) * colW + 6)
+                }
+            }
+            .frame(width: 832, height: head, alignment: .topLeading)
+
+            ScrollViewReader { scroll in
+                ScrollView {
+                    ZStack(alignment: .topLeading) {
+                        ForEach(0..<24, id: \.self) { h in
+                            Rectangle().fill(NotesLayout.line).frame(width: 832 - gutter, height: 1)
+                                .offset(x: gutter, y: CGFloat(h) * hour)
+                            Text("\(h):00").font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+                                .offset(y: CGFloat(h) * hour - 6).id(h)
+                        }
+                        // Клик по пустому месту — новая задача на этот час, с шагом полчаса.
+                        Color.clear.contentShape(Rectangle())
+                            .frame(width: 832 - gutter, height: 24 * hour)
+                            .offset(x: gutter)
+                            .onTapGesture { point in
+                                let column = min(Int(point.x / colW), days.count - 1)
+                                let half = (point.y / (hour / 2)).rounded(.down) / 2
+                                draft = Calendar.current.date(byAdding: .minute, value: Int(half * 60), to: days[column])
+                            }
+                        ForEach(events, id: \.eventIdentifier) { event in
+                            if let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: event.startDate) }) {
+                                let lane = lanes[event.eventIdentifier] ?? (0, 1)
+                                let width = (colW - 6) / CGFloat(lane.1)
+                                EventBlock(event: event, task: tasks.calendar.isTaskEvent(event))
+                                    .frame(width: width - 2, height: height(event))
+                                    .offset(x: gutter + CGFloat(column) * colW + 3 + CGFloat(lane.0) * width, y: top(event) + 2)
+                            }
+                        }
+                        if let start = draft, let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: start) }) {
+                            RoundedRectangle(cornerRadius: 10).fill(Theme.coral.opacity(0.12))
+                                .frame(width: colW - 6, height: hour - 4)
+                                .offset(x: gutter + CGFloat(column) * colW + 3, y: top(at: start) + 2)
+                                .popover(isPresented: Binding(get: { draft != nil }, set: { if !$0 { draft = nil } }), arrowEdge: .trailing) {
+                                    NewTaskPopover(start: start) { title, due, hasTime in
+                                        tasks.add(title, due: due, hasTime: hasTime)
+                                        draft = nil
+                                    }
+                                }
+                        }
+                    }
+                    .frame(width: 832, height: 24 * hour + 10, alignment: .topLeading)
+                    .padding(.top, 6)
+                }
+                .scrollIndicators(.never)
+                .onAppear { scroll.scrollTo(8, anchor: .top) }
             }
         }
-        .frame(width: 832, height: 44 + CGFloat(hours) * hour, alignment: .topLeading)
     }
 
-    private func top(_ event: EKEvent) -> CGFloat {
-        if event.isAllDay { return -24 }
-        let parts = Calendar.current.dateComponents([.hour, .minute], from: event.startDate)
-        let value = CGFloat((parts.hour ?? 0) - first) + CGFloat(parts.minute ?? 0) / 60
-        return min(max(value, 0), CGFloat(hours) - 0.5) * hour
+    private func top(at date: Date) -> CGFloat {
+        let parts = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return (CGFloat(parts.hour ?? 0) + CGFloat(parts.minute ?? 0) / 60) * hour
     }
+
+    private func top(_ event: EKEvent) -> CGFloat { event.isAllDay ? 0 : top(at: event.startDate) }
 
     private func height(_ event: EKEvent) -> CGFloat {
         if event.isAllDay { return 20 }
-        return max(CGFloat(event.endDate.timeIntervalSince(event.startDate) / 3600) * hour - 6, 22)
+        return max(CGFloat(event.endDate.timeIntervalSince(event.startDate) / 3600) * hour - 4, 22)
+    }
+
+    // Пересекающиеся по времени события одного дня — в соседние дорожки: (номер, сколько всего).
+    static func lanes(_ events: [EKEvent]) -> [String: (Int, Int)] {
+        var result: [String: (Int, Int)] = [:]
+        let byDay = Dictionary(grouping: events) { Calendar.current.startOfDay(for: $0.startDate) }
+        for (_, day) in byDay {
+            var cluster: [EKEvent] = [], ends: [Date] = [], clusterEnd = Date.distantPast
+            func close() { for e in cluster { result[e.eventIdentifier] = (result[e.eventIdentifier]?.0 ?? 0, max(ends.count, 1)) }; cluster = []; ends = [] }
+            for event in day.sorted(by: { $0.startDate < $1.startDate }) {
+                let end = max(event.endDate, event.startDate.addingTimeInterval(1800))
+                if event.startDate >= clusterEnd { close() }
+                let lane = ends.firstIndex { $0 <= event.startDate } ?? ends.count
+                if lane == ends.count { ends.append(end) } else { ends[lane] = end }
+                result[event.eventIdentifier] = (lane, 1)
+                cluster.append(event)
+                clusterEnd = max(clusterEnd, end)
+            }
+            close()
+        }
+        return result
     }
 }
 

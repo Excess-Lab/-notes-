@@ -46,7 +46,9 @@ struct NotesWindow: View {
         let w = geo.size.width, h = geo.size.height
         ZStack(alignment: .topLeading) {
             // Шапка из планок, как на первом входе, только 92 px и во всю ширину.
-            GlassSlats(slatWidth: Layout.finalSlatWidth)
+            // Планки — около 60 слоёв с размытием. Раньше они перерисовывались при каждом изменении экрана
+            // (буква в заметке, наведение) — отсюда лаги. Теперь один раз на ширину окна, слой через Metal.
+            StaticSlats(width: w).equatable()
                 .frame(height: NotesLayout.header)
 
             TopBar(model: model)
@@ -304,9 +306,14 @@ struct SectionContent: View {
                 case .settings: SettingsScreen(model: model)
                 }
             }
+            // Раздел, заметка или папка сменились — старое уходит в размытие, новое из него проявляется,
+            // как шаги первого входа. Раньше текст менялся рывком, хотя окно двигалось плавно.
+            .id(contentID)
+            .transition(.blurReplace)
             .padding(.top, 51)
 
             Text(crumb)
+                .contentTransition(.interpolate)
                 .font(Martian.body.font(13))
                 .kerning(Theme.tracking(-7, size: 13))
                 .foregroundStyle(NotesLayout.gray)
@@ -324,6 +331,15 @@ struct SectionContent: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.trailing, 15)
             .offset(y: 109 - 92)
+        }
+        .animation(.smooth(duration: 0.45), value: contentID)
+    }
+
+    private var contentID: String {
+        switch model.section {
+        case .notes: "notes-\(model.selection)"
+        case .video: "video-\(model.video.open?.uuidString ?? "")"
+        default: "\(model.section)"
         }
     }
 
@@ -430,5 +446,12 @@ struct IconButton: View {
         }
         .buttonStyle(.plain)
         .help(help)
+    }
+}
+
+struct StaticSlats: View, Equatable {
+    let width: CGFloat
+    var body: some View {
+        GlassSlats(slatWidth: Layout.finalSlatWidth).drawingGroup()
     }
 }
