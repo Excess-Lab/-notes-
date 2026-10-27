@@ -7,6 +7,16 @@ import SwiftUI
 
     init() {
         FontRegistrar.registerBundledFonts()
+        // Смена темы вслед за системой — плавно (ThemeCrossfade).
+        DispatchQueue.main.async { ThemeCrossfade.shared.start() }
+        #if DEBUG
+        // `--args -themeFlipTest YES` — через 3 с приложение само меняет тему: снять кадр посреди наплыва.
+        if UserDefaults.standard.bool(forKey: "themeFlipTest") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                NSApp.appearance = NSAppearance(named: NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? .aqua : .darkAqua)
+            }
+        }
+        #endif
         #if DEBUG
         // Снимать тёмную тему, не переключая систему: `--args -appearance dark`.
         if UserDefaults.standard.string(forKey: "appearance") == "dark" {
