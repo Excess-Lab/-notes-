@@ -32,21 +32,38 @@ private struct VideoList: View {
                     .foregroundStyle(NotesLayout.gray)
                     .padding(.top, 6)
 
-                // Зона, куда бросают файл: пунктир, как у «новой папки».
-                VStack(spacing: 8) {
-                    DotIcon(glyph: .plus, size: 24)
-                    Text("перетащи видео или аудио сюда")
-                        .font(Martian.heading.font(15))
-                        .kerning(Theme.tracking(-7, size: 15))
-                        .foregroundStyle(Theme.ink)
-                    Text("mp4, mov, m4a или mp3")
-                        .font(Martian.body.font(11))
-                        .kerning(Theme.tracking(-7, size: 11))
-                        .foregroundStyle(NotesLayout.gray)
+                // Зона, куда бросают файл: пунктир и коралловые волны (шейдер DropZone.metal); клик — выбрать
+                // файл. Отдельной кнопки «выбрать файл» нет (ТЗ 30.10.2026).
+                Button { video.choose() } label: {
+                    VStack(spacing: 8) {
+                        DotIcon(glyph: .plus, size: 24)
+                        Text(targeted ? "отпусти — начнём расшифровку" : "перетащи видео или аудио")
+                            .font(Martian.heading.font(15))
+                            .kerning(Theme.tracking(-7, size: 15))
+                            .foregroundStyle(Theme.ink)
+                            .contentTransition(.interpolate)
+                        Text("или нажми, чтобы выбрать · mp4, mov, mp3, wav, flac и другие")
+                            .font(Martian.body.font(11))
+                            .kerning(Theme.tracking(-7, size: 11))
+                            .foregroundStyle(NotesLayout.gray)
+                    }
+                    .frame(width: 832, height: 132)
+                    .background {
+                        TimelineView(.animation) { context in
+                            Rectangle().fill(.white)
+                                .colorEffect(ShaderLibrary.dropzone(.boundingRect,
+                                    .float(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600)),
+                                    .float(targeted ? 1 : 0)))
+                        }
+                        .clipShape(RoundedRectangle(cornerRadius: 20))
+                    }
+                    .background(RoundedRectangle(cornerRadius: 20)
+                        .strokeBorder(targeted ? Theme.coral : NotesLayout.line, style: StrokeStyle(lineWidth: 2, dash: [6, 6])))
+                    .scaleEffect(targeted ? 1.015 : 1)
+                    .animation(.smooth(duration: 0.3), value: targeted)
+                    .contentShape(RoundedRectangle(cornerRadius: 20))
                 }
-                .frame(width: 832, height: 132)
-                .background(RoundedRectangle(cornerRadius: 20)
-                    .strokeBorder(targeted ? Theme.coral : NotesLayout.line, style: StrokeStyle(lineWidth: 2, dash: [6, 6])))
+                .buttonStyle(.plain)
                 .padding(.top, 46)
                 .onDrop(of: [.fileURL], isTargeted: $targeted) { providers in
                     for provider in providers {
@@ -56,11 +73,6 @@ private struct VideoList: View {
                     }
                     return true
                 }
-
-                Button("выбрать файл") { video.choose() }
-                    .buttonStyle(CoralCapsuleStyle())
-                    .frame(width: 832)
-                    .padding(.top, 19)
 
                 group("в работе", video.visible.filter { $0.status == .working || $0.status == .queued })
                 group("готово", video.visible.filter { $0.status == .done })

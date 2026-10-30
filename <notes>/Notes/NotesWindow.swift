@@ -13,6 +13,7 @@ enum NotesLayout {
 
 struct NotesWindow: View {
     @Bindable var model: NotesModel
+    @State private var arrived = false
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -52,37 +53,64 @@ struct NotesWindow: View {
                 .frame(height: NotesLayout.header)
 
             TopBar(model: model)
+                .modifier(Arrival(shown: arrived, delay: 0.05))
 
             // Боковая панель и лист содержимого — отдельные стеклянные листы под шапкой.
-            GlassSheet(radius: 14)
-                .frame(width: 247, height: h - 92)
-                .offset(x: 17, y: 92)
-            SectionSidebar(model: model)
-                .frame(width: 247, height: h - 92, alignment: .topLeading)
-                .offset(x: 17, y: 92)
+            Group {
+                GlassSheet(radius: 14)
+                    .frame(width: 247, height: h - 92)
+                // Смена раздела: панель уходит в размытие и проявляется новой, вместе с листом справа.
+                SectionSidebar(model: model)
+                    .id(model.section)
+                    .transition(.blurReplace)
+                    .frame(width: 247, height: h - 92, alignment: .topLeading)
+            }
+            .animation(.smooth(duration: 0.45), value: model.section)
+            .offset(x: 17, y: 92)
+            .modifier(Arrival(shown: arrived, delay: 0.15))
 
-            GlassSheet(radius: 18)
-                .frame(width: w - 294, height: h - 92)
-                .offset(x: 279, y: 92)
-            // Обрезаем до сдвига: после .offset обрезка шла по старому месту, и правый край листа пропадал.
-            SectionContent(model: model)
-                .frame(width: w - 294, height: h - 92, alignment: .topLeading)
-                .clipped()
-                .offset(x: 279, y: 92)
+            Group {
+                GlassSheet(radius: 18)
+                    .frame(width: w - 294, height: h - 92)
+                // Обрезаем до сдвига: после .offset обрезка шла по старому месту, и правый край листа пропадал.
+                SectionContent(model: model)
+                    .frame(width: w - 294, height: h - 92, alignment: .topLeading)
+                    .clipped()
+            }
+            .offset(x: 279, y: 92)
+            .modifier(Arrival(shown: arrived, delay: 0.25))
         }
         }
+        .onAppear { arrived = true }
+    }
+}
+
+// Первый показ окна: шапка, панель и лист проявляются по очереди из размытия, чуть снизу (ТЗ 30.10.2026).
+private struct Arrival: ViewModifier {
+    let shown: Bool
+    let delay: Double
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            .blur(radius: shown ? 0 : 12)
+            .offset(y: shown ? 0 : 14)
+            .animation(.smooth(duration: 0.7).delay(delay), value: shown)
     }
 }
 
 // Стеклянный лист: #F9F9F9 20 % и светлый кант, как лист шагов первого входа.
+// Листы доходят до низа окна — скруглены только сверху (ТЗ 30.10.2026); нижний кант уходит за край окна.
 struct GlassSheet: View {
     var radius: CGFloat
 
     var body: some View {
-        RoundedRectangle(cornerRadius: radius)
+        let shape = UnevenRoundedRectangle(topLeadingRadius: radius, topTrailingRadius: radius)
+        shape
             .fill(Theme.sheet.opacity(0.2))
-            .overlay(RoundedRectangle(cornerRadius: radius).strokeBorder(Theme.edge.opacity(0.9), lineWidth: 1))
+            .overlay(shape.strokeBorder(Theme.edge.opacity(0.9), lineWidth: 1))
             .shadow(color: .black.opacity(0.07), radius: 10, y: -2)
+            .padding(.bottom, -1)
     }
 }
 
@@ -106,10 +134,12 @@ private struct HeaderGroup<Content: View>: View {
 private struct TopBar: View {
     let model: NotesModel
     @State private var sync = SyncController.shared
+    @State private var hovered: NotesModel.Section?
+    @Namespace private var hover
 
     var body: some View {
-        // Группа синхронизации тянется до правого края окна с тем же отступом, что слева (просьба Макара).
         GeometryReader { geo in
+        let compact = geo.size.width < 1240
         ZStack(alignment: .topLeading) {
             HeaderGroup(width: 417) {
                 Button { model.section = .notes } label: {
@@ -142,42 +172,53 @@ private struct TopBar: View {
             }
             .offset(x: 17, y: 15)
 
-            // Разделы задач, календаря и видео ещё не сделаны: в макете «задачи» яркие, но пока они
-            // ведут в никуда — все три приглушены (30 %, как неактивные в кадре) и не нажимаются.
-            HeaderGroup(width: 540) {
-                HStack(spacing: 10) {
-                    section("заметки", .notes, .notes)
-                    section("задачи", .taskDone, .tasks)
-                    section("календарь", .calendar, .calendar)
-                    section("видео", .video, .video)
-                    section("настройки", .settings, .settings)
+            // Узкое окно — разделы и синхронизация одними значками, название — подсказкой при наведении;
+            // широкое — со словами, как в кадрах (ТЗ 30.10.2026: «только иконки при сжимании»).
+            // Подсветка наведения одна на группу и переезжает между кнопками, не вылезая за них.
+            let sections: CGFloat = compact ? 5 * 34 + 4 * 6 + 22 : 540
+            HeaderGroup(width: sections) {
+                HStack(spacing: compact ? 6 : 10) {
+                    section("заметки", .notes, .notes, compact)
+                    section("задачи", .taskDone, .tasks, compact)
+                    section("календарь", .calendar, .calendar, compact)
+                    section("видео", .video, .video, compact)
+                    section("настройки", .settings, .settings, compact)
                 }
                 .offset(x: 11)
+                .animation(.smooth(duration: 0.25), value: hovered)
             }
             .offset(x: 449, y: 15)
 
-            HeaderGroup(width: max(180, geo.size.width - 1004 - 17)) {
-                HStack(spacing: 6) {
-                    DotIcon(glyph: .git)
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
-                        Text(sync.status(now: context.date))
-                            .font(Martian.body.font(11))
-                            .kerning(Theme.tracking(-7, size: 11))
-                            .foregroundStyle(Theme.fg)
-                            .lineLimit(1)
+            // Синхронизация тянется до правого края окна с тем же отступом, что слева.
+            let left = 449 + sections + 15
+            TimelineView(.periodic(from: .now, by: 30)) { context in
+                HeaderGroup(width: max(48, geo.size.width - left - 17)) {
+                    HStack(spacing: 6) {
+                        DotIcon(glyph: .git)
+                        if !compact {
+                            Text(sync.status(now: context.date))
+                                .font(Martian.body.font(11))
+                                .kerning(Theme.tracking(-7, size: 11))
+                                .foregroundStyle(Theme.fg)
+                                .lineLimit(1)
+                                .transition(.blurReplace)
+                        }
                     }
+                    .opacity(0.4)
+                    .offset(x: 16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .help(sync.status(now: context.date))
                 }
-                .opacity(0.4)
-                .offset(x: 16)
             }
-            .offset(x: 1004, y: 15)
+            .offset(x: left, y: 15)
         }
+        .animation(.smooth(duration: 0.35), value: compact)
         }
     }
 
-    // Раздел в шапке: выбранный — ярко на белом 10 %, остальные — 30 %, как в кадрах. Повторный клик
-    // по выбранному возвращает к заметкам.
-    private func section(_ title: String, _ glyph: DotGlyph, _ target: NotesModel.Section) -> some View {
+    // Раздел в шапке: выбранный — ярко на белом 10 %, остальные — 30 %, как в кадрах.
+    private func section(_ title: String, _ glyph: DotGlyph, _ target: NotesModel.Section, _ compact: Bool) -> some View {
         let active = model.section == target
         return Button {
             model.flush()
@@ -185,18 +226,32 @@ private struct TopBar: View {
         } label: {
             HStack(spacing: 8) {
                 DotIcon(glyph: glyph)
-                Text(title)
-                    .font(Martian.body.font(13))
-                    .kerning(Theme.tracking(-7, size: 13))
-                    .foregroundStyle(Theme.ink)
+                if !compact {
+                    Text(title)
+                        .font(Martian.body.font(13))
+                        .kerning(Theme.tracking(-7, size: 13))
+                        .foregroundStyle(Theme.ink)
+                        .fixedSize()
+                        .transition(.blurReplace)
+                }
             }
-            .padding(.horizontal, 8)
-            .frame(height: 26)
-            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bg.opacity(active ? 0.1 : 0)))
-            .opacity(active ? 1 : 0.3)
-            .contentShape(Rectangle())
+                .padding(.horizontal, compact ? 0 : 8)
+                .frame(minWidth: 34, minHeight: 26)
+                .background {
+                    if hovered == target && !active {
+                        RoundedRectangle(cornerRadius: 8).fill(Theme.bg.opacity(0.06))
+                            .matchedGeometryEffect(id: "hover", in: hover)
+                    }
+                }
+                .background(RoundedRectangle(cornerRadius: 8).fill(Theme.bg.opacity(active ? 0.1 : 0)))
+                .opacity(active || hovered == target ? 1 : 0.3)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .help(compact ? title : "")
+        .onHover { inside in
+            if inside { hovered = target } else if hovered == target { hovered = nil }
+        }
     }
 }
 
@@ -230,6 +285,8 @@ struct NotesSidebar: View {
                     FolderRows(model: model, folder: model.tree, depth: 0)
                 }
                 .contextMenu { NoteMenu(model: model, url: model.library.root, folder: true) }
+                // Мимо папок — в корень хранилища.
+                .dropDestination(for: URL.self) { urls, _ in model.drop(urls, into: model.library.root) }
                 .padding(.horizontal, 10)
                 .padding(.top, 15)
                 .padding(.bottom, 20)
@@ -244,15 +301,20 @@ private struct FolderRows: View {
     let model: NotesModel
     let folder: NoteLibrary.Folder
     let depth: Int
+    @State private var target: URL?
 
     var body: some View {
         ForEach(folder.folders) { child in
             SidebarRow(glyph: .folder, title: child.name, depth: depth,
-                       selected: model.selection == .folder(child.url)) {
+                       selected: model.selection == .folder(child.url), targeted: target == child.url) {
                 model.toggle(child.url)
                 model.open(.folder(child.url))
             }
             .contextMenu { NoteMenu(model: model, url: child.url, folder: true) }
+            .draggable(child.url)
+            .dropDestination(for: URL.self) { urls, _ in model.drop(urls, into: child.url) } isTargeted: { inside in
+                if inside { target = child.url } else if target == child.url { target = nil }
+            }
             if model.expanded.contains(child.url) {
                 FolderRows(model: model, folder: child, depth: depth + 1)
             }
@@ -263,6 +325,7 @@ private struct FolderRows: View {
                 model.open(.note(note.url))
             }
             .contextMenu { NoteMenu(model: model, url: note.url) }
+            .draggable(note.url)
         }
     }
 }
@@ -274,6 +337,8 @@ struct SidebarRow: View {
     var depth = 0
     var count: Int? = nil
     let selected: Bool
+    // Сюда сейчас тянут файл — коралловая подсветка.
+    var targeted = false
     let action: () -> Void
 
     var body: some View {
@@ -298,6 +363,8 @@ struct SidebarRow: View {
             .padding(.trailing, 8)
             .frame(height: 26)
             .background(RoundedRectangle(cornerRadius: 8).fill(Theme.fg.opacity(selected ? 0.07 : 0)))
+            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.coral.opacity(targeted ? 0.18 : 0)))
+            .animation(.smooth(duration: 0.2), value: targeted)
             .contentShape(RoundedRectangle(cornerRadius: 8))
         }
         .buttonStyle(.plain)

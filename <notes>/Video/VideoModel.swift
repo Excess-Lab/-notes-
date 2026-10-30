@@ -70,7 +70,7 @@ import NotesSpeech
 
     // MARK: - Очередь
 
-    static let types = ["mp4", "mov", "m4v", "m4a", "mp3", "wav", "aac", "aiff", "aif", "caf"]
+    static let types = ["mp4", "mov", "m4v", "m4a", "m4b", "mp3", "wav", "aac", "aiff", "aif", "caf", "flac", "3gp"]
 
     func choose() {
         let panel = NSOpenPanel()

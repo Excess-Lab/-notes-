@@ -85,6 +85,37 @@ extension NotesModel {
         }
         do { try FileManager.default.copyItem(at: url, to: target) } catch { NSAlert(error: error).runModal() }
     }
+
+    // Перетаскивание в боковой панели, как в Finder: своё — переносим, файлы из Finder — копируем внутрь.
+    // Папку в саму себя или в свою подпапку не кладём; занятое имя — «2», «3».
+    @discardableResult
+    func drop(_ urls: [URL], into folder: URL) -> Bool {
+        flush()
+        let root = library.root.standardizedFileURL.path
+        var moved = false
+        for url in urls {
+            let source = url.standardizedFileURL
+            guard source.path.hasPrefix(root + "/") else { copyFile(url, into: folder); moved = true; continue }
+            let target = folder.standardizedFileURL
+            guard source.deletingLastPathComponent() != target,
+                  !(target.path + "/").hasPrefix(source.path + "/") else { continue }
+            let ext = source.pathExtension, base = source.deletingPathExtension().lastPathComponent
+            var destination = target.appendingPathComponent(source.lastPathComponent)
+            var n = 2
+            while FileManager.default.fileExists(atPath: destination.path) {
+                destination = target.appendingPathComponent(ext.isEmpty ? "\(base) \(n)" : "\(base) \(n).\(ext)")
+                n += 1
+            }
+            do { try FileManager.default.moveItem(at: source, to: destination) } catch { NSAlert(error: error).runModal(); continue }
+            moved = true
+            // Открытая заметка уехала вместе с файлом или папкой — открываем её на новом месте.
+            if let open = openNote?.standardizedFileURL, open.path.hasPrefix(source.path) {
+                self.open(.note(URL(fileURLWithPath: destination.path + open.path.dropFirst(source.path.count))))
+            }
+        }
+        if moved { reloadTree(); tasks.reload() }
+        return moved
+    }
 }
 
 // Меню строки боковой панели. Для папки — ещё «вставить сюда».

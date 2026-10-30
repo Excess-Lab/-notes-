@@ -308,6 +308,15 @@ extension NotesModel {
             let copy = url.deletingLastPathComponent().appendingPathComponent(url.deletingPathExtension().lastPathComponent + " копия.md")
             check("дубликат создан", FileManager.default.fileExists(atPath: copy.path))
             trash(copy); check("дубликат ушёл в Корзину", !FileManager.default.fileExists(atPath: copy.path))
+            let into = library.root.appendingPathComponent("перенос", isDirectory: true)
+            try? FileManager.default.createDirectory(at: into, withIntermediateDirectories: true)
+            drop([url], into: into)
+            let moved = into.appendingPathComponent(url.lastPathComponent)
+            check("перетащенная заметка переехала и открыта там", FileManager.default.fileExists(atPath: moved.path)
+                  && openNote?.standardizedFileURL == moved.standardizedFileURL)
+            check("папку в саму себя не кладём", !drop([into], into: into))
+            drop([moved], into: url.deletingLastPathComponent())
+            trash(into)
         }
         if UserDefaults.standard.bool(forKey: "liveSelfTest") {
             CalendarSync.shared.selfTest(check)
