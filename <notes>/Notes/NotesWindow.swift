@@ -479,7 +479,11 @@ struct SectionContent: View {
                         FolderOverview(model: model, folder: model.currentFolder)
                     }
                 case .tasks: TasksScreen(model: model.tasks)
-                case .calendar: CalendarScreen(tasks: model.tasks, uploads: model.video.items)
+                case .calendar:
+                    // Календарь — во всю ширину листа (58 слева, справа — по краю верхних кнопок, 15), а не по колонке текста:
+                    // «на таком размере окна можно календарь растянуть» (31.10.2026).
+                    CalendarScreen(tasks: model.tasks, uploads: model.video.items)
+                        .transformEnvironment(\.pageWidth) { $0 += 116 - 58 - 15 }
                 case .video: VideoScreen(model: model)
                 case .settings: SettingsScreen(model: model)
                 }
