@@ -445,6 +445,14 @@ struct SectionContent: View {
             .padding(.top, 51)
 
 
+            if model.section == .notes, !model.tabs.isEmpty {
+                NoteTabs(model: model)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.leading, 56).padding(.trailing, 100)
+                    .offset(y: 15)
+                    .transition(.opacity)
+            }
+
             HStack(spacing: 8) {
                 IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
                 IconButton(glyph: .newNote, help: "новая заметка") { model.newNote() }

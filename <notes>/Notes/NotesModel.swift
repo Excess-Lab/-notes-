@@ -15,6 +15,8 @@ import SwiftUI
     private(set) var tree: NoteLibrary.Folder
     var selection: Selection
     var expanded: Set<URL> = []
+    // Открытые заметки — вкладками сверху листа (ТЗ 30.10.2026). Только в памяти: в хранилище не пишем.
+    var tabs: [URL] = []
 
     // Открытая заметка: текст, как он сейчас в редакторе.
     var text = "" { didSet { if text != savedText { scheduleSave() } } }
@@ -87,6 +89,7 @@ import SwiftUI
         section = .notes
         self.selection = selection
         if case .note(let url) = selection {
+            if !tabs.contains(where: { $0.standardizedFileURL == url.standardizedFileURL }) { tabs.append(url) }
             let loaded = (try? library.read(url)) ?? ""
             savedText = loaded
             text = loaded
@@ -172,7 +175,11 @@ import SwiftUI
         }
     }
 
-    func reloadTree() { tree = library.tree() }
+    // Файл удалили или перенесли — его вкладка закрывается.
+    func reloadTree() {
+        tree = library.tree()
+        tabs.removeAll { !FileManager.default.fileExists(atPath: $0.path) }
+    }
 
     private func find(_ url: URL, in folder: NoteLibrary.Folder) -> NoteLibrary.Folder? {
         if folder.url.standardizedFileURL == url.standardizedFileURL { return folder }
@@ -317,6 +324,11 @@ extension NotesModel {
             check("папку в саму себя не кладём", !drop([into], into: into))
             drop([moved], into: url.deletingLastPathComponent())
             trash(into)
+            let other = library.root.appendingPathComponent("Входящие.md")
+            open(.note(other)); open(.note(url))
+            let before = tabs.count
+            closeTab(url)
+            check("вкладка закрылась и открылась соседняя", tabs.count == before - 1 && openNote != url && openNote != nil)
         }
         if UserDefaults.standard.bool(forKey: "liveSelfTest") {
             CalendarSync.shared.selfTest(check)
