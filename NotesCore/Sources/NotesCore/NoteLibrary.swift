@@ -145,7 +145,11 @@ public struct NoteLibrary: Sendable {
     static func snippet(_ text: String, word: String) -> String {
         let lines = text.split(whereSeparator: \.isNewline).map { $0.trimmingCharacters(in: .whitespaces) }
         let line = lines.first { normalize($0).contains(word) && !$0.hasPrefix("#") } ?? lines.first { !$0.isEmpty } ?? ""
-        return String(line.drop { $0 == "#" || $0 == " " || $0 == "-" || $0 == "—" }.prefix(140))
+        // Разметку списка и задач («- [ ] », «📅») в отрывке не показываем — только сам текст.
+        var clean = String(line.drop { $0 == "#" || $0 == " " || $0 == "-" || $0 == "—" || $0 == "*" })
+        for mark in ["[ ] ", "[x] ", "[X] "] where clean.hasPrefix(mark) { clean.removeFirst(mark.count) }
+        if let date = clean.range(of: "📅") { clean = String(clean[..<date.lowerBound]).trimmingCharacters(in: .whitespaces) }
+        return String(clean.prefix(140))
     }
 
     // «312 слов» под заголовком заметки.

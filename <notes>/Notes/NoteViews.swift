@@ -229,66 +229,92 @@ private struct NoteRow: View {
     }
 }
 
-// Поиск поверх — кадр 79:12603: экран под ним затемнён (чёрный 12 %) и размыт, карточка 680
-// со строкой запроса и переключателем «по смыслу / по тексту», ниже до восьми результатов.
+// Поиск поверх — переделан по просьбе Макара (27.10.2026): карточка шире, запрос крупным шрифтом
+// заголовков, пока запрос пустой — недавние заметки, найденное слово в отрывке выделено, выбранная
+// строка — мягкая подсветка, как в боковой панели, внизу подсказки клавиш.
 struct SearchOverlay: View {
     @Bindable var model: NotesModel
     @FocusState private var focused: Bool
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            Rectangle()
-                .fill(.black.opacity(0.12))
-                .contentShape(Rectangle())
+        ZStack(alignment: .top) {
+            Rectangle().fill(.black.opacity(0.12)).contentShape(Rectangle())
                 .onTapGesture { model.searchShown = false }
 
             VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    DotIcon(glyph: .search, size: 18)
-                    // Запрос — ввод человека, стиль «ввод»: обычный системный шрифт, как в макете.
-                    TextField("что ищем", text: $model.query)
+                HStack(spacing: 12) {
+                    DotIcon(glyph: .search, size: 20)
+                    TextField("найти в заметках", text: $model.query)
                         .textFieldStyle(.plain)
-                        .font(.system(size: 17))
+                        .font(Martian.heading.font(20))
                         .foregroundStyle(Theme.ink)
                         .focused($focused)
                         .onSubmit { model.openHighlighted() }
                         .onKeyPress(.downArrow) { move(1) }
                         .onKeyPress(.upArrow) { move(-1) }
                         .onKeyPress(.escape) { model.searchShown = false; return .handled }
-                    ModeSwitch()
+                    if !model.query.isEmpty {
+                        Text("\(model.hits.count)")
+                            .font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray)
+                    }
                 }
-                .padding(.leading, 18)
-                .padding(.trailing, 12)
-                .frame(height: 55)
-                .background(RoundedRectangle(cornerRadius: 30).fill(Theme.bg.opacity(0.5)))
+                .padding(.horizontal, 22)
+                .frame(height: 64)
 
-                VStack(spacing: 2) {
-                    ForEach(Array(model.hits.enumerated()), id: \.element.id) { index, hit in
-                        Button { model.highlighted = index; model.openHighlighted() } label: {
-                            HitRow(hit: hit, path: model.library.breadcrumb(for: hit.note.url).dropLast().joined(separator: " / "),
-                                   highlighted: index == model.highlighted)
+                Rectangle().fill(NotesLayout.line).frame(height: 1)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    if model.query.isEmpty {
+                        Caption(text: "недавние")
+                        ForEach(Array(recent.enumerated()), id: \.element.id) { index, note in
+                            Button { model.open(.note(note.url)); model.searchShown = false } label: {
+                                ResultRow(title: note.title, path: path(note.url), snippet: nil, word: nil, selected: false)
+                            }.buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                    }
-                    if !model.query.isEmpty && model.hits.isEmpty {
-                        Text("ничего не нашли")
-                            .font(Martian.body.font(13))
-                            .kerning(Theme.tracking(-7, size: 13))
-                            .foregroundStyle(NotesLayout.gray)
-                            .frame(height: 52)
+                    } else if model.hits.isEmpty {
+                        Text("ничего не нашли — попробуй другие слова")
+                            .font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray)
+                            .frame(maxWidth: .infinity).frame(height: 70)
+                    } else {
+                        ForEach(Array(model.hits.enumerated()), id: \.element.id) { index, hit in
+                            Button { model.highlighted = index; model.openHighlighted() } label: {
+                                ResultRow(title: hit.note.title, path: path(hit.note.url), snippet: hit.snippet,
+                                          word: model.query.split(separator: " ").first.map(String.init),
+                                          selected: index == model.highlighted)
+                            }.buttonStyle(.plain)
+                        }
                     }
                 }
-                .padding(8)
+                .padding(10)
+
+                HStack(spacing: 16) {
+                    Hint(key: "↑↓", text: "выбрать"); Hint(key: "enter", text: "открыть"); Hint(key: "esc", text: "закрыть")
+                    Spacer()
+                    Text("по тексту · по смыслу скоро")
+                        .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+                }
+                .padding(.horizontal, 22)
+                .frame(height: 38)
+                .background(Theme.fg.opacity(0.03))
             }
-            .frame(width: 680)
-            .background(RoundedRectangle(cornerRadius: 30).fill(Theme.bg.opacity(0.72))
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 30)))
-            .clipShape(RoundedRectangle(cornerRadius: 30))
-            .shadow(color: .black.opacity(0.15), radius: 30, y: 10)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 238)
+            .frame(width: 720)
+            .background(RoundedRectangle(cornerRadius: 28).fill(Theme.bg.opacity(0.78))
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 28)))
+            .clipShape(RoundedRectangle(cornerRadius: 28))
+            .overlay(RoundedRectangle(cornerRadius: 28).strokeBorder(Theme.edge.opacity(0.8), lineWidth: 1))
+            .shadow(color: .black.opacity(0.18), radius: 40, y: 16)
+            .padding(.top, 150)
         }
         .onAppear { focused = true }
+    }
+
+    private var recent: [NoteLibrary.Note] {
+        Array(model.library.allNotes(in: model.tree).sorted { $0.modified > $1.modified }.prefix(5))
+    }
+
+    private func path(_ url: URL) -> String {
+        let parts = model.library.breadcrumb(for: url).dropLast()
+        return parts.isEmpty ? "без папки" : parts.joined(separator: " / ")
     }
 
     private func move(_ delta: Int) -> KeyPress.Result {
@@ -298,62 +324,58 @@ struct SearchOverlay: View {
     }
 }
 
-// «по смыслу / по тексту». Поиск по смыслу ещё в работе (TASKS.md) — пока включён «по тексту»,
-// а «по смыслу» приглушён и не нажимается.
-private struct ModeSwitch: View {
+private struct Caption: View {
+    let text: String
     var body: some View {
-        HStack(spacing: 2) {
-            chip("по смыслу", on: false).opacity(0.4).help("поиск по смыслу ещё в работе")
-            chip("по тексту", on: true)
-        }
-        .padding(3)
-        .background(Capsule().fill(Theme.bg.opacity(0.45)))
-        .overlay(Capsule().strokeBorder(Theme.edge.opacity(0.75), lineWidth: 1))
-    }
-
-    private func chip(_ title: String, on: Bool) -> some View {
-        Text(title)
-            .font(Martian.body.font(13))
-            .kerning(Theme.tracking(-7, size: 13))
-            .foregroundStyle(on ? Theme.ink : NotesLayout.gray)
-            .padding(.horizontal, 10)
-            .frame(height: 22)
-            .background(Capsule().fill(on ? Theme.bg : .clear).shadow(color: .black.opacity(0.08), radius: 3))
+        Text(text).font(Martian.body.font(11)).foregroundStyle(Theme.fg.opacity(0.3))
+            .padding(.horizontal, 12).padding(.vertical, 6)
     }
 }
 
-private struct HitRow: View {
-    let hit: NoteLibrary.Hit
+private struct Hint: View {
+    let key: String
+    let text: String
+    var body: some View {
+        HStack(spacing: 6) {
+            Keycap(text: key)
+            Text(text).font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+        }
+    }
+}
+
+private struct ResultRow: View {
+    let title: String
     let path: String
-    let highlighted: Bool
+    let snippet: String?
+    let word: String?
+    let selected: Bool
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            DotIcon(glyph: .file)
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .top, spacing: 12) {
+            DotIcon(glyph: .file).padding(.top, 2)
+            VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Text(hit.note.title)
-                        .font(Martian.body.font(13))
-                        .kerning(Theme.tracking(-7, size: 13))
-                        .foregroundStyle(Theme.ink)
-                    Text(path.isEmpty ? "входящие" : path)
-                        .font(Martian.body.font(11))
-                        .kerning(Theme.tracking(-7, size: 11))
-                        .foregroundStyle(NotesLayout.gray)
+                    Text(title).font(Martian.body.font(14)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Text(path).font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray).lineLimit(1)
                 }
-                Text(hit.snippet)
-                    .font(Martian.body.font(13))
-                    .kerning(Theme.tracking(-7, size: 13))
-                    .foregroundStyle(NotesLayout.gray)
-                    .lineLimit(1)
+                if let snippet {
+                    highlighted(snippet).font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray).lineLimit(1)
+                }
             }
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 9)
-        .frame(width: 664, height: 52, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 12)
-            .fill(Color(red: 0, green: 113 / 255, blue: 227 / 255).opacity(highlighted ? 0.12 : 0)))
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Theme.fg.opacity(selected ? 0.06 : 0)))
         .contentShape(Rectangle())
+    }
+
+    // Найденное слово в отрывке — тёмным, остальное серым.
+    private func highlighted(_ text: String) -> Text {
+        guard let word, !word.isEmpty,
+              let range = text.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) else { return Text(text) }
+        let head = String(text[..<range.lowerBound]), match = String(text[range]), tail = String(text[range.upperBound...])
+        return Text("\(head)\(Text(match).foregroundStyle(Theme.ink))\(tail)")
     }
 }
