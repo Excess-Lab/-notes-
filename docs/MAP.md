@@ -31,6 +31,7 @@
 - `<notes>/Tasks/TasksModel.swift` — задачи из заметок, фильтры, отметка; синхронизация с Apple Calendar (EventKit).
 - `<notes>/Tasks/TasksScreen.swift` — экраны задач и календаря (неделя, день, месяц).
 - `<notes>/Video/VideoModel.swift` — очередь расшифровок, хранение вне хранилища, заметка, копия, .srt.
+- `<notes>/Icon/DockIcon.swift` — иконка в Доке темнеет вместе с темой приложения; `icon-dark.png` рядом собрана из слоёв AppIcon.icon.
 - `<notes>/Video/DropZone.metal` — шейдер зоны «перетащи» в видео: стеклянные планки поверх плывущих тёплых пятен.
 - `<notes>/Video/VideoScreen.swift` — список видео с зоной для файла и экран расшифровки.
 - `<notes>/Settings/SettingsScreen.swift` — пять страниц настроек на настоящих данных.
