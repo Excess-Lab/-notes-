@@ -139,7 +139,10 @@ private struct TopBar: View {
 
     var body: some View {
         GeometryReader { geo in
-        let compact = geo.size.width < 1240
+        // Сжимаем по очереди (31.10.2026, «сначала сжимаем синхронизацию а затем уже пункты меню»):
+        // сперва синхронизация теряет текст, разделы — только когда и значку синхронизации не хватает места.
+        let compact = geo.size.width < 449 + 540 + 15 + 48 + 17
+        let syncText = geo.size.width >= 449 + 540 + 15 + 240 + 17
         ZStack(alignment: .topLeading) {
             HeaderGroup(width: 417) {
                 Button { model.section = .notes } label: {
@@ -172,8 +175,7 @@ private struct TopBar: View {
             }
             .offset(x: 17, y: 15)
 
-            // Узкое окно — разделы и синхронизация одними значками, название — подсказкой при наведении;
-            // широкое — со словами, как в кадрах (ТЗ 30.10.2026: «только иконки при сжимании»).
+            // Узкое окно — значки, название — подсказкой при наведении; широкое — со словами, как в кадрах.
             // Подсветка наведения одна на группу и переезжает между кнопками, не вылезая за них.
             let sections: CGFloat = compact ? 5 * 34 + 4 * 6 + 22 : 540
             HeaderGroup(width: sections) {
@@ -195,7 +197,7 @@ private struct TopBar: View {
                 HeaderGroup(width: max(48, geo.size.width - left - 17)) {
                     HStack(spacing: 6) {
                         DotIcon(glyph: .git)
-                        if !compact {
+                        if syncText {
                             Text(sync.status(now: context.date))
                                 .font(Martian.body.font(11))
                                 .kerning(Theme.tracking(-7, size: 11))
@@ -214,6 +216,7 @@ private struct TopBar: View {
             .offset(x: left, y: 15)
         }
         .animation(.smooth(duration: 0.35), value: compact)
+        .animation(.smooth(duration: 0.35), value: syncText)
         }
     }
 
