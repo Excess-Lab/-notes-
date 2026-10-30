@@ -77,6 +77,10 @@ import NotesCore
     static let shared = CalendarSync()
 
     let store = EKEventStore()
+    // Меняется при любой правке календарей (в том числе снаружи) — экран перечитывает список.
+    // Раньше удалённый календарь висел в боковой панели, пока не переключишь раздел.
+    private(set) var revision = 0
+    private var storeObserver: NSObjectProtocol?
     // Связи «задача → событие» — вне хранилища: в заметки служебное не пишем.
     private(set) var links: [String: String] = [:]
     private static let linksURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -90,6 +94,9 @@ import NotesCore
         // и каждый запуск создавал события заново.
         try? FileManager.default.createDirectory(at: Self.linksURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         links = (try? JSONDecoder().decode([String: String].self, from: Data(contentsOf: Self.linksURL))) ?? [:]
+        storeObserver = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: store, queue: .main) { _ in
+            MainActor.assumeIsolated { CalendarSync.shared.revision += 1 }
+        }
     }
 
     var hasAccess: Bool { EKEventStore.authorizationStatus(for: .event) == .fullAccess }
@@ -223,6 +230,7 @@ import NotesCore
         }
         try store.commit()
         try store.removeCalendar(calendar, commit: true)
+        revision += 1
         return moved
     }
 

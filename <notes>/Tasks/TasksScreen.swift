@@ -136,6 +136,14 @@ struct CalendarScreen: View {
                         .foregroundStyle(NotesLayout.gray)
                 }
                 Spacer()
+                // Листать: ‹ сегодня › — раньше только стрелками с клавиатуры, и то не всегда.
+                HStack(spacing: 4) {
+                    Button { shift(-1) } label: { IconButtonLabel(glyph: .chevronLeft) }.buttonStyle(.plain)
+                    Button("сегодня") { withAnimation(.smooth(duration: 0.4)) { anchor = Date() } }
+                        .buttonStyle(QuietLinkStyle(size: 13, opacity: 0.6))
+                    Button { shift(1) } label: { IconButtonLabel(glyph: .chevronRight) }.buttonStyle(.plain)
+                }
+                .padding(.trailing, 8).padding(.top, 2)
                 // Плюс — новая задача на ближайший час сегодня (или на выбранный день).
                 Button {
                     mode = mode == .month ? .day : mode
@@ -146,7 +154,7 @@ struct CalendarScreen: View {
                     .buttonStyle(.plain).help("новая задача").padding(.trailing, 8).padding(.top, 2)
                 HStack(spacing: 2) {
                     ForEach(Mode.allCases, id: \.self) { item in
-                        Button { mode = item } label: { ModeChip(title: item.rawValue, on: mode == item) }
+                        Button { withAnimation(.smooth(duration: 0.4)) { mode = item } } label: { ModeChip(title: item.rawValue, on: mode == item) }
                             .buttonStyle(.plain)
                     }
                 }
@@ -165,6 +173,9 @@ struct CalendarScreen: View {
                     case .month: MonthGrid(month: anchor, calendar: calendar, tasks: tasks) { anchor = $0; mode = .day }
                     }
                 }
+                // Неделя, день, месяц и листание — мягким размытием, как разделы.
+                .id("\(mode)-\(Int(anchor.timeIntervalSince1970 / 86_400))")
+                .transition(.blurReplace)
                 .padding(.top, 30)
             } else {
                 Button("дать доступ") { Task { _ = await tasks.calendar.requestAccess(); anchor = Date() } }
@@ -200,7 +211,7 @@ struct CalendarScreen: View {
 
     private func shift(_ step: Int) {
         let unit: Calendar.Component = mode == .day ? .day : mode == .week ? .weekOfYear : .month
-        anchor = calendar.date(byAdding: unit, value: step, to: anchor) ?? anchor
+        withAnimation(.smooth(duration: 0.4)) { anchor = calendar.date(byAdding: unit, value: step, to: anchor) ?? anchor }
     }
 }
 
@@ -341,18 +352,26 @@ private struct EventBlock: View {
     let task: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(event.title ?? "")
-                .font(Martian.body.font(11)).foregroundStyle(Theme.ink).lineLimit(2)
-            if !event.isAllDay {
-                Text(event.startDate.formatted(.dateTime.hour().minute()))
-                    .font(Martian.body.font(11)).foregroundStyle(task ? Theme.coral : NotesLayout.gray)
+        GeometryReader { geo in
+            // Короткое событие — одной строкой «название · время», иначе текст налезал на соседей.
+            Group {
+                if geo.size.height < 38 || event.isAllDay {
+                    Text("\(event.title ?? "")\(event.isAllDay ? "" : " · " + event.startDate.formatted(.dateTime.hour().minute()))")
+                        .lineLimit(1)
+                } else {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(event.title ?? "").lineLimit(max(1, Int((geo.size.height - 24) / 14)))
+                        Text(event.startDate.formatted(.dateTime.hour().minute()))
+                            .foregroundStyle(task ? Theme.coral : NotesLayout.gray)
+                    }
+                }
             }
+            .font(Martian.body.font(11)).foregroundStyle(Theme.ink)
+            .padding(.horizontal, 8).padding(.vertical, 4)
+            .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(task ? Theme.coral.opacity(0.12) : Theme.fg.opacity(0.06)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(task ? Theme.coral.opacity(0.14) : Theme.fg.opacity(0.07)))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
     }
 }
 

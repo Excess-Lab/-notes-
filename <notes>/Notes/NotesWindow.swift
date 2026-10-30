@@ -373,6 +373,7 @@ struct SectionSidebar: View {
             }
         case .calendar:
             SidebarList(title: "календари") {
+                let _ = model.tasks.calendar.revision
                 ForEach(model.tasks.calendar.calendars, id: \.calendarIdentifier) { calendar in
                     SidebarRow(glyph: .calendar, title: calendar.title,
                                selected: calendar.calendarIdentifier == model.tasks.calendar.tasksCalendar?.calendarIdentifier) {}
