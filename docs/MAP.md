@@ -72,6 +72,8 @@
 ## Прочее
 
 - `Scripts/fetch-sherpa-onnx.sh` — скачивает sherpa-onnx, проверяет суммы, собирает xcframework.
+- `Scripts/make-dmg.sh` — собирает установщик build/notes.dmg: Release, окно с фоном, ярлык «Программы».
+- `Scripts/dmg-background.swift` — рисует фон установщика: полоски как в шапке, коралловая стрелка.
 - `<notes>/AppIcon.icon` — иконка приложения (Icon Composer): слой планок и слой надписи, светлая и тёмная.
 - `notes.entitlements` — права, которых нет в настройках сборки (bookmarks).
 - `<notes>.xcodeproj` — проект Xcode, пакеты подключены локально.
