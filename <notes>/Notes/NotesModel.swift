@@ -43,6 +43,9 @@ import SwiftUI
 
     // Поиск по смыслу: встроенная модель Apple + индекс в Application Support (кэш, не в хранилище).
     private(set) var indexReady = false
+    // Поиск по смыслу — бета, включается в настройках → поиск (30.10.2026). Выключен — индекс не строим.
+    static let semanticKey = "semanticSearch"
+    var semanticOn: Bool { UserDefaults.standard.bool(forKey: Self.semanticKey) }
     private let embedder = AppleEmbedder()
     private let index = SemanticIndex(store: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("semantic-index.json"))
@@ -192,7 +195,7 @@ import SwiftUI
     // не теряем. Пока индекс собирается — только по словам. Решение Макара: «делаем микс» (30.10.2026).
     private func runSearch() {
         let words = library.search(query, limit: 20)
-        guard indexReady, let embedder else { hits = Array(words.prefix(8)); highlighted = 0; return }
+        guard semanticOn, indexReady, let embedder else { hits = Array(words.prefix(8)); highlighted = 0; return }
         let notes = Dictionary(library.allNotes(in: tree).map { ($0.url.standardizedFileURL, $0) }, uniquingKeysWith: { a, _ in a })
         var merged: [URL: NoteLibrary.Hit] = [:]
         for hit in index.search(query, embedder: embedder, limit: 12) {
@@ -215,7 +218,7 @@ import SwiftUI
     private var indexAgain = false
 
     func refreshIndex() {
-        guard let embedder else { return }
+        guard semanticOn, let embedder else { return }
         guard !indexing else { indexAgain = true; return }
         indexing = true
         let library = library, index = index

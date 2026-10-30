@@ -26,7 +26,7 @@ struct SettingsScreen: View {
                 switch page {
                 case .sync: SyncPage(model: model)
                 case .dictation: DictationPage()
-                case .search: SearchPage()
+                case .search: SearchPage(model: model)
                 case .lock: LockPage(model: model)
                 case .calendar:
                     CalendarPage(sync: model.tasks.calendar, reload: model.tasks.reload)
@@ -189,16 +189,33 @@ private struct DictationPage: View {
     }
 }
 
-// Поиск по смыслу ещё в работе (TASKS.md) — страница честно говорит, что сейчас поиск по тексту.
+// Поиск: по тексту — всегда, по смыслу — бета, включается здесь.
 private struct SearchPage: View {
+    let model: NotesModel
+    @AppStorage(NotesModel.semanticKey) private var semantic = false
+
     var body: some View {
         SettingRow(title: "поиск по тексту", subtitle: "все слова запроса, ⌘K из любого места") {
             GrantedLabel(text: "работает")
         }
-        SettingRow(title: "поиск по смыслу", subtitle: "встроенная в macos модель, ничего не скачивает") {
-            Text("в работе").font(Martian.body.font(13)).foregroundStyle(Theme.fg.opacity(0.3))
+        GlassRow(width: 640) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text("поиск по смыслу").font(Martian.body.font(13)).foregroundStyle(Theme.ink)
+                    // Метка «бета»: модель Apple угадывает не всё (3 из 4 в тесте).
+                    Text("бета")
+                        .font(Martian.body.font(10)).foregroundStyle(NotesLayout.gray)
+                        .padding(.horizontal, 6).padding(.vertical, 1)
+                        .overlay(Capsule().strokeBorder(NotesLayout.gray.opacity(0.5), lineWidth: 1))
+                }
+                Text("встроенная модель macos, ничего не скачивает; находит похожее по смыслу")
+                    .font(Martian.body.font(11)).foregroundStyle(Theme.fg.opacity(0.3))
+            }
+            Spacer(minLength: 0)
+            Toggle("", isOn: $semantic).toggleStyle(.switch).tint(Theme.coral).labelsHidden()
+                .onChange(of: semantic) { _, on in if on { model.refreshIndex() } }
         }
-        Note(text: "индекс будет лежать вне хранилища и в git не попадёт")
+        Note(text: "индекс лежит вне хранилища и в git не попадает")
     }
 }
 

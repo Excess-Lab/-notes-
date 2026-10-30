@@ -290,7 +290,7 @@ struct SearchOverlay: View {
                 HStack(spacing: 16) {
                     Hint(key: "↑↓", text: "выбрать"); Hint(key: "enter", text: "открыть"); Hint(key: "esc", text: "закрыть")
                     Spacer()
-                    Text(model.indexReady ? "по смыслу и тексту" : "по тексту, смысл готовлю")
+                    Text(!model.semanticOn ? "по тексту" : model.indexReady ? "по смыслу (бета) и тексту" : "по тексту, смысл готовлю")
                         .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
                 }
                 .padding(.horizontal, 22)
