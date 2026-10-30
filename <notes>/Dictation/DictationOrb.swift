@@ -7,28 +7,77 @@ struct DictationOrb: View {
     let state: DictationController.State
     let level: Float
     @Environment(\.colorScheme) private var scheme
+    @State private var motion = OrbClock()
 
-    private static let size: CGFloat = 96
+    // Холст шейдера с запасом: ореол раньше обрезался краем квадрата 1,3 (ТЗ: «рамка режет»).
+    static let canvas: CGFloat = 1.9
 
     var body: some View {
         // В покое анимация стоит: иначе скрытая сфера грела бы Mac.
         TimelineView(.animation(paused: state == .idle)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600) * (state == .recognizing ? 2.4 : 1)
-            let voice = state == .listening ? Double(level) : state == .copied ? 0 : 0.1
-            ZStack {
-                Rectangle().fill(.white)
-                    .frame(width: Self.size * 1.3, height: Self.size * 1.3)
-                    .colorEffect(ShaderLibrary.orb(.boundingRect, .float(t), .float(voice), .float(scheme == .dark ? 1 : 0)))
-                if state == .copied {
-                    CheckMark()
-                        .stroke(.white, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
-                        .frame(width: 22, height: 16)
-                        .transition(.scale(scale: 0.6).combined(with: .opacity))
-                }
-            }
-            .scaleEffect(1 + voice * 0.04)
+            let frame = motion.step(now: timeline.date, state: state, level: Double(level))
+            OrbFace(t: frame.t, voice: frame.voice, state: state, dark: scheme == .dark)
         }
         .animation(.smooth(duration: 0.4), value: state)
+    }
+}
+
+private struct OrbFace: View {
+    let t: Float
+    let voice: Float
+    let state: DictationController.State
+    let dark: Bool
+    private let size: CGFloat = 96
+
+    var body: some View {
+        let canvas = DictationOrb.canvas
+            ZStack {
+                Rectangle().fill(.white)
+                    .frame(width: size * canvas, height: size * canvas)
+                    .colorEffect(ShaderLibrary.orb(.boundingRect, .float(t), .float(voice), .float(dark ? 1 : 0),
+                                                   .float(canvas)))
+                if state == .copied {
+                    // Галочка — под стеклом: чуть размыта и прикрыта бликом, а не наклейкой сверху.
+                    ZStack {
+                        CheckMark()
+                            .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                            .frame(width: 26, height: 19)
+                            .blur(radius: 1.4)
+                            .opacity(0.9)
+                        Circle()
+                            .fill(LinearGradient(colors: [.white.opacity(0.22), .clear, .white.opacity(0.08)],
+                                                 startPoint: .top, endPoint: .bottom))
+                            .frame(width: size * 0.86, height: size * 0.86)
+                    }
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+                }
+            }
+            .scaleEffect(1 + CGFloat(voice) * 0.04)
+    }
+}
+
+// Ход сферы по кадрам: голос сглаживается каждый кадр (раньше прыгал с частотой звука — подлагивало),
+// а время копится со своей скоростью: после конца речи — быстро, потом плавно замедляется (ТЗ 30.10.2026).
+final class OrbClock {
+    private var last: Date?
+    private var phase = 0.0
+    private var voice = 0.0
+    private var recognizingSince: Date?
+
+    func step(now: Date, state: DictationController.State, level: Double) -> (t: Float, voice: Float) {
+        let dt = min(0.05, last.map { now.timeIntervalSince($0) } ?? 0)
+        last = now
+        if state == .recognizing { recognizingSince = recognizingSince ?? now } else { recognizingSince = nil }
+        let speed: Double
+        if let since = recognizingSince {
+            speed = 1.2 + 3.8 * exp(-now.timeIntervalSince(since) / 0.9)
+        } else {
+            speed = 1
+        }
+        phase = (phase + dt * speed).truncatingRemainder(dividingBy: 3600)
+        let target = state == .listening ? level : state == .copied ? 0 : 0.1
+        voice += (target - voice) * min(1, dt * 12)
+        return (Float(phase), Float(self.voice))
     }
 }
 

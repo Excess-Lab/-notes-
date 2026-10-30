@@ -15,8 +15,8 @@ static float band(float2 p, float k, float t, float voice) {
     return exp(-d * d / (width * width)) * smoothstep(1.15, 0.2, abs(q.x));
 }
 
-[[ stitchable ]] half4 orb(float2 position, half4 color, float4 bounds, float t, float voice, float dark) {
-    float2 p = (position - bounds.xy - bounds.zw * 0.5) / (bounds.w * 0.5 / 1.3);
+[[ stitchable ]] half4 orb(float2 position, half4 color, float4 bounds, float t, float voice, float dark, float canvas) {
+    float2 p = (position - bounds.xy - bounds.zw * 0.5) / (bounds.w * 0.5 / canvas);
     float r = length(p);
 
     // Ореол за пределами шара.
@@ -42,8 +42,12 @@ static float band(float2 p, float k, float t, float voice) {
     float rim = fresnel * (dark > 0.5 ? 0.45 : 0.6);
     float glint = exp(-pow((y - 0.8) * 4.0, 2.0)) * smoothstep(0.6, 0.95, r) * 0.25;
 
-    float3 c = body + light * (1.2 + voice * 1.2) + rim + glint;
+    // Свет — коралловый (#E54D33, цвет приложения), радуга остаётся только на концах полосы (ТЗ 30.10.2026).
+    float3 coral = float3(0.898, 0.302, 0.2);
+    float lum = dot(light, float3(0.3, 0.5, 0.2));
+    float3 tinted = mix(light, coral * lum * 1.9 + float3(lum * 0.25), 0.7);
+    float3 c = body + tinted * (1.2 + voice * 1.2) + rim + glint;
     float edge = smoothstep(1.0, 0.985, r);
-    float a = min(1.0, alpha + max(light.r, light.b) * 0.6 + rim) * edge;
+    float a = min(1.0, alpha + max(tinted.r, tinted.b) * 0.6 + rim) * edge;
     return half4(half3(c * a), half(a));
 }

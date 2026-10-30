@@ -261,7 +261,7 @@ final class DictationController {
 // и клики пропускает насквозь — человек продолжает работать там, где был.
 private final class DictationPanel {
     private let panel: NSPanel
-    private static let side: CGFloat = 200   // со стороной сферы 96 и запасом под тень
+    private static let side: CGFloat = 240   // сфера 96, холст шейдера ×1,9 и запас под пружину появления
 
     init(controller: DictationController) {
         panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: Self.side, height: Self.side),
