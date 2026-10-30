@@ -15,7 +15,7 @@ static float band(float2 p, float k, float t, float voice) {
     return exp(-d * d / (width * width)) * smoothstep(1.15, 0.2, abs(q.x));
 }
 
-[[ stitchable ]] half4 orb(float2 position, half4 color, float4 bounds, float t, float voice, float dark, float canvas) {
+static half4 orbAt(float2 position, float4 bounds, float t, float voice, float dark, float canvas) {
     float2 p = (position - bounds.xy - bounds.zw * 0.5) / (bounds.w * 0.5 / canvas);
     float r = length(p);
 
@@ -50,4 +50,33 @@ static float band(float2 p, float k, float t, float voice) {
     float edge = smoothstep(1.0, 0.985, r);
     float a = min(1.0, alpha + max(tinted.r, tinted.b) * 0.6 + rim) * edge;
     return half4(half3(c * a), half(a));
+}
+
+// Для SwiftUI (.colorEffect) — превью и запас.
+[[ stitchable ]] half4 orb(float2 position, half4 color, float4 bounds, float t, float voice, float dark, float canvas) {
+    return orbAt(position, bounds, t, voice, dark, canvas);
+}
+
+// Для OrbLayer (MTKView): сфера рисуется своим слоем без пересчёта SwiftUI на каждом кадре —
+// через .colorEffect в TimelineView она ела ~20 % процессора и подлагивала (31.10.2026).
+struct OrbUniforms {
+    float2 size;   // в пикселях
+    float t;
+    float voice;
+    float dark;
+    float canvas;
+};
+
+struct OrbVertex { float4 position [[position]]; };
+
+vertex OrbVertex orbVertex(uint id [[vertex_id]]) {
+    // Один треугольник на весь экран.
+    float2 uv = float2((id << 1) & 2, id & 2);
+    OrbVertex out;
+    out.position = float4(uv * 2.0 - 1.0, 0, 1);
+    return out;
+}
+
+fragment half4 orbFragment(OrbVertex in [[stage_in]], constant OrbUniforms &u [[buffer(0)]]) {
+    return orbAt(in.position.xy, float4(0, 0, u.size), u.t, u.voice, u.dark, u.canvas);
 }

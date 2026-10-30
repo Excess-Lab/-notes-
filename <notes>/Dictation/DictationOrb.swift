@@ -1,3 +1,4 @@
+import MetalKit
 import SwiftUI
 
 // Сфера надиктовки — стеклянный шар, как у новой Siri (кадры Макара, 30.10.2026). Рисует шейдер
@@ -7,53 +8,107 @@ struct DictationOrb: View {
     let state: DictationController.State
     let level: Float
     @Environment(\.colorScheme) private var scheme
-    @State private var motion = OrbClock()
 
     // Холст шейдера с запасом: ореол раньше обрезался краем квадрата 1,3 (ТЗ: «рамка режет»).
     static let canvas: CGFloat = 1.9
+    private let size: CGFloat = 96
 
     var body: some View {
-        // В покое анимация стоит: иначе скрытая сфера грела бы Mac.
-        TimelineView(.animation(paused: state == .idle)) { timeline in
-            let frame = motion.step(now: timeline.date, state: state, level: Double(level))
-            OrbFace(t: frame.t, voice: frame.voice, state: state, dark: scheme == .dark)
+        ZStack {
+            // Кадры рисует OrbLayer сам, 60 в секунду; SwiftUI здесь пересчитывается только при смене
+            // состояния и громкости, а не каждый кадр.
+            OrbLayer(state: state, level: level, dark: scheme == .dark)
+                .frame(width: size * Self.canvas, height: size * Self.canvas)
+            if state == .copied {
+                // Галочка — под стеклом: чуть размыта и прикрыта бликом, а не наклейкой сверху.
+                ZStack {
+                    CheckMark()
+                        .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
+                        .frame(width: 26, height: 19)
+                        .blur(radius: 1.4)
+                        .opacity(0.9)
+                    Circle()
+                        .fill(LinearGradient(colors: [.white.opacity(0.22), .clear, .white.opacity(0.08)],
+                                             startPoint: .top, endPoint: .bottom))
+                        .frame(width: size * 0.86, height: size * 0.86)
+                }
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
+            }
         }
         .animation(.smooth(duration: 0.4), value: state)
     }
 }
 
-private struct OrbFace: View {
-    let t: Float
-    let voice: Float
+// Metal-слой сферы: шейдер orbFragment из Orb.metal, ход времени и голоса — OrbClock. В покое — пауза.
+private struct OrbLayer: NSViewRepresentable {
     let state: DictationController.State
+    let level: Float
     let dark: Bool
-    private let size: CGFloat = 96
 
-    var body: some View {
-        let canvas = DictationOrb.canvas
-            ZStack {
-                Rectangle().fill(.white)
-                    .frame(width: size * canvas, height: size * canvas)
-                    .colorEffect(ShaderLibrary.orb(.boundingRect, .float(t), .float(voice), .float(dark ? 1 : 0),
-                                                   .float(canvas)))
-                if state == .copied {
-                    // Галочка — под стеклом: чуть размыта и прикрыта бликом, а не наклейкой сверху.
-                    ZStack {
-                        CheckMark()
-                            .stroke(.white, style: StrokeStyle(lineWidth: 3, lineCap: .round, lineJoin: .round))
-                            .frame(width: 26, height: 19)
-                            .blur(radius: 1.4)
-                            .opacity(0.9)
-                        Circle()
-                            .fill(LinearGradient(colors: [.white.opacity(0.22), .clear, .white.opacity(0.08)],
-                                                 startPoint: .top, endPoint: .bottom))
-                            .frame(width: size * 0.86, height: size * 0.86)
-                    }
-                    .transition(.scale(scale: 0.6).combined(with: .opacity))
-                }
-            }
-            .scaleEffect(1 + CGFloat(voice) * 0.04)
+    func makeCoordinator() -> OrbRenderer { OrbRenderer() }
+
+    func makeNSView(context: Context) -> MTKView {
+        let view = MTKView(frame: .zero, device: context.coordinator.device)
+        view.colorPixelFormat = .bgra8Unorm
+        view.clearColor = MTLClearColor(red: 0, green: 0, blue: 0, alpha: 0)
+        view.layer?.isOpaque = false
+        view.preferredFramesPerSecond = 60
+        view.delegate = context.coordinator
+        return view
     }
+
+    func updateNSView(_ view: MTKView, context: Context) {
+        let renderer = context.coordinator
+        renderer.state = state
+        renderer.level = Double(level)
+        renderer.dark = dark
+        view.isPaused = state == .idle
+    }
+}
+
+final class OrbRenderer: NSObject, MTKViewDelegate {
+    let device = MTLCreateSystemDefaultDevice()
+    private lazy var queue = device?.makeCommandQueue()
+    private lazy var pipeline: MTLRenderPipelineState? = {
+        guard let device, let library = device.makeDefaultLibrary() else { return nil }
+        let descriptor = MTLRenderPipelineDescriptor()
+        descriptor.vertexFunction = library.makeFunction(name: "orbVertex")
+        descriptor.fragmentFunction = library.makeFunction(name: "orbFragment")
+        descriptor.colorAttachments[0].pixelFormat = .bgra8Unorm
+        return try? device.makeRenderPipelineState(descriptor: descriptor)
+    }()
+    private let clock = OrbClock()
+    var state: DictationController.State = .idle
+    var level = 0.0
+    var dark = true
+
+    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+
+    func draw(in view: MTKView) {
+        guard let pipeline, let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
+              let buffer = queue?.makeCommandBuffer(),
+              let encoder = buffer.makeRenderCommandEncoder(descriptor: pass) else { return }
+        let frame = clock.step(now: Date(), state: state, level: level)
+        let size = view.drawableSize
+        // Голос чуть раздувает шар: меньше холст — крупнее сфера.
+        var uniforms = OrbUniforms(size: SIMD2(Float(size.width), Float(size.height)), t: frame.t, voice: frame.voice,
+                                   dark: dark ? 1 : 0, canvas: Float(DictationOrb.canvas) / (1 + frame.voice * 0.04))
+        encoder.setRenderPipelineState(pipeline)
+        encoder.setFragmentBytes(&uniforms, length: MemoryLayout<OrbUniforms>.stride, index: 0)
+        encoder.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+        encoder.endEncoding()
+        buffer.present(drawable)
+        buffer.commit()
+    }
+}
+
+// Раскладка совпадает с OrbUniforms в Orb.metal: float2 и четыре float.
+private struct OrbUniforms {
+    var size: SIMD2<Float>
+    var t: Float
+    var voice: Float
+    var dark: Float
+    var canvas: Float
 }
 
 // Ход сферы по кадрам: голос сглаживается каждый кадр (раньше прыгал с частотой звука — подлагивало),

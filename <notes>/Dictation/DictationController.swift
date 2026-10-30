@@ -296,10 +296,10 @@ private struct OrbHost: View {
 
     var body: some View {
         let visible = controller.state != .idle
+        // Без .blur: даже с радиусом 0 он гнал каждый кадр шейдера через лишний проход (лаги, 31.10.2026).
         DictationOrb(state: controller.state, level: controller.level)
             .scaleEffect(visible ? 1 : 0.6)
             .opacity(visible ? 1 : 0)
-            .blur(radius: visible ? 0 : 8)
             .animation(.spring(duration: 0.35, bounce: 0.25), value: visible)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
