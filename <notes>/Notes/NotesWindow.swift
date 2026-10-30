@@ -217,8 +217,19 @@ struct NotesSidebar: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
+                    // Закреплённые — над деревом.
+                    let pins = model.pinned
+                    if !pins.isEmpty {
+                        ForEach(pins, id: \.self) { url in
+                            SidebarRow(glyph: .file, title: url.deletingPathExtension().lastPathComponent,
+                                       selected: model.selection == .note(url)) { model.open(.note(url)) }
+                                .contextMenu { NoteMenu(model: model, url: url) }
+                        }
+                        Rectangle().fill(NotesLayout.line).frame(height: 1).padding(.vertical, 6)
+                    }
                     FolderRows(model: model, folder: model.tree, depth: 0)
                 }
+                .contextMenu { NoteMenu(model: model, url: model.library.root, folder: true) }
                 .padding(.horizontal, 10)
                 .padding(.top, 15)
                 .padding(.bottom, 20)
@@ -241,6 +252,7 @@ private struct FolderRows: View {
                 model.toggle(child.url)
                 model.open(.folder(child.url))
             }
+            .contextMenu { NoteMenu(model: model, url: child.url, folder: true) }
             if model.expanded.contains(child.url) {
                 FolderRows(model: model, folder: child, depth: depth + 1)
             }
@@ -250,6 +262,7 @@ private struct FolderRows: View {
                        selected: model.selection == .note(note.url)) {
                 model.open(.note(note.url))
             }
+            .contextMenu { NoteMenu(model: model, url: note.url) }
         }
     }
 }

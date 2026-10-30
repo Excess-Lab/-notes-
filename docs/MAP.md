@@ -22,6 +22,7 @@
 - `<notes>/Onboarding/PinEntrySheet.swift` — окно пинкода поверх шага, ячейки, клавиши.
 - `<notes>/Onboarding/UnlockStep.swift` — вход: пинкод, Touch ID, пауза после ошибок, «забыл пинкод».
 - `<notes>/Notes/NotesModel.swift` — состояние главного экрана: выбор, автосохранение, правки снаружи, поиск, самопроверка.
+- `<notes>/Notes/NoteActions.swift` — меню заметки и папки: закрепить, копировать, вставить, дублировать, удалить в Корзину.
 - `<notes>/Notes/NotesWindow.swift` — главный экран: шапка, боковая панель, лист содержимого, кнопки.
 - `<notes>/Notes/NoteViews.swift` — заметка, обзор папок с карточками, строки, поиск поверх.
 - `<notes>/Notes/MarkdownEditor.swift` — редактор текста заметки (NSTextView) с оформлением заголовков.

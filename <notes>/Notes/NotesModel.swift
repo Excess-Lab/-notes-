@@ -181,7 +181,7 @@ import SwiftUI
         }
     }
 
-    private func reloadTree() { tree = library.tree() }
+    func reloadTree() { tree = library.tree() }
 
     private func find(_ url: URL, in folder: NoteLibrary.Folder) -> NoteLibrary.Folder? {
         if folder.url.standardizedFileURL == url.standardizedFileURL { return folder }
@@ -284,6 +284,14 @@ extension NotesModel {
             tasks.toggle(bread)
             let disk = (try? String(contentsOf: bread.note, encoding: .utf8)) ?? ""
             check("отметка «готово» записалась в файл", disk.contains("- [x] Купить хлеб"))
+        }
+        if case .note(let url) = selection {
+            togglePin(url); check("заметка закрепилась", isPinned(url))
+            togglePin(url)
+            duplicate(url)
+            let copy = url.deletingLastPathComponent().appendingPathComponent(url.deletingPathExtension().lastPathComponent + " копия.md")
+            check("дубликат создан", FileManager.default.fileExists(atPath: copy.path))
+            trash(copy); check("дубликат ушёл в Корзину", !FileManager.default.fileExists(atPath: copy.path))
         }
         if UserDefaults.standard.bool(forKey: "liveSelfTest") {
             CalendarSync.shared.selfTest(check)
