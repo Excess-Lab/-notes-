@@ -149,15 +149,25 @@ private struct TopBar: View {
     @State private var hovered: NotesModel.Section?
     @State private var fullSections: CGFloat = 518
     @State private var syncText: CGFloat = 0
+    @State private var labels: [String: CGFloat] = [:]
     @Namespace private var hover
+
+    // Разделы в шапке: все со словами → гибрид (значки, слово только у выбранного) → только значки.
+    enum Fit { case full, hybrid, icons }
+    private static let titles = ["задачи", "календарь", "видео", "настройки"]
 
     var body: some View {
         GeometryReader { geo in
-        // Сжимаем по очереди (31.10.2026): сперва синхронизация — её текст не влезает и растворяется к краю,
-        // разделы теряют слова, только когда рядом с ними не остаётся места и для значка синхронизации.
         // Ширину разделов со словами меряем (невидимая копия ниже), а не берём 540 из кадра: у Макара
         // подписи вылезали под синхронизацию.
-        let compact = geo.size.width < 449 + fullSections + 22 + 16 + 48 + 17
+        // Порядок сжатия: сначала текст синхронизации (остаётся значок), потом разделы — значками.
+        // Значок синхронизации не пропадает никогда («почему синхронизация пропадает», 31.10.2026).
+        // Гибрид — только если влезает подпись любого раздела, даже самая длинная: иначе при переключении
+        // раздела шапка то влезала бы, то нет («только когда можем показать текст каждого раздела», 31.10.2026).
+        let longest = labels.values.max() ?? 80
+        let fit: Fit = geo.size.width >= 449 + fullSections + 22 + 16 + 48 + 17 ? .full
+            : geo.size.width >= 449 + Self.hybridWidth(longest) + 16 + 48 + 17 ? .hybrid : .icons
+        let compact = fit != .full
         // Группы — в ряд (HStack): синхронизация встаёт сразу за разделами. На отступах .offset она съезжала
         // под разделы — TimelineView тянется на всю ширину и сдвигал её.
         HStack(alignment: .top, spacing: 0) {
@@ -201,9 +211,13 @@ private struct TopBar: View {
 
             // Узкое окно — значки, название — подсказкой при наведении; широкое — со словами, как в кадрах.
             // Подсветка наведения одна на группу и переезжает между кнопками, не вылезая за них.
-            let sections: CGFloat = compact ? 3 * 34 + 2 * 6 + 22 : fullSections + 22
+            let sections: CGFloat = switch fit {
+            case .full: fullSections + 22
+            case .hybrid: Self.hybridWidth(selectedTitle.flatMap { labels[$0] })
+            case .icons: 4 * 34 + 3 * 6 + 22
+            }
             HeaderGroup(width: sections) {
-                sectionButtons(compact: compact)
+                sectionButtons(fit)
                     .offset(x: 11)
                 .animation(.smooth(duration: 0.25), value: hovered)
             }
@@ -213,58 +227,93 @@ private struct TopBar: View {
             // По ширине текста, как в кадре. Не влезает целиком — остаётся одна иконка, без обрезанного
             // и размытого текста («не помещается — просто текст убери», 31.10.2026).
             let natural = 16 + 16 + 6 + syncText + 16
-            let fits = natural <= geo.size.width - left - 17
+            let room = geo.size.width - left - 17
+            let fits = natural <= room && !compact
             let width: CGFloat = fits ? natural : 48
-            HeaderGroup(width: width) {
-                HStack(spacing: 6) {
-                    DotIcon(glyph: .git)
-                    TimelineView(.periodic(from: .now, by: 30)) { context in
-                        Text(sync.status(now: context.date))
-                            .font(Martian.body.font(11))
-                            .kerning(Theme.tracking(-7, size: 11))
-                            .foregroundStyle(Theme.fg)
-                            .fixedSize()
-                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { syncText = $0 }
-                    }
-                    .fixedSize()
-                    .opacity(fits ? 1 : 0)
-                }
-                .opacity(0.4)
-                .padding(.leading, 16)
-                // Ширина строки — ровно капсула: длинный текст раньше раздувал её, и капсула
-                // вылезала по центру поверх разделов.
-                .frame(width: width, height: 48, alignment: .leading)
-                .clipped()
-                .animation(.smooth(duration: 0.25), value: fits)
-                .contentShape(Rectangle())
-                .help(sync.status(now: .now))
-            }
+            // Синхронизация прижата к правому краю, между ней и разделами — свободное место (31.10.2026).
             Spacer(minLength: 0)
+            Group {
+                HeaderGroup(width: width) {
+                    HStack(spacing: 6) {
+                        DotIcon(glyph: .git)
+                        TimelineView(.periodic(from: .now, by: 30)) { context in
+                            Text(sync.status(now: context.date))
+                                .font(Martian.body.font(11))
+                                .kerning(Theme.tracking(-7, size: 11))
+                                .foregroundStyle(Theme.fg)
+                                .fixedSize()
+                                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { syncText = $0 }
+                        }
+                        .fixedSize()
+                        .opacity(fits ? 1 : 0)
+                    }
+                    .opacity(0.4)
+                    .padding(.leading, 16)
+                    // Ширина строки — ровно капсула: длинный текст раньше раздувал её, и капсула
+                    // вылезала по центру поверх разделов.
+                    .frame(width: width, height: 48, alignment: .leading)
+                    .clipped()
+                    .animation(.smooth(duration: 0.25), value: fits)
+                    .contentShape(Rectangle())
+                    .help(sync.status(now: .now))
+                }
+                .padding(.trailing, 17)
+                .transition(.opacity)
+            }
         }
         .padding(.top, 15)
         .background(alignment: .topLeading) {
-            sectionButtons(compact: false)
+            sectionButtons(.full)
                 .fixedSize()
                 .hidden()
                 .allowsHitTesting(false)
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { fullSections = $0 }
+            ForEach(Self.titles, id: \.self) { title in
+                Self.label(title).fixedSize().hidden()
+                    .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { labels[title] = $0 }
+            }
         }
-        .animation(.smooth(duration: 0.35), value: compact)
+        .animation(.smooth(duration: 0.35), value: fit)
+        .animation(.smooth(duration: 0.35), value: model.section)
         }
     }
 
-    private func sectionButtons(compact: Bool) -> some View {
-        // Кадр 152:32854: в группе только задачи, календарь, видео; заметки — по логотипу, настройки — ⌘,.
-        HStack(spacing: compact ? 6 : 10) {
-            section("задачи", .taskDone, .tasks, compact)
-            section("календарь", .calendar, .calendar, compact)
-            section("видео", .video, .video, compact)
+    // Кнопка со словом: значок 16 + зазор 8 + поля 8 по краям; группа — 3 значка по 34, зазоры 6 и поля 22.
+    private static func hybridWidth(_ label: CGFloat?) -> CGFloat {
+        3 * 34 + max(34, (label ?? 0) + 40) + 3 * 6 + 22
+    }
+
+    private var selectedTitle: String? {
+        switch model.section {
+        case .tasks: "задачи"
+        case .calendar: "календарь"
+        case .video: "видео"
+        case .settings: "настройки"
+        default: nil
+        }
+    }
+
+    private static func label(_ title: String) -> some View {
+        Text(title)
+            .font(Martian.body.font(13))
+            .kerning(Theme.tracking(-7, size: 13))
+            .foregroundStyle(Theme.ink)
+    }
+
+    private func sectionButtons(_ fit: Fit) -> some View {
+        // Заметки — по логотипу; настройки вернулись в шапку: «настройки пропали» (31.10.2026), ⌘, тоже работает.
+        HStack(spacing: fit == .full ? 10 : 6) {
+            section("задачи", .taskDone, .tasks, fit)
+            section("календарь", .calendar, .calendar, fit)
+            section("видео", .video, .video, fit)
+            section("настройки", .settings, .settings, fit)
         }
     }
 
     // Раздел в шапке: выбранный — ярко на белом 10 %, остальные — 30 %, как в кадрах.
-    private func section(_ title: String, _ glyph: DotGlyph, _ target: NotesModel.Section, _ compact: Bool) -> some View {
+    private func section(_ title: String, _ glyph: DotGlyph, _ target: NotesModel.Section, _ fit: Fit) -> some View {
         let active = model.section == target
+        let compact = fit == .icons || (fit == .hybrid && !active)
         return Button {
             model.flush()
             model.section = target
@@ -272,10 +321,7 @@ private struct TopBar: View {
             HStack(spacing: 8) {
                 DotIcon(glyph: glyph)
                 if !compact {
-                    Text(title)
-                        .font(Martian.body.font(13))
-                        .kerning(Theme.tracking(-7, size: 13))
-                        .foregroundStyle(Theme.ink)
+                    Self.label(title)
                         .fixedSize()
                         .transition(.blurReplace)
                 }
