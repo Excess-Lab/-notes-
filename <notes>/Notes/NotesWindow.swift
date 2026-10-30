@@ -139,10 +139,9 @@ private struct TopBar: View {
 
     var body: some View {
         GeometryReader { geo in
-        // Сжимаем по очереди (31.10.2026, «сначала сжимаем синхронизацию а затем уже пункты меню»):
-        // сперва синхронизация теряет текст, разделы — только когда и значку синхронизации не хватает места.
+        // Сжимаем по очереди (31.10.2026): сперва синхронизация — её текст не влезает и растворяется к краю
+        // («он будет просто затемняться»), разделы теряют слова, только когда и значку не хватает места.
         let compact = geo.size.width < 449 + 540 + 15 + 48 + 17
-        let syncText = geo.size.width >= 449 + 540 + 15 + 240 + 17
         ZStack(alignment: .topLeading) {
             HeaderGroup(width: 417) {
                 Button { model.section = .notes } label: {
@@ -197,18 +196,18 @@ private struct TopBar: View {
                 HeaderGroup(width: max(48, geo.size.width - left - 17)) {
                     HStack(spacing: 6) {
                         DotIcon(glyph: .git)
-                        if syncText {
-                            Text(sync.status(now: context.date))
-                                .font(Martian.body.font(11))
-                                .kerning(Theme.tracking(-7, size: 11))
-                                .foregroundStyle(Theme.fg)
-                                .lineLimit(1)
-                                .transition(.blurReplace)
-                        }
+                        Text(sync.status(now: context.date))
+                            .font(Martian.body.font(11))
+                            .kerning(Theme.tracking(-7, size: 11))
+                            .foregroundStyle(Theme.fg)
+                            .fixedSize()
                     }
                     .opacity(0.4)
-                    .offset(x: 16)
+                    .padding(.leading, 16)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .clipped()
+                    .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.7),
+                                                 .init(color: .clear, location: 0.95)], startPoint: .leading, endPoint: .trailing))
                     .contentShape(Rectangle())
                     .help(sync.status(now: context.date))
                 }
@@ -216,7 +215,6 @@ private struct TopBar: View {
             .offset(x: left, y: 15)
         }
         .animation(.smooth(duration: 0.35), value: compact)
-        .animation(.smooth(duration: 0.35), value: syncText)
         }
     }
 
