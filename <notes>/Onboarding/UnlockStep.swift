@@ -68,7 +68,7 @@ struct UnlockStep: View {
     }
 
     private func subtitle(wait: TimeInterval?) -> String {
-        if let wait { return "много попыток — подожди \(Self.format(wait))" }
+        if let wait { return "слишком много попыток, подожди \(Self.format(wait))" }
         if unlock.stage == .wrong { return "неверный пинкод" }
         if BiometricLock.isEnabled { return hasPin ? "или приложи палец к touch id" : "к touch id, чтобы открыть заметки" }
         return "чтобы открыть заметки"

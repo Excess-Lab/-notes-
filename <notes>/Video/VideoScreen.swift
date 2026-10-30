@@ -39,7 +39,7 @@ private struct VideoList: View {
                         .font(Martian.heading.font(15))
                         .kerning(Theme.tracking(-7, size: 15))
                         .foregroundStyle(Theme.ink)
-                    Text("mp4, mov, m4a, mp3 — распознаётся на этом mac")
+                    Text("mp4, mov, m4a или mp3")
                         .font(Martian.body.font(11))
                         .kerning(Theme.tracking(-7, size: 11))
                         .foregroundStyle(NotesLayout.gray)

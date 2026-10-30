@@ -272,7 +272,7 @@ struct SearchOverlay: View {
                             }.buttonStyle(.plain)
                         }
                     } else if model.hits.isEmpty {
-                        Text("ничего не нашли — попробуй другие слова")
+                        Text("ничего не нашлось")
                             .font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray)
                             .frame(maxWidth: .infinity).frame(height: 70)
                     } else {

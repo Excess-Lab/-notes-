@@ -43,11 +43,11 @@ struct SettingsScreen: View {
 
     private func subtitle(_ page: NotesModel.SettingsPage) -> String {
         switch page {
-        case .sync: "папка, история и github"
-        case .dictation: "из любого приложения, текст — в буфер обмена"
+        case .sync: "где лежат заметки и куда уходят"
+        case .dictation: "говоришь — текст в буфере"
         case .search: "по тексту и по смыслу"
         case .lock: "пинкод и touch id"
-        case .calendar: "задачи из заметок с датой"
+        case .calendar: "задачи со сроком попадают в календарь"
         }
     }
 }
@@ -108,7 +108,7 @@ private struct SyncPage: View {
             }
             .buttonStyle(WhitePillStyle())
         }
-        SettingRow(title: "история в git", subtitle: "коммит раз в час, подпись по заметкам") {
+        SettingRow(title: "история в git", subtitle: "каждый час сохраняем версию") {
             if isRepo {
                 GrantedLabel(text: "включено")
             } else {
@@ -148,7 +148,7 @@ private struct SyncPage: View {
                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 .frame(width: 640, alignment: .leading).padding(.top, 8)
         }
-        Note(text: "конфликты не теряют текст: версия с другого mac ляжет рядом")
+        Note(text: "правили на двух mac — сохраним обе версии")
             .onAppear { isRepo = GitVault.isRepository(vault) }
             .sheet(isPresented: $relogin) {
                 ReloginSheet(vault: vault) {
@@ -179,7 +179,7 @@ private struct DictationPage: View {
                 }
             }
         }
-        Note(text: "речь распознаётся на этом mac и никуда не отправляется")
+        Note(text: "всё распознаётся на этом mac, без интернета")
     }
 
     private func subtitle(_ model: SpeechModel) -> String {
@@ -195,7 +195,7 @@ private struct SearchPage: View {
     @AppStorage(NotesModel.semanticKey) private var semantic = false
 
     var body: some View {
-        SettingRow(title: "поиск по тексту", subtitle: "все слова запроса, ⌘K из любого места") {
+        SettingRow(title: "поиск по тексту", subtitle: "⌘K из любого места") {
             GrantedLabel(text: "работает")
         }
         GlassRow(width: 640) {
@@ -208,14 +208,14 @@ private struct SearchPage: View {
                         .padding(.horizontal, 6).padding(.vertical, 1)
                         .overlay(Capsule().strokeBorder(NotesLayout.gray.opacity(0.5), lineWidth: 1))
                 }
-                Text("встроенная модель macos, ничего не скачивает; находит похожее по смыслу")
+                Text("найдёт заметку, даже если не помнишь точных слов")
                     .font(Martian.body.font(11)).foregroundStyle(Theme.fg.opacity(0.3))
             }
             Spacer(minLength: 0)
             Toggle("", isOn: $semantic).toggleStyle(.switch).tint(Theme.coral).labelsHidden()
                 .onChange(of: semantic) { _, on in if on { model.refreshIndex() } }
         }
-        Note(text: "индекс лежит вне хранилища и в git не попадает")
+        Note(text: "индекс хранится отдельно от заметок и в историю не попадает")
     }
 }
 
@@ -228,7 +228,7 @@ private struct LockPage: View {
         SettingRow(title: "пинкод", subtitle: pinSet ? "4 цифры" : "не задан") {
             Button(pinSet ? "сменить" : "задать") { model.pinEntryShown = true }.buttonStyle(WhitePillStyle())
         }
-        SettingRow(title: "touch id", subtitle: "приложи палец вместо пинкода") {
+        SettingRow(title: "touch id", subtitle: "вход по пальцу") {
             if !BiometricLock.isAvailable {
                 Text("нет touch id").font(Martian.body.font(13)).foregroundStyle(Theme.fg.opacity(0.3))
             } else if touchID {
@@ -237,8 +237,8 @@ private struct LockPage: View {
                 Button("включить") { Task { touchID = await BiometricLock.enable() } }.buttonStyle(WhitePillStyle())
             }
         }
-        SettingRow(title: "когда спрашивать", subtitle: "после блокировки mac и 15 минут в фоне") { EmptyView() }
-        Note(text: "заметки не шифруются — их можно открыть любым редактором")
+        SettingRow(title: "когда спрашивать", subtitle: "после блокировки mac или 15 минут без дела") { EmptyView() }
+        Note(text: "пинкод закрывает приложение, сами заметки остаются обычными файлами")
             .onChange(of: model.pinEntryShown) { _, shown in if !shown { pinSet = PinStore().isSet } }
     }
 }
@@ -267,7 +267,7 @@ private struct CalendarPage: View {
             .menuStyle(.button).buttonStyle(WhitePillStyle()).fixedSize()
             .disabled(!access)
         }
-        SettingRow(title: "длительность", subtitle: "\(minutes) минут, если в задаче нет конца") {
+        SettingRow(title: "длительность", subtitle: "\(minutes) минут на задачу") {
             Menu("изменить") {
                 ForEach([15, 30, 60, 90], id: \.self) { value in
                     Button("\(value) минут") { sync.minutes = value; minutes = value }
@@ -275,7 +275,7 @@ private struct CalendarPage: View {
             }
             .menuStyle(.button).buttonStyle(WhitePillStyle()).fixedSize()
         }
-        Note(text: "событие обновляется вместе с заметкой, а не плодится заново")
+        Note(text: "поменял задачу — событие в календаре поменяется само")
             .onAppear { access = sync.hasAccess; minutes = sync.minutes }
     }
 }
@@ -321,7 +321,7 @@ private struct ReloginSheet: View {
         VStack(spacing: 18) {
             Text("войти в github")
                 .font(Martian.heading.font(22)).foregroundStyle(Theme.ink)
-            Text("старый вход больше не действует — введи код на github.com/login/device")
+            Text("вход устарел. введи код на github — и всё снова уйдёт в облако")
                 .font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray)
             DeviceCodeCapsule(state: login.state, renew: { attempt += 1 })
                 .offset(y: -(207 - Layout.sheetTop))

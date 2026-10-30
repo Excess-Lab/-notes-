@@ -435,7 +435,7 @@ private struct NewTaskPopover: View {
                     .labelsHidden().datePickerStyle(.field).font(Martian.body.font(13))
                 Toggle("весь день", isOn: $allDay).toggleStyle(.checkbox).font(Martian.body.font(13))
             }
-            Text("enter — добавить, esc — закрыть")
+            Text("enter — добавить")
                 .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
         }
         .padding(14)
