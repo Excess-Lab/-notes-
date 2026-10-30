@@ -90,4 +90,18 @@ struct WhisperTests {
         print("Whisper:", text)
         #expect(text.range(of: "[а-яё]", options: [.regularExpression, .caseInsensitive]) != nil)
     }
+
+    @Test("длинная запись режется на куски до 20 с по тишине")
+    func pieces() {
+        let rate = Transcribers.sampleRate
+        // 50 с «речи» с тишиной на 17-й и 35-й секунде.
+        var samples = [Float](repeating: 0.5, count: rate * 50)
+        for s in [17, 35] { for i in (s * rate)..<(s * rate + rate / 5) { samples[i] = 0 } }
+        let parts = Transcribers.pieces(samples)
+        #expect(parts.count == 3)
+        #expect(parts.allSatisfy { $0.count <= rate * 20 })
+        #expect(abs(parts[0].upperBound - 17 * rate) < rate / 5)
+        #expect(parts.last?.upperBound == samples.count)
+        #expect(Transcribers.pieces([Float](repeating: 0, count: rate / 10)).isEmpty)
+    }
 }

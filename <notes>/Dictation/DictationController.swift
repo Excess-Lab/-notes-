@@ -125,10 +125,12 @@ final class DictationController {
             return
         }
         state = .recognizing
+        Self.keep(samples)
         do {
             let engine = try await loadTranscriber()
             // Распознавание — секунда-две работы процессора: не на главном потоке, чтобы не замер интерфейс.
             let text = try await Task.detached { try await engine.transcribe(samples) }.value
+            Self.forget()
             guard !text.isEmpty else { hide(); return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
@@ -140,6 +142,34 @@ final class DictationController {
             NSSound.beep()
             hide()
         }
+    }
+
+    // Запись лежит на диске, пока не распознана: если приложение упадёт посреди распознавания,
+    // при следующем запуске она распознается и текст окажется в буфере — сказанное не пропадает.
+    private static var pending: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("<notes>/недораспознанная запись.f32")
+    }
+
+    private static func keep(_ samples: [Float]) {
+        try? FileManager.default.createDirectory(at: pending.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? samples.withUnsafeBufferPointer { Data(buffer: $0) }.write(to: pending, options: .atomic)
+    }
+
+    private static func forget() { try? FileManager.default.removeItem(at: pending) }
+
+    // Запуск: осталась запись с прошлого раза — распознаём, кладём в буфер, показываем галочку.
+    func recoverPending() async {
+        guard let data = try? Data(contentsOf: Self.pending), !data.isEmpty, state == .idle else { return }
+        Self.forget()   // если упадёт снова — второй раз не пробуем, чтобы не падать на каждом запуске
+        let samples = data.withUnsafeBytes { Array($0.bindMemory(to: Float.self)) }
+        guard let engine = try? await loadTranscriber(),
+              let text = try? await Task.detached(operation: { try await engine.transcribe(samples) }).value,
+              !text.isEmpty else { return }
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        log.info("восстановили надиктовку после сбоя")
+        flashReady()
     }
 
     private func loadTranscriber() async throws -> Transcriber {
@@ -188,8 +218,12 @@ final class DictationController {
     // сфера слушает (громкость из файла), распознаёт, кладёт текст в буфер, показывает галочку.
     // Запуск: `open <notes>.app --args -dictationTestFile /путь/к/файлу.wav`.
     func debugRun(file: URL) async {
-        guard modelReady() else { return }
-        guard let data = try? Data(contentsOf: file), let range = data.range(of: Data("data".utf8)) else { return }
+        // Итог — и в stderr: из терминала его видно через `open --stderr файл`.
+        func report(_ line: String) { FileHandle.standardError.write(Data("тест надиктовки: \(line)\n".utf8)) }
+        guard modelReady() else { return report("модель не скачана") }
+        guard let data = try? Data(contentsOf: file), let range = data.range(of: Data("data".utf8)) else {
+            return report("не прочитали файл (песочница пускает только в «Загрузки»)")
+        }
         let samples: [Float] = data[(range.upperBound + 4)...].withUnsafeBytes { raw in
             raw.bindMemory(to: Int16.self).map { Float($0) / 32768 }
         }
@@ -211,10 +245,12 @@ final class DictationController {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
             log.info("тест надиктовки: \(text, privacy: .public)")
+            report("\(samples.count / Transcribers.sampleRate) с → \(text.count) знаков: \(text.prefix(120))…")
             state = .copied
             try? await Task.sleep(for: .seconds(1.2))
         } catch {
             log.error("тест надиктовки: \(String(describing: error), privacy: .public)")
+            report("ошибка \(error)")
         }
         hide()
     }

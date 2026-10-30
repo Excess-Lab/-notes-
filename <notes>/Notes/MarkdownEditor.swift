@@ -34,12 +34,19 @@ struct MarkdownEditor: NSViewRepresentable {
         if view.string != text {
             view.string = text
             Style.apply(to: view.textStorage)
+            // Другая заметка — старые шаги отмены к ней не относятся.
+            context.coordinator.undo.removeAllActions()
         }
     }
 
     final class Coordinator: NSObject, NSTextViewDelegate {
         var text: Binding<String>
+        // Свой стек отмены у каждого редактора. С общим стеком окна ⌘Z после смены заметки звал
+        // уже закрытый редактор — приложение падало (отчёты 30.10.2026, PITFALLS.md).
+        let undo = UndoManager()
         init(text: Binding<String>) { self.text = text }
+
+        func undoManager(for view: NSTextView) -> UndoManager? { undo }
 
         func textDidChange(_ notification: Notification) {
             guard let view = notification.object as? NSTextView else { return }

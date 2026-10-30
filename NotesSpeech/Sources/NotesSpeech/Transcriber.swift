@@ -10,6 +10,31 @@ public protocol Transcriber: Sendable {
 public enum Transcribers {
     public static let sampleRate = 16_000
 
+    // Куски не длиннее maxSeconds: режем в самой тихой десятой доли секунды между 70 % и 100 % длины
+    // куска, чтобы не рвать слово. Обрезки короче 0,3 с отбрасываем — это тишина, а модель на них сбоит.
+    public static func pieces(_ samples: [Float], maxSeconds: Double = 20) -> [Range<Int>] {
+        let limit = Int(Double(sampleRate) * maxSeconds), window = sampleRate / 10, minimum = sampleRate * 3 / 10
+        var result: [Range<Int>] = []
+        var start = 0
+        while start < samples.count {
+            var end = samples.count
+            if end - start > limit {
+                var best = start + limit, quietest = Float.greatestFiniteMagnitude
+                var at = start + limit * 7 / 10
+                while at + window <= start + limit {
+                    var energy: Float = 0
+                    for i in at..<(at + window) { energy += samples[i] * samples[i] }
+                    if energy < quietest { quietest = energy; best = at + window / 2 }
+                    at += window / 2
+                }
+                end = best
+            }
+            if end - start >= minimum { result.append(start..<end) }
+            start = end
+        }
+        return result
+    }
+
     // Готовит распознаватель выбранной модели. Загрузка модели в память занимает секунды —
     // делаем один раз и держим, а не на каждую надиктовку.
     public static func make(_ model: SpeechModel, store: ModelStore = .standard) async throws -> Transcriber {
@@ -54,7 +79,13 @@ public final class GigaAMTranscriber: Transcriber, @unchecked Sendable {
 
     deinit { SherpaOnnxDestroyOfflineRecognizer(recognizer) }
 
+    // Кодировщик GigaAM падает (исключение C++, его не поймать из Swift) на записи длиннее ~25 с —
+    // режем на куски до 20 с по самым тихим местам и склеиваем текст.
     public func transcribe(_ samples: [Float]) async throws -> String {
+        Transcribers.pieces(samples).map { decode(Array(samples[$0])) }.filter { !$0.isEmpty }.joined(separator: " ")
+    }
+
+    private func decode(_ samples: [Float]) -> String {
         guard !samples.isEmpty, let stream = SherpaOnnxCreateOfflineStream(recognizer) else { return "" }
         defer { SherpaOnnxDestroyOfflineStream(stream) }
         samples.withUnsafeBufferPointer { buffer in

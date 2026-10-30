@@ -39,6 +39,7 @@ import SwiftUI
                 // Надиктовка работает с запуска приложения, из любого окна (⌥ space).
                 .task {
                     DictationController.shared.start()
+                    await DictationController.shared.recoverPending()
                     #if DEBUG
                     if let name = UserDefaults.standard.string(forKey: "orbPreview") {
                         await DictationController.shared.debugShowOrb(name)
