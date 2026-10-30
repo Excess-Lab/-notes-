@@ -194,7 +194,9 @@ private struct TopBar: View {
             let left = 449 + sections + 15
             TimelineView(.periodic(from: .now, by: 30)) { context in
                 HeaderGroup(width: max(48, geo.size.width - left - 17)) {
-                    HStack(spacing: 6) {
+                    // Не влезает — к краю текст уходит в размытие, как под стеклом, и растворяется
+                    // (31.10.2026, «он размывается прям с эффектом размытия»).
+                    let line = HStack(spacing: 6) {
                         DotIcon(glyph: .git)
                         Text(sync.status(now: context.date))
                             .font(Martian.body.font(11))
@@ -205,9 +207,12 @@ private struct TopBar: View {
                     .opacity(0.4)
                     .padding(.leading, 16)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    ZStack {
+                        line.mask(Self.edge([(.black, 0), (.black, 0.6), (.clear, 0.82)]))
+                        line.blur(radius: 4)
+                            .mask(Self.edge([(.clear, 0.55), (.black, 0.78), (.clear, 0.97)]))
+                    }
                     .clipped()
-                    .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.7),
-                                                 .init(color: .clear, location: 0.95)], startPoint: .leading, endPoint: .trailing))
                     .contentShape(Rectangle())
                     .help(sync.status(now: context.date))
                 }
@@ -216,6 +221,10 @@ private struct TopBar: View {
         }
         .animation(.smooth(duration: 0.35), value: compact)
         }
+    }
+
+    private static func edge(_ stops: [(Color, CGFloat)]) -> LinearGradient {
+        LinearGradient(stops: stops.map { .init(color: $0.0, location: $0.1) }, startPoint: .leading, endPoint: .trailing)
     }
 
     // Раздел в шапке: выбранный — ярко на белом 10 %, остальные — 30 %, как в кадрах.
