@@ -55,6 +55,7 @@ open "build/Build/Products/Debug/<notes>.app"
   `open -n -F --stderr лог.txt "build/Build/Products/Debug/<notes>.app" --args -testVault YES -notesSelfTest YES -liveSelfTest YES`.
   Событие в календаре создаётся и сразу удаляется — следов не остаётся.
 - Сразу в раздел: `-notesSection tasks|calendar|video|settings`, страница настроек — `-settingsPage вход`.
+- `-notesAllTabs YES` — все заметки вкладками (проверить растворение краёв).
   С `-testVault` календарь не синхронизируется — настоящий Календарь не трогаем.
 - Плавная смена темы: `--args -themeFlipTest YES` — через 3 с приложение само меняет тему.
 - Тёмная тема без переключения системы: `--args -appearance dark`.
