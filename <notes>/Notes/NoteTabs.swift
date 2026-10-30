@@ -14,6 +14,8 @@ extension NotesModel {
 struct NoteTabs: View {
     let model: NotesModel
     @State private var hovered: URL?
+    // Можно листать влево / вправо — этот край растворяется (ТЗ 30.10.2026: подсказка горизонтальной прокрутки).
+    @State private var more: (left: Bool, right: Bool) = (false, false)
 
     var body: some View {
         ScrollView(.horizontal) {
@@ -49,5 +51,27 @@ struct NoteTabs: View {
             .animation(.smooth(duration: 0.3), value: model.tabs)
         }
         .scrollIndicators(.never)
+        .onScrollGeometryChange(for: [Bool].self) { geo in
+            [geo.contentOffset.x > 1, geo.contentOffset.x + geo.containerSize.width < geo.contentSize.width - 1]
+        } action: { _, edges in
+            withAnimation(.smooth(duration: 0.25)) { more = (edges[0], edges[1]) }
+        }
+        .mask(EdgeFade(left: more.left, right: more.right))
+    }
+}
+
+// Маска с растворёнными краями — там, куда ещё можно листать.
+struct EdgeFade: View {
+    let left: Bool
+    let right: Bool
+
+    var body: some View {
+        HStack(spacing: 0) {
+            LinearGradient(colors: [.clear, .black], startPoint: .leading, endPoint: .trailing)
+                .frame(width: left ? 40 : 0)
+            Rectangle()
+            LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
+                .frame(width: right ? 40 : 0)
+        }
     }
 }

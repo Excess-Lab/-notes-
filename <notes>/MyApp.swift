@@ -100,6 +100,10 @@ private struct RootView: View {
             let model = NotesModel(vault: vault)
             model.openDaily()
             #if DEBUG
+            // `-notesAllTabs YES` — все заметки вкладками: проверить растворение краёв при прокрутке.
+            if UserDefaults.standard.bool(forKey: "notesAllTabs") {
+                for note in model.library.allNotes(in: model.tree) { model.open(.note(note.url)) }
+            }
             if let path = UserDefaults.standard.string(forKey: "notesOpen") {
                 let url = vault.appendingPathComponent(path)
                 model.open(path.hasSuffix(".md") ? .note(url) : url.pathExtension.isEmpty ? .folder(url) : .file(url))
