@@ -97,6 +97,14 @@ private struct RootView: View {
         // Модель заметок — одна на окно: создаём, когда есть папка хранилища.
         .onChange(of: onboarding.vaultURL, initial: true) { _, vault in
             guard let vault, notes?.library.root != vault.standardizedFileURL else { return }
+            // UndoManager держит цель без владения: после смены хранилища ⌘Z позвал бы ушедшую модель
+            // и уронил приложение, как 30.10 с редактором (PITFALLS.md). Чистим её действия заранее.
+            if let old = notes {
+                for undo in NSApp.windows.compactMap(\.undoManager) + [old.fallbackUndo] {
+                    undo.removeAllActions(withTarget: old)
+                    undo.removeAllActions(withTarget: old.tasks)
+                }
+            }
             let model = NotesModel(vault: vault)
             model.openDaily()
             #if DEBUG
