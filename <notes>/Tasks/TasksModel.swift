@@ -206,6 +206,18 @@ import NotesCore
     // Удалить календарь, но не события: сначала все его события переезжают в календарь по умолчанию
     // («обычный»), потом удаляется сам календарь. Повторяющиеся переносим один раз, всей серией.
     // Возвращает, сколько событий перенесено.
+    // Новый календарь — в той же учётной записи, что календарь по умолчанию (iCloud или «На Mac»).
+    func createCalendar(_ title: String) throws {
+        let calendar = EKCalendar(for: .event, eventStore: store)
+        calendar.title = title
+        guard let source = store.defaultCalendarForNewEvents?.source ?? store.sources.first(where: { $0.sourceType == .local }) else {
+            throw CocoaError(.featureUnsupported)
+        }
+        calendar.source = source
+        try store.saveCalendar(calendar, commit: true)
+        revision += 1
+    }
+
     func removeCalendar(_ calendar: EKCalendar) throws -> Int {
         guard let target = store.defaultCalendarForNewEvents, target.calendarIdentifier != calendar.calendarIdentifier else {
             throw CocoaError(.featureUnsupported)
@@ -266,6 +278,25 @@ extension CalendarSync {
     }
 }
 #endif
+
+// Новый календарь: системное окно с полем для названия.
+enum CalendarCreation {
+    static func ask(sync: CalendarSync) {
+        let alert = NSAlert()
+        alert.messageText = "Новый календарь"
+        alert.informativeText = "Появится и в Календаре Apple."
+        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
+        field.placeholderString = "название"
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Создать")
+        alert.addButton(withTitle: "Отмена")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let title = field.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !title.isEmpty else { return }
+        do { try sync.createCalendar(title) } catch { NSAlert(error: error).runModal() }
+    }
+}
 
 // Подтверждение перед удалением календаря — системным окном, обычным языком (UI.md).
 enum CalendarRemoval {

@@ -121,6 +121,7 @@ private struct VideoRow: View {
                 Text("в очереди").font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray)
             case .done:
                 Button("открыть") { video.open = item.id }.buttonStyle(QuietLinkStyle(size: 13, opacity: 0.3))
+                Button("удалить") { VideoModel.confirmRemove(item, video: video) }.buttonStyle(QuietLinkStyle(size: 13, opacity: 0.3))
             case .failed:
                 Button("убрать") { video.remove(item.id) }.buttonStyle(QuietLinkStyle(size: 13, opacity: 0.3))
             }
@@ -139,6 +140,19 @@ private struct VideoRow: View {
         case .failed: return "файл больше недоступен — добавь его заново"
         default: return size + length
         }
+    }
+}
+
+extension VideoModel {
+    // Удалить расшифровку — с подтверждением: текст пропадёт, сам видеофайл не трогаем.
+    static func confirmRemove(_ item: Item, video: VideoModel) {
+        let alert = NSAlert()
+        alert.messageText = "Удалить расшифровку «\(item.name)»?"
+        alert.informativeText = "Текст пропадёт. Сам файл и заметки, уже сохранённые из него, останутся."
+        alert.addButton(withTitle: "Удалить")
+        alert.addButton(withTitle: "Отмена")
+        alert.buttons.first?.hasDestructiveAction = true
+        if alert.runModal() == .alertFirstButtonReturn { video.remove(item.id) }
     }
 }
 
@@ -167,6 +181,7 @@ private struct TranscriptView: View {
                     .buttonStyle(CoralCapsuleStyle())
                     Button("копировать текст") { model.video.copy(item.id) }.buttonStyle(WhitePillStyle())
                     Button("экспорт .srt") { model.video.exportSRT(item.id) }.buttonStyle(WhitePillStyle())
+                    Button("удалить") { VideoModel.confirmRemove(item, video: model.video) }.buttonStyle(QuietLinkStyle(size: 13, opacity: 0.3))
                 }
                 .padding(.top, 16)
 

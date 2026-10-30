@@ -108,6 +108,8 @@ private struct TopBar: View {
     @State private var sync = SyncController.shared
 
     var body: some View {
+        // Группа синхронизации тянется до правого края окна с тем же отступом, что слева (просьба Макара).
+        GeometryReader { geo in
         ZStack(alignment: .topLeading) {
             HeaderGroup(width: 417) {
                 Button { model.section = .notes } label: {
@@ -154,7 +156,7 @@ private struct TopBar: View {
             }
             .offset(x: 449, y: 15)
 
-            HeaderGroup(width: 180) {
+            HeaderGroup(width: max(180, geo.size.width - 1004 - 17)) {
                 HStack(spacing: 6) {
                     DotIcon(glyph: .git)
                     TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -169,6 +171,7 @@ private struct TopBar: View {
                 .offset(x: 16)
             }
             .offset(x: 1004, y: 15)
+        }
         }
     }
 
@@ -382,6 +385,10 @@ struct SectionSidebar: View {
                                 .disabled(calendar.calendarIdentifier == model.tasks.calendar.store.defaultCalendarForNewEvents?.calendarIdentifier)
                         }
                 }
+                SidebarRow(glyph: .plus, title: "новый календарь", selected: false) {
+                    CalendarCreation.ask(sync: model.tasks.calendar)
+                }
+                .opacity(0.5)
             }
         case .video:
             SidebarList(title: "видео") {
