@@ -210,12 +210,13 @@ private struct TopBar: View {
             .padding(.trailing, 16)
 
             let left = 449 + sections + 16
-            // По ширине текста, как в кадре; места нет — сжимается первой.
-            let width = max(48, min(16 + 16 + 6 + syncText + 16, geo.size.width - left - 17))
+            // По ширине текста, как в кадре. Не влезает целиком — остаётся одна иконка, без обрезанного
+            // и размытого текста («не помещается — просто текст убери», 31.10.2026).
+            let natural = 16 + 16 + 6 + syncText + 16
+            let fits = natural <= geo.size.width - left - 17
+            let width: CGFloat = fits ? natural : 48
             HeaderGroup(width: width) {
-                // Не влезает — к краю текст уходит в размытие и растворяется («он размывается прям
-                // с эффектом размытия»); влезает — чистый, без размытия (31.10.2026).
-                let line = HStack(spacing: 6) {
+                HStack(spacing: 6) {
                     DotIcon(glyph: .git)
                     TimelineView(.periodic(from: .now, by: 30)) { context in
                         Text(sync.status(now: context.date))
@@ -226,23 +227,15 @@ private struct TopBar: View {
                             .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { syncText = $0 }
                     }
                     .fixedSize()
+                    .opacity(fits ? 1 : 0)
                 }
                 .opacity(0.4)
                 .padding(.leading, 16)
                 // Ширина строки — ровно капсула: длинный текст раньше раздувал её, и капсула
                 // вылезала по центру поверх разделов.
                 .frame(width: width, height: 48, alignment: .leading)
-                let fade = 16 + 16 + 6 + syncText + 14 > width
-                let end = 1 - 10 / width, mid = 1 - 30 / width, start = 1 - 50 / width
-                ZStack {
-                    if fade {
-                        line.mask(Self.edge([(.black, 0), (.black, start), (.clear, mid)]))
-                        line.blur(radius: 4).mask(Self.edge([(.clear, start), (.black, mid), (.clear, end)]))
-                    } else {
-                        line
-                    }
-                }
                 .clipped()
+                .animation(.smooth(duration: 0.25), value: fits)
                 .contentShape(Rectangle())
                 .help(sync.status(now: .now))
             }
@@ -267,10 +260,6 @@ private struct TopBar: View {
             section("календарь", .calendar, .calendar, compact)
             section("видео", .video, .video, compact)
         }
-    }
-
-    private static func edge(_ stops: [(Color, CGFloat)]) -> LinearGradient {
-        LinearGradient(stops: stops.map { .init(color: $0.0, location: $0.1) }, startPoint: .leading, endPoint: .trailing)
     }
 
     // Раздел в шапке: выбранный — ярко на белом 10 %, остальные — 30 %, как в кадрах.
