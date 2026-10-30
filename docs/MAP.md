@@ -29,6 +29,7 @@
 - `<notes>/Tasks/TasksModel.swift` — задачи из заметок, фильтры, отметка; синхронизация с Apple Calendar (EventKit).
 - `<notes>/Tasks/TasksScreen.swift` — экраны задач и календаря (неделя, день, месяц).
 - `<notes>/Video/VideoModel.swift` — очередь расшифровок, хранение вне хранилища, заметка, копия, .srt.
+- `<notes>/Video/DropZone.metal` — шейдер зоны «перетащи» в видео: коралловые волны, при наведении файла сходятся к центру.
 - `<notes>/Video/VideoScreen.swift` — список видео с зоной для файла и экран расшифровки.
 - `<notes>/Settings/SettingsScreen.swift` — пять страниц настроек на настоящих данных.
 - `<notes>/Vault/VaultStore.swift` — папка хранилища: выбор, security-scoped bookmark, iCloud.
