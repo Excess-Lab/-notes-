@@ -38,6 +38,7 @@
 - `<notes>/Dictation/GlobalHotKey.swift` — глобальный хоткей через Carbon, без «Универсального доступа».
 - `<notes>/Dictation/AudioRecorder.swift` — запись микрофона в 16 кГц моно.
 - `<notes>/Dictation/DictationOrb.swift` — сфера с волнами от громкости и галочкой.
+- `<notes>/Dictation/Orb.metal` — шейдер сферы: стеклянный шар преломляет полосу света
 - `<notes>/Dictation/SpeechSettings.swift` — какая модель выбрана, подписи моделей.
 - `<notes>/Dictation/ModelDownloads.swift` — одно скачивание модели на всё приложение и окно «скачать модель?».
 

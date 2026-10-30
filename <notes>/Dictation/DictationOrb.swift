@@ -1,112 +1,34 @@
 import SwiftUI
 
-// Сфера надиктовки — кадр «распознование» (узел Figma 92:10604): три кольца с угловыми градиентами
-// (синий, коралловый, жёлтый ведущий цвет, дальше белый на убыль) под стеклянным кругом.
-// Слушаем — кольца медленно плывут и раздуваются от громкости голоса.
-// Распознаём — крутятся по кривым из Figma: цикл 4 с, внутри кольца в первые 4 с из 16 — быстрые обороты.
+// Сфера надиктовки — стеклянный шар, как у новой Siri (кадры Макара, 30.10.2026). Рисует шейдер
+// Orb.metal: за стеклом полоса света, шар преломляет её, на концах радуга. Слушаем — полоса раскачивается
+// и толстеет от голоса; распознаём — бежит быстрее. Светлая и тёмная тема — разная плотность стекла.
 struct DictationOrb: View {
     let state: DictationController.State
     let level: Float
+    @Environment(\.colorScheme) private var scheme
 
-    // Стекло в макете 324 при кольцах 378 / 318 / 266 — здесь то же соотношение при стекле 96.
     private static let size: CGFloat = 96
-    private static let rings: [(diameter: CGFloat, color: Color, frame: [Double])] = [
-        (378, Color(red: 0, green: 0x71 / 255, blue: 0xE3 / 255), OrbMotion.outer),
-        (318, Theme.coral, OrbMotion.middle),
-        (266, Color(red: 0xFE / 255, green: 0xBC / 255, blue: 0x2E / 255), OrbMotion.inner),
-    ]
 
     var body: some View {
-        // В покое анимация стоит: раньше она крутилась и при скрытой сфере, и приложение грело Mac
-        // («Energy Impact: Very High» в Xcode).
+        // В покое анимация стоит: иначе скрытая сфера грела бы Mac.
         TimelineView(.animation(paused: state == .idle)) { timeline in
-            let time = timeline.date.timeIntervalSinceReferenceDate
+            let t = timeline.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600) * (state == .recognizing ? 2.4 : 1)
+            let voice = state == .listening ? Double(level) : state == .copied ? 0 : 0.1
             ZStack {
-                // Блум: те же кольца, сильнее размытые и ярче, светятся за краем стекла.
-                rings(time: time)
-                    .frame(width: Self.size + 40, height: Self.size + 40)
-                    // Кольца и их размытие — одним слоем через Metal: иначе каждый кадр дорогой.
-                    // Стекло (материал) сюда не попадает: в отдельном слое оно не видит, что под окном.
-                    .drawingGroup()
-                    .blur(radius: 16)
-                    .opacity(0.55)
-                    .blendMode(.plusLighter)
-
-                sphere(time: time)
-            }
-        }
-        .animation(.smooth(duration: 0.4), value: state)
-    }
-
-    private func sphere(time: TimeInterval) -> some View {
-        ZStack {
-                // Фона у сферы нет: под ней размытие того, что на экране (как стекло в макете).
-                Circle().fill(.ultraThinMaterial)
-
-                rings(time: time)
-                    .drawingGroup()
-                    // Стекло в макете (Glass, преломление 0,8) размывает кольца в мягкие пятна цвета.
-                    .blur(radius: 9)
-
-                // Мягкая тень в середине — как на кадре.
-                Circle().fill(RadialGradient(colors: [.black.opacity(0.25), .clear], center: .center,
-                                             startRadius: 0, endRadius: Self.size * 0.36))
-                Circle().fill(.white.opacity(0.06))
-                // Кромка стекла с лёгкой радугой (дисперсия 0,5 в макете).
-                Circle().strokeBorder(AngularGradient(colors: [.cyan.opacity(0.5), .white.opacity(0.35),
-                                                               .pink.opacity(0.45), .white.opacity(0.3),
-                                                               .yellow.opacity(0.4), .cyan.opacity(0.5)],
-                                                      center: .center), lineWidth: 0.8)
-
+                Rectangle().fill(.white)
+                    .frame(width: Self.size * 1.3, height: Self.size * 1.3)
+                    .colorEffect(ShaderLibrary.orb(.boundingRect, .float(t), .float(voice), .float(scheme == .dark ? 1 : 0)))
                 if state == .copied {
                     CheckMark()
                         .stroke(.white, style: StrokeStyle(lineWidth: 2.4, lineCap: .round, lineJoin: .round))
                         .frame(width: 22, height: 16)
                         .transition(.scale(scale: 0.6).combined(with: .opacity))
                 }
+            }
+            .scaleEffect(1 + voice * 0.04)
         }
-        .frame(width: Self.size, height: Self.size)
-        .clipShape(Circle())
-    }
-
-    private func rings(time: TimeInterval) -> some View {
-                ZStack {
-                    ForEach(Self.rings.indices, id: \.self) { index in
-                        let ring = Self.rings[index]
-                        Circle()
-                            .fill(AngularGradient(stops: Self.stops(ring.color), center: .center,
-                                                  angle: .degrees(-90)))
-                            .frame(width: Self.scaled(ring.diameter), height: Self.scaled(ring.diameter))
-                            .rotationEffect(.radians(angle(ring: ring.frame, index: index, time: time)))
-                    }
-                }
-                // Голос раздувает кольца и делает их ярче.
-                .scaleEffect(state == .listening ? 1 + CGFloat(level) * 0.18 : 1)
-                .opacity(state == .listening ? 0.75 + Double(level) * 0.25 : 1)
-    }
-
-    private static func scaled(_ figma: CGFloat) -> CGFloat { figma / 324 * size }
-
-    // Стопы угловой заливки колец из макета: ведущий цвет, потом белый 25 % → 10 % → 10 % → 25 % → 100 %.
-    private static func stops(_ lead: Color) -> [Gradient.Stop] {
-        [.init(color: lead, location: 0),
-         .init(color: .white.opacity(0.25), location: 0.125),
-         .init(color: .white.opacity(0.10), location: 0.25),
-         .init(color: .white.opacity(0.10), location: 0.745),
-         .init(color: .white.opacity(0.25), location: 0.87),
-         .init(color: .white, location: 1)]
-    }
-
-    private func angle(ring frame: [Double], index: Int, time: TimeInterval) -> Double {
-        switch state {
-        case .recognizing:
-            return OrbMotion.recognizing(frame: frame, time: time)
-        case .listening:
-            // Пока слушаем — спокойное вращение в разные стороны, чтобы кольца не слипались.
-            return time * [0.35, -0.5, 0.65][index]
-        default:
-            return 0
-        }
+        .animation(.smooth(duration: 0.4), value: state)
     }
 }
 

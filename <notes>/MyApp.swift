@@ -19,8 +19,10 @@ import SwiftUI
         #endif
         #if DEBUG
         // Снимать тёмную тему, не переключая систему: `--args -appearance dark`.
-        if UserDefaults.standard.string(forKey: "appearance") == "dark" {
-            NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        switch UserDefaults.standard.string(forKey: "appearance") {
+        case "dark": NSApplication.shared.appearance = NSAppearance(named: .darkAqua)
+        case "light": NSApplication.shared.appearance = NSAppearance(named: .aqua)
+        default: break
         }
         #endif
     }
