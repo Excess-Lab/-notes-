@@ -54,7 +54,8 @@
 - `NotesCore/Sources/NotesCore/NoteLibrary.swift` — заметки в папке: дерево, чтение и запись, создание, переименование, поиск по тексту.
 - `NotesCore/Sources/NotesCore/NoteTasks.swift` — задачи из строк заметок: разбор, отметка, группы, план синхронизации с календарём.
 - `NotesCore/Sources/NotesCore/Transcript.swift` — расшифровка: куски с временем, .srt, заметка Markdown.
-- `NotesCore/Sources/NotesCore/SemanticIndex.swift` — поиск по смыслу: куски заметок, векторы встроенной модели Apple, кэш вне хранилища.
+- `NotesCore/Sources/NotesCore/SearchQuery.swift` — запрос общего поиска: все слова без регистра и ё/е, упоминание в расшифровке.
+- `NotesCore/Sources/NotesCore/SemanticIndex.swift` — поиск по смыслу: куски заметок, векторы встроенной модели Apple. С 31.10.2026 в приложении не подключён, ждёт модели получше.
 - `NotesCore/Sources/NotesCore/FolderWatcher.swift` — слежка за папкой (FSEvents), `.git` пропускаем.
 - `NotesCore/Sources/NotesCore/HotKeyCombo.swift` — сочетание надиктовки: подпись, проверка, хранение.
 - `NotesCore/Sources/NotesCore/PinCode.swift` — пинкод: ввод, проверка при входе, хеш, хранение.
