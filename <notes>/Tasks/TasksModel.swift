@@ -52,7 +52,7 @@ import NotesCore
         reload()
     }
 
-    func toggle(_ task: NoteTask) {
+    func toggle(_ task: NoteTask, undo: UndoManager? = nil) {
         do {
             try NoteTasks.setDone(task, !task.done, library: library)
         } catch {
@@ -60,6 +60,12 @@ import NotesCore
             NSSound.beep()
         }
         reload()
+        // ⌘Z — отметка обратно: ищем ту же строку уже с новым текстом.
+        guard let undo else { return }
+        undo.registerUndo(withTarget: self) { model in
+            if let fresh = model.tasks.first(where: { $0.note == task.note && $0.line == task.line }) { model.toggle(fresh, undo: undo) }
+        }
+        undo.setActionName(task.done ? "Снять отметку" : "Отметку")
     }
 
     // «сегодня», «чт 16 окт», «в календаре, 15:00».

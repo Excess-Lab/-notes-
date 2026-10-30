@@ -18,6 +18,8 @@ import SwiftUI
     var expanded: Set<URL> = []
     // Открытые заметки — вкладками сверху листа (ТЗ 30.10.2026). Только в памяти: в хранилище не пишем.
     var tabs: [URL] = []
+    // ⌘Z, когда окна ещё нет (самопроверка в фоне); обычно — undoManager окна.
+    let fallbackUndo = UndoManager()
 
     // Открытая заметка: текст, как он сейчас в редакторе.
     var text = "" { didSet { if text != savedText { scheduleSave() } } }
@@ -127,6 +129,7 @@ import SwiftUI
 
     func newNote() {
         guard let url = try? library.createNote(in: currentFolder.url) else { return NSSound.beep() }
+        undoCreation("Новая заметка", [url])
         reloadTree()
         open(.note(url))
     }
@@ -135,6 +138,7 @@ import SwiftUI
         guard let url = try? Templates.create(from: template, in: folder ?? currentFolder.url, library: library) else {
             return NSSound.beep()
         }
+        undoCreation("Новая заметка", [url])
         reloadTree()
         open(.note(url))
     }
@@ -152,6 +156,7 @@ import SwiftUI
     func newFolder(named name: String) {
         guard !name.trimmingCharacters(in: .whitespaces).isEmpty,
               let url = try? library.createFolder(in: currentFolder.url, name: name) else { return }
+        undoCreation("Новая папка", [url])
         reloadTree()
         open(.folder(url))
     }
@@ -354,6 +359,17 @@ extension NotesModel {
             check("папку в саму себя не кладём", !drop([into], into: into))
             drop([moved], into: url.deletingLastPathComponent())
             trash(into)
+            // ⌘Z: удаление возвращает файл, перенос — обратно, дубль — убирает.
+            trash(url); undoer.undo()
+            check("⌘Z вернул удалённую заметку", fm.fileExists(atPath: url.path))
+            duplicate(url); undoer.undo()
+            check("⌘Z убрал дубль", !fm.fileExists(atPath: copy.path))
+            let box = library.root.appendingPathComponent("ящик", isDirectory: true)
+            try? fm.createDirectory(at: box, withIntermediateDirectories: true)
+            drop([url], into: box); undoer.undo()
+            check("⌘Z вернул перенесённую заметку", fm.fileExists(atPath: url.path)
+                  && !fm.fileExists(atPath: box.appendingPathComponent(url.lastPathComponent).path))
+            trash(box)
             let other = library.root.appendingPathComponent("Входящие.md")
             open(.note(other)); open(.note(url))
             let before = tabs.count

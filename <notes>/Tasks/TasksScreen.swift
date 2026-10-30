@@ -68,6 +68,7 @@ private struct TaskRow: View {
     let task: NoteTask
     // Отметили — галочка и зачёркивание сразу, а строка уходит через полсекунды плавно (ТЗ 30.10.2026).
     @State private var checking = false
+    @Environment(\.undoManager) private var undo
 
     var body: some View {
         let linked = model.calendar.isLinked(task)
@@ -76,7 +77,7 @@ private struct TaskRow: View {
             Button {
                 withAnimation(.smooth(duration: 0.25)) { checking = true }
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                    withAnimation(.smooth(duration: 0.45)) { model.toggle(task) }
+                    withAnimation(.smooth(duration: 0.45)) { model.toggle(task, undo: undo) }
                     checking = false
                 }
             } label: {

@@ -31,11 +31,20 @@ extension NotesModel {
 
     func trash(_ url: URL) {
         flush()
+        var inTrash: NSURL?
         do {
-            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+            try FileManager.default.trashItem(at: url, resultingItemURL: &inTrash)
         } catch {
             NSAlert(error: error).runModal()
             return
+        }
+        // ⌘Z — достаём из Корзины на старое место.
+        if let inTrash = inTrash as URL? {
+            undoable("Удаление") { model in
+                try? FileManager.default.moveItem(at: inTrash, to: url)
+                model.reloadTree()
+                model.redoable("Удаление") { $0.trash(url) }
+            }
         }
         let gone = url.standardizedFileURL.path
         switch selection {
@@ -64,17 +73,42 @@ extension NotesModel {
     // Вставить в папку файлы из буфера; при совпадении имени — «копия».
     func paste(into folder: URL) {
         let urls = NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        for url in urls { copyFile(url, into: folder) }
+        undoCreation("Вставка", urls.compactMap { copyFile($0, into: folder) })
         reloadTree()
     }
 
     func duplicate(_ url: URL) {
         flush()
-        copyFile(url, into: url.deletingLastPathComponent())
+        undoCreation("Дублирование", [copyFile(url, into: url.deletingLastPathComponent())].compactMap { $0 })
         reloadTree()
     }
 
-    private func copyFile(_ url: URL, into folder: URL) {
+    // MARK: - ⌘Z для действий с файлами (ТЗ 30.10.2026)
+    // Меню «Правка → Отменить» идёт по цепочке ответчиков к undoManager окна; в тексте заметки у редактора
+    // свой (MarkdownEditor), так что ⌘Z в тексте отменяет текст, а вне его — последнее действие с файлами.
+    var undoer: UndoManager { NSApp.keyWindow?.undoManager ?? fallbackUndo }
+
+    func undoable(_ name: String, _ action: @escaping (NotesModel) -> Void) {
+        undoer.registerUndo(withTarget: self) { action($0) }
+        undoer.setActionName(name)
+    }
+
+    // Внутри отмены — регистрирует «повторить» (UndoManager сам кладёт её в стек повторов).
+    func redoable(_ name: String, _ action: @escaping (NotesModel) -> Void) { undoable(name, action) }
+
+    // Созданное (новая заметка, дубль, вставка) — ⌘Z убирает в Корзину.
+    func undoCreation(_ name: String, _ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        undoable(name) { model in
+            model.flush()
+            for url in urls { try? FileManager.default.trashItem(at: url, resultingItemURL: nil) }
+            if let open = model.openNote, urls.contains(open) { model.open(.folder(open.deletingLastPathComponent())) }
+            model.reloadTree()
+        }
+    }
+
+    @discardableResult
+    private func copyFile(_ url: URL, into folder: URL) -> URL? {
         let ext = url.pathExtension
         let base = url.deletingPathExtension().lastPathComponent
         var target = folder.appendingPathComponent(url.lastPathComponent)
@@ -84,7 +118,8 @@ extension NotesModel {
             target = folder.appendingPathComponent(ext.isEmpty ? name : "\(name).\(ext)")
             n += 1
         }
-        do { try FileManager.default.copyItem(at: url, to: target) } catch { NSAlert(error: error).runModal() }
+        do { try FileManager.default.copyItem(at: url, to: target) } catch { NSAlert(error: error).runModal(); return nil }
+        return target
     }
 
     // Перетаскивание в боковой панели, как в Finder: своё — переносим, файлы из Finder — копируем внутрь.
@@ -94,9 +129,13 @@ extension NotesModel {
         flush()
         let root = library.root.standardizedFileURL.path
         var moved = false
+        var moves: [(URL, URL)] = [], copies: [URL] = []
         for url in urls {
             let source = url.standardizedFileURL
-            guard source.path.hasPrefix(root + "/") else { copyFile(url, into: folder); moved = true; continue }
+            guard source.path.hasPrefix(root + "/") else {
+                if let copy = copyFile(url, into: folder) { copies.append(copy); moved = true }
+                continue
+            }
             let target = folder.standardizedFileURL
             guard source.deletingLastPathComponent() != target,
                   !(target.path + "/").hasPrefix(source.path + "/") else { continue }
@@ -109,12 +148,26 @@ extension NotesModel {
             }
             do { try FileManager.default.moveItem(at: source, to: destination) } catch { NSAlert(error: error).runModal(); continue }
             moved = true
+            moves.append((source, destination))
             // Открытая заметка уехала вместе с файлом или папкой — открываем её на новом месте.
             if let open = openNote?.standardizedFileURL, open.path.hasPrefix(source.path) {
                 self.open(.note(URL(fileURLWithPath: destination.path + open.path.dropFirst(source.path.count))))
             }
         }
         if moved { reloadTree(); tasks.reload() }
+        undoCreation("Копирование", copies)
+        if !moves.isEmpty {
+            // ⌘Z — всё обратно по своим папкам.
+            undoable("Перенос") { model in
+                model.flush()
+                for (source, destination) in moves.reversed() { try? FileManager.default.moveItem(at: destination, to: source) }
+                if let open = model.openNote?.standardizedFileURL,
+                   let (source, destination) = moves.first(where: { open.path.hasPrefix($0.1.path) }) {
+                    model.open(.note(URL(fileURLWithPath: source.path + open.path.dropFirst(destination.path.count))))
+                }
+                model.reloadTree(); model.tasks.reload()
+            }
+        }
         return moved
     }
 }
