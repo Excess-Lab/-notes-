@@ -19,14 +19,20 @@ public struct NoteLibrary: Sendable {
         public let url: URL
         public let folders: [Folder]
         public let notes: [Note]
+        // Остальные файлы, которые умеем показать (PDF, Word, фото, видео) — открываются просмотром (ТЗ 30.10.2026).
+        public var files: [Note] = []
         public var id: URL { url }
         public var name: String { url.lastPathComponent }
         // Сколько заметок внутри, со вложенными — «12 заметок» под карточкой папки.
         public var noteCount: Int { notes.count + folders.reduce(0) { $0 + $1.noteCount } }
     }
 
-    // Дерево хранилища. Скрытые файлы и папки (`.git`, `.obsidian`-подобные) пропускаем,
-    // заметки — только `.md`. Порядок — по имени, как в Finder.
+    public static let viewable: Set<String> = ["pdf", "doc", "docx", "rtf", "pages", "key", "numbers", "xls", "xlsx",
+        "ppt", "pptx", "txt", "csv", "png", "jpg", "jpeg", "heic", "gif", "webp", "tiff", "svg",
+        "mp4", "mov", "m4v", "mp3", "m4a", "wav", "aiff", "flac"]
+
+    // Дерево хранилища. Скрытые файлы и папки (`.git`, служебные папки других программ) пропускаем,
+    // заметки — `.md`, плюс файлы для просмотра. Порядок — по имени, как в Finder.
     public func tree() -> Folder { folder(at: root) }
 
     private func folder(at url: URL) -> Folder {
@@ -35,17 +41,22 @@ public struct NoteLibrary: Sendable {
                                                                   options: [.skipsHiddenFiles])) ?? []
         var folders: [Folder] = []
         var notes: [Note] = []
+        var files: [Note] = []
         for item in items {
             let values = try? item.resourceValues(forKeys: Set(keys))
             if values?.isDirectory == true {
                 folders.append(folder(at: item))
             } else if item.pathExtension.lowercased() == "md" {
                 notes.append(Note(url: item, modified: values?.contentModificationDate ?? .distantPast))
+            } else if Self.viewable.contains(item.pathExtension.lowercased()) {
+                files.append(Note(url: item, modified: values?.contentModificationDate ?? .distantPast))
             }
         }
         let byName: (String, String) -> Bool = { $0.localizedStandardCompare($1) == .orderedAscending }
-        return Folder(url: url, folders: folders.sorted { byName($0.name, $1.name) },
-                      notes: notes.sorted { byName($0.title, $1.title) })
+        var folder = Folder(url: url, folders: folders.sorted { byName($0.name, $1.name) },
+                            notes: notes.sorted { byName($0.title, $1.title) })
+        folder.files = files.sorted { byName($0.url.lastPathComponent, $1.url.lastPathComponent) }
+        return folder
     }
 
     // «проекты / план приложения» — путь заметки от корня хранилища, без расширения.

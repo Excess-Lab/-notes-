@@ -9,6 +9,7 @@ import SwiftUI
     enum Selection: Hashable {
         case folder(URL)   // корень хранилища — тоже папка: «все заметки»
         case note(URL)
+        case file(URL)     // PDF, Word, фото, видео — просмотр, не правка
     }
 
     let library: NoteLibrary
@@ -78,7 +79,7 @@ import SwiftUI
     var currentFolder: NoteLibrary.Folder {
         switch selection {
         case .folder(let url): find(url, in: tree) ?? tree
-        case .note(let url): find(url.deletingLastPathComponent(), in: tree) ?? tree
+        case .note(let url), .file(let url): find(url.deletingLastPathComponent(), in: tree) ?? tree
         }
     }
 
@@ -95,12 +96,17 @@ import SwiftUI
             let loaded = (try? library.read(url)) ?? ""
             savedText = loaded
             text = loaded
-            // Папки на пути к заметке раскрыты — видно, где она лежит.
-            var folder = url.deletingLastPathComponent().standardizedFileURL
-            while folder.path.count > library.root.path.count {
-                expanded.insert(folder)
-                folder = folder.deletingLastPathComponent().standardizedFileURL
-            }
+        }
+        // Папки на пути к заметке или файлу раскрыты — видно, где он лежит.
+        if case .note(let url) = selection { reveal(url) }
+        if case .file(let url) = selection { reveal(url) }
+    }
+
+    private func reveal(_ url: URL) {
+        var folder = url.deletingLastPathComponent().standardizedFileURL
+        while folder.path.count > library.root.path.count {
+            expanded.insert(folder)
+            folder = folder.deletingLastPathComponent().standardizedFileURL
         }
     }
 
@@ -113,6 +119,7 @@ import SwiftUI
         switch selection {
         case .folder(let url) where url.standardizedFileURL == library.root: "все заметки"
         case .folder(let url), .note(let url): library.breadcrumb(for: url).joined(separator: " / ")
+        case .file(let url): (library.breadcrumb(for: url).dropLast() + [url.lastPathComponent]).joined(separator: " / ")
         }
     }
 
@@ -199,6 +206,9 @@ import SwiftUI
     func reloadTree() {
         tree = library.tree()
         tabs.removeAll { !FileManager.default.fileExists(atPath: $0.path) }
+        if case .file(let url) = selection, !FileManager.default.fileExists(atPath: url.path) {
+            selection = .folder(url.deletingLastPathComponent())
+        }
     }
 
     private func find(_ url: URL, in folder: NoteLibrary.Folder) -> NoteLibrary.Folder? {

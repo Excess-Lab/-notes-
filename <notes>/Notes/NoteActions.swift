@@ -40,6 +40,7 @@ extension NotesModel {
         let gone = url.standardizedFileURL.path
         switch selection {
         case .note(let open) where open.standardizedFileURL.path.hasPrefix(gone),
+             .file(let open) where open.standardizedFileURL.path.hasPrefix(gone),
              .folder(let open) where open.standardizedFileURL.path.hasPrefix(gone):
             self.open(.folder(url.deletingLastPathComponent()))
         default: break

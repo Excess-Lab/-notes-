@@ -374,6 +374,15 @@ private struct FolderRows: View {
             .contextMenu { NoteMenu(model: model, url: note.url) }
             .draggable(note.url)
         }
+        ForEach(folder.files) { file in
+            SidebarRow(glyph: .file, title: file.url.lastPathComponent, depth: depth,
+                       selected: model.selection == .file(file.url)) {
+                model.open(.file(file.url))
+            }
+            .opacity(0.75)
+            .contextMenu { NoteMenu(model: model, url: file.url) }
+            .draggable(file.url)
+        }
     }
 }
 
@@ -429,6 +438,8 @@ struct SectionContent: View {
                 case .notes:
                     if let note = model.openNote {
                         NoteEditor(model: model, url: note).id(note)
+                    } else if case .file(let url) = model.selection {
+                        FilePreview(url: url).id(url)
                     } else {
                         FolderOverview(model: model, folder: model.currentFolder)
                     }

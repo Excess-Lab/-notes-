@@ -1,3 +1,4 @@
+import AppKit
 import NotesCore
 import NotesSpeech
 import SwiftUI
@@ -96,6 +97,12 @@ final class OnboardingModel {
             let url = base.appendingPathComponent(path)
             try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try? text.write(to: url, atomically: true, encoding: .utf8)
+        }
+        // Файл для просмотра — картинка, чтобы проверить просмотр Quick Look в листе.
+        if let tiff = NSApplication.shared.applicationIconImage?.tiffRepresentation,
+           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            try? FileManager.default.createDirectory(at: base.appendingPathComponent("Идеи для видео"), withIntermediateDirectories: true)
+            try? png.write(to: base.appendingPathComponent("Идеи для видео/обложка.png"))
         }
         return base
     }

@@ -102,7 +102,7 @@ private struct RootView: View {
             #if DEBUG
             if let path = UserDefaults.standard.string(forKey: "notesOpen") {
                 let url = vault.appendingPathComponent(path)
-                model.open(path.hasSuffix(".md") ? .note(url) : .folder(url))
+                model.open(path.hasSuffix(".md") ? .note(url) : url.pathExtension.isEmpty ? .folder(url) : .file(url))
             }
             // `-notesSection tasks|calendar|video|settings`, `-settingsPage вход` — сразу в раздел.
             switch UserDefaults.standard.string(forKey: "notesSection") {
