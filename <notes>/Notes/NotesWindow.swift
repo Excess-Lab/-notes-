@@ -380,6 +380,10 @@ struct SectionSidebar: View {
                 ForEach(model.tasks.calendar.calendars, id: \.calendarIdentifier) { calendar in
                     SidebarRow(glyph: .calendar, title: calendar.title,
                                selected: calendar.calendarIdentifier == model.tasks.calendar.tasksCalendar?.calendarIdentifier) {}
+                        .contextMenu {
+                            Button("Удалить календарь…") { CalendarRemoval.confirm(calendar, sync: model.tasks.calendar) }
+                                .disabled(calendar.calendarIdentifier == model.tasks.calendar.store.defaultCalendarForNewEvents?.calendarIdentifier)
+                        }
                 }
             }
         case .video:

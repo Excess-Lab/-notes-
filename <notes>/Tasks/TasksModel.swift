@@ -195,6 +195,36 @@ import NotesCore
         event.notes = "Задача из заметок <notes>."
     }
 
+    // Удалить календарь, но не события: сначала все его события переезжают в календарь по умолчанию
+    // («обычный»), потом удаляется сам календарь. Повторяющиеся переносим один раз, всей серией.
+    // Возвращает, сколько событий перенесено.
+    func removeCalendar(_ calendar: EKCalendar) throws -> Int {
+        guard let target = store.defaultCalendarForNewEvents, target.calendarIdentifier != calendar.calendarIdentifier else {
+            throw CocoaError(.featureUnsupported)
+        }
+        var moved = 0
+        var seenSeries: Set<String> = []
+        // EventKit отдаёт события кусками не длиннее 4 лет — идём окнами от −12 до +12 лет.
+        var start = Calendar.current.date(byAdding: .year, value: -12, to: Date())!
+        let end = Calendar.current.date(byAdding: .year, value: 12, to: Date())!
+        while start < end {
+            let stop = min(Calendar.current.date(byAdding: .year, value: 4, to: start)!, end)
+            for event in store.events(matching: store.predicateForEvents(withStart: start, end: stop, calendars: [calendar])) {
+                if event.hasRecurrenceRules {
+                    let series = event.calendarItemExternalIdentifier ?? event.eventIdentifier ?? ""
+                    guard seenSeries.insert(series).inserted else { continue }
+                }
+                event.calendar = target
+                try store.save(event, span: event.hasRecurrenceRules ? .futureEvents : .thisEvent, commit: false)
+                moved += 1
+            }
+            start = stop
+        }
+        try store.commit()
+        try store.removeCalendar(calendar, commit: true)
+        return moved
+    }
+
     // События недели или дня для экрана календаря.
     func events(from start: Date, to end: Date) -> [EKEvent] {
         guard hasAccess else { return [] }
@@ -224,6 +254,56 @@ extension CalendarSync {
         log("событие создано в «\(tasksCalendar?.title ?? "—")»", event?.title == title && event?.calendar == tasksCalendar)
         sync([done])
         log("после «готово» событие удалено", id.flatMap { store.event(withIdentifier: $0) } == nil && links[open.key] == nil)
+    }
+}
+#endif
+
+// Подтверждение перед удалением календаря — системным окном, обычным языком (UI.md).
+enum CalendarRemoval {
+    static func confirm(_ calendar: EKCalendar, sync: CalendarSync) {
+        let target = sync.store.defaultCalendarForNewEvents?.title ?? "календарь по умолчанию"
+        let alert = NSAlert()
+        alert.messageText = "Удалить календарь «\(calendar.title)»?"
+        alert.informativeText = "Его события не пропадут — они переедут в «\(target)». Сам календарь исчезнет из Календаря Apple на всех устройствах."
+        alert.addButton(withTitle: "Удалить")
+        alert.addButton(withTitle: "Отмена")
+        alert.buttons.first?.hasDestructiveAction = true
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        do {
+            let moved = try sync.removeCalendar(calendar)
+            let done = NSAlert()
+            done.messageText = "Календарь удалён"
+            done.informativeText = "Событий перенесено в «\(target)»: \(moved)."
+            done.runModal()
+        } catch {
+            NSAlert(error: error).runModal()
+        }
+    }
+}
+
+#if DEBUG
+extension CalendarSync {
+    // Живая проверка удаления: временный календарь с событием → удаление → событие в календаре
+    // по умолчанию, временного календаря нет → тестовое событие убираем. Чужие календари не трогает.
+    func removalSelfTest(_ log: (String, Bool) -> Void) {
+        guard hasAccess, let target = store.defaultCalendarForNewEvents else { return log("доступ к календарю", false) }
+        let temp = EKCalendar(for: .event, eventStore: store)
+        temp.title = "<notes> проверка удаления"
+        temp.source = target.source
+        do { try store.saveCalendar(temp, commit: true) } catch { return log("временный календарь: \(error.localizedDescription)", false) }
+        let event = EKEvent(eventStore: store)
+        event.calendar = temp
+        event.title = "<notes> переезд \(UUID().uuidString.prefix(6))"
+        event.startDate = Date().addingTimeInterval(7200)
+        event.endDate = event.startDate.addingTimeInterval(1800)
+        try? store.save(event, span: .thisEvent, commit: true)
+        let id = event.eventIdentifier!
+        let moved = (try? removeCalendar(temp)) ?? -1
+        let after = store.event(withIdentifier: id)
+        log("удаление календаря: перенесено \(moved), событие теперь в «\(after?.calendar.title ?? "-")»",
+            moved == 1 && after?.calendar.calendarIdentifier == target.calendarIdentifier)
+        log("временного календаря больше нет", store.calendar(withIdentifier: temp.calendarIdentifier) == nil)
+        if let after { try? store.remove(after, span: .thisEvent, commit: true) }
     }
 }
 #endif
