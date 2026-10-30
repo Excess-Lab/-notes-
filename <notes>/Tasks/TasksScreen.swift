@@ -179,6 +179,11 @@ struct CalendarScreen: View {
         // Стрелки ← → листают неделю, день или месяц.
         .onKeyPress(.leftArrow) { shift(-1); return .handled }
         .onKeyPress(.rightArrow) { shift(1); return .handled }
+        .background {
+            // ⌘T — сегодня, как в Календаре Apple.
+            Button("") { withAnimation(.smooth(duration: 0.4)) { anchor = Date() } }
+                .keyboardShortcut("t", modifiers: .command).opacity(0).allowsHitTesting(false)
+        }
         .focusable()
         .focusEffectDisabled()
         .onAppear(perform: takeFocus)
@@ -285,11 +290,19 @@ private struct DayGrid: View {
     @State private var draftEnd: Date?
     @State private var dragging = false
     @State private var position = ScrollPosition(y: 8 * 44)
+    // Перетаскиваемое событие: сдвиг на целые дни и четверти часа; растягиваемое — на четверти.
+    @State private var moving: (slot: String, days: Int, quarters: Int)?
+    @State private var resizing: (slot: String, quarters: Int)?
+    @State private var opened: String?
+    @Environment(\.undoManager) private var undo
     private let gutter: CGFloat = 44, hour: CGFloat = 44, head: CGFloat = 44
 
     var body: some View {
         let colW = (page - gutter) / CGFloat(days.count)
-        let events = tasks.calendar.events(from: days[0], to: Calendar.current.date(byAdding: .day, value: 1, to: days.last!)!)
+        let all = tasks.calendar.events(from: days[0], to: Calendar.current.date(byAdding: .day, value: 1, to: days.last!)!)
+        // События на весь день — отдельной строкой над сеткой, как в Календаре Apple; раньше лежали на 0:00.
+        let allDay = all.filter(\.isAllDay)
+        let events = all.filter { !$0.isAllDay }
         let lanes = Self.lanes(events)
         VStack(alignment: .leading, spacing: 0) {
             ZStack(alignment: .topLeading) {
@@ -315,6 +328,25 @@ private struct DayGrid: View {
                 }
             }
             .frame(width: page, height: head, alignment: .topLeading)
+
+            let perDay = days.map { day in allDay.filter { Self.covers($0, day) } }
+            if let most = perDay.map(\.count).max(), most > 0 {
+                ZStack(alignment: .topLeading) {
+                    Text("весь день").font(Martian.body.font(9)).foregroundStyle(NotesLayout.gray).offset(y: 4)
+                    ForEach(Array(perDay.enumerated()), id: \.offset) { index, list in
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(list, id: \.slot) { event in
+                                EventBlock(event: event, task: tasks.calendar.isTaskEvent(event))
+                                    .frame(width: colW - 6, height: 20)
+                                    .onTapGesture { opened = event.slot }
+                                    .popover(isPresented: openBinding(event)) { EventCard(event: event, tasks: tasks) { opened = nil } }
+                            }
+                        }
+                        .offset(x: gutter + CGFloat(index) * colW + 3)
+                    }
+                }
+                .frame(width: page, height: CGFloat(most) * 22 + 6, alignment: .topLeading)
+            }
 
             ScrollView {
                 ZStack(alignment: .topLeading) {
@@ -346,10 +378,59 @@ private struct DayGrid: View {
                         if let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: event.startDate) }) {
                             let lane = lanes[event.slot] ?? (0, 1)
                             let width = (colW - 6) / CGFloat(lane.1)
-                            EventBlock(event: event, task: tasks.calendar.isTaskEvent(event))
-                                .frame(width: width - 2, height: height(event))
-                                .offset(x: gutter + CGFloat(column) * colW + 3 + CGFloat(lane.0) * width, y: top(event) + 1.5)
+                            let move = moving?.slot == event.slot ? moving : nil
+                            let grow = resizing?.slot == event.slot ? CGFloat(resizing!.quarters) * hour / 4 : 0
+                            // Тащим — событие во всю ширину колонки и поверх соседей, со своим новым временем.
+                            EventBlock(event: event, task: tasks.calendar.isTaskEvent(event),
+                                       span: move.map { Self.span(shifted(event, $0.days, $0.quarters).0, shifted(event, $0.days, $0.quarters).1) }
+                                           ?? (resizing?.slot == event.slot ? Self.span(event.startDate, resized(event, resizing!.quarters)) : nil))
+                                .frame(width: (move != nil ? colW - 6 : width) - 2, height: max(hour / 4 - 3, height(event) + grow))
+                                .overlay(alignment: .bottom) {
+                                    // Нижний край — растянуть, как в Календаре Apple.
+                                    Color.clear.frame(height: 6).contentShape(Rectangle())
+                                        .pointerStyle(.frameResize(position: .bottom))
+                                        .gesture(DragGesture(minimumDistance: 2)
+                                            .onChanged { resizing = (event.slot, Int(($0.translation.height / (hour / 4)).rounded())) }
+                                            .onEnded { _ in
+                                                if let r = resizing { tasks.move(event, start: event.startDate, end: resized(event, r.quarters), undo: undo) }
+                                                resizing = nil
+                                            })
+                                }
+                                .offset(x: gutter + CGFloat(column) * colW + 3 + (move != nil ? 0 : CGFloat(lane.0) * width)
+                                           + CGFloat(move?.days ?? 0) * colW,
+                                        y: top(event) + 1.5 + CGFloat(move?.quarters ?? 0) * hour / 4)
+                                .zIndex(move != nil || opened == event.slot ? 1 : 0)
+                                .shadow(color: .black.opacity(move != nil ? 0.35 : 0), radius: 8, y: 3)
+                                .onTapGesture { opened = event.slot }
+                                .gesture(DragGesture(minimumDistance: 4)
+                                    .onChanged { drag in
+                                        let shift = Int((drag.translation.width / colW).rounded())
+                                        moving = (event.slot, max(-column, min(days.count - 1 - column, shift)),
+                                                  Int((drag.translation.height / (hour / 4)).rounded()))
+                                    }
+                                    .onEnded { _ in
+                                        if let m = moving {
+                                            let (start, end) = shifted(event, m.days, m.quarters)
+                                            tasks.move(event, start: start, end: end, undo: undo)
+                                        }
+                                        moving = nil
+                                    })
+                                .popover(isPresented: openBinding(event), arrowEdge: .trailing) {
+                                    EventCard(event: event, tasks: tasks) { opened = nil }
+                                }
                         }
+                    }
+                    // Линия «сейчас» — красная черта с точкой в колонке сегодняшнего дня.
+                    if let today = days.firstIndex(where: { Calendar.current.isDateInToday($0) }) {
+                        TimelineView(.periodic(from: .now, by: 60)) { context in
+                            HStack(spacing: 0) {
+                                Circle().fill(Theme.coral).frame(width: 7, height: 7)
+                                Rectangle().fill(Theme.coral).frame(width: colW - 4, height: 1.5)
+                            }
+                            .offset(x: gutter + CGFloat(today) * colW - 3, y: top(at: context.date) - 3.5)
+                        }
+                        .allowsHitTesting(false)
+                        .zIndex(2)
                     }
                     if let start = draft, let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: start) }) {
                         let end = draftEnd ?? start.addingTimeInterval(3600)
@@ -375,6 +456,29 @@ private struct DayGrid: View {
             // их рамки остаются наверху, и сетка висела на полуночи.
             .scrollPosition($position)
         }
+    }
+
+    private func openBinding(_ event: EKEvent) -> Binding<Bool> {
+        Binding(get: { opened == event.slot }, set: { if !$0 { opened = nil } })
+    }
+
+    // Новое начало и конец после перетаскивания: дни и четверти часа, длительность та же.
+    private func shifted(_ event: EKEvent, _ days: Int, _ quarters: Int) -> (Date, Date) {
+        let calendar = Calendar.current
+        let day = calendar.date(byAdding: .day, value: days, to: event.startDate)!
+        let start = calendar.date(byAdding: .minute, value: quarters * 15, to: day)!
+        return (start, start.addingTimeInterval(event.endDate.timeIntervalSince(event.startDate)))
+    }
+
+    // Новый конец после растягивания — не короче четверти часа.
+    private func resized(_ event: EKEvent, _ quarters: Int) -> Date {
+        max(event.startDate.addingTimeInterval(15 * 60), event.endDate.addingTimeInterval(TimeInterval(quarters * 15 * 60)))
+    }
+
+    // Событие на весь день задевает этот день (многодневные — каждый свой день).
+    static func covers(_ event: EKEvent, _ day: Date) -> Bool {
+        let start = Calendar.current.startOfDay(for: day)
+        return event.startDate < start.addingTimeInterval(86_400) && event.endDate > start
     }
 
     static func span(_ start: Date, _ end: Date) -> String {
@@ -424,6 +528,8 @@ private struct DayGrid: View {
 private struct EventBlock: View {
     let event: EKEvent
     let task: Bool
+    // Пока тащат или растягивают — новое время вместо начала.
+    var span: String? = nil
 
     var body: some View {
         GeometryReader { geo in
@@ -432,14 +538,15 @@ private struct EventBlock: View {
                 if geo.size.width < 40 {
                     // Узкая дорожка — только цвет: текст рвался по буквам в столбик.
                     Color.clear
-                } else if geo.size.height < 38 || event.isAllDay {
-                    Text("\(event.title ?? "")\(event.isAllDay ? "" : " · " + event.startDate.formatted(.dateTime.hour().minute()))")
+                } else if geo.size.height < 38 || event.isAllDay || geo.size.width < 70 {
+                    // Узко или коротко — одной строкой с многоточием: длинные слова рвались по буквам.
+                    Text("\(event.title ?? "")\(event.isAllDay ? "" : " · " + (span ?? event.startDate.formatted(.dateTime.hour().minute())))")
                         .lineLimit(1)
                         .font(Martian.body.font(geo.size.height < 20 ? 9 : 11))
                 } else {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(event.title ?? "").lineLimit(max(1, Int((geo.size.height - 24) / 14)))
-                        Text(event.startDate.formatted(.dateTime.hour().minute()))
+                        Text(span ?? event.startDate.formatted(.dateTime.hour().minute()))
                             .foregroundStyle(task ? Theme.coral : NotesLayout.gray)
                     }
                 }
@@ -450,6 +557,52 @@ private struct EventBlock: View {
         }
         .background(RoundedRectangle(cornerRadius: 8).fill(task ? Theme.coral.opacity(0.14) : Theme.fg.opacity(0.07)))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+}
+
+// Карточка события по клику: название (правится, Enter — сохранить), когда, календарь; удалить — для
+// обычных событий. Событие задачи правится в заметке — карточка говорит, в какой.
+private struct EventCard: View {
+    let event: EKEvent
+    let tasks: TasksModel
+    let close: () -> Void
+    @State private var title = ""
+    @Environment(\.undoManager) private var undo
+
+    var body: some View {
+        let task = tasks.task(for: event)
+        VStack(alignment: .leading, spacing: 10) {
+            if task == nil {
+                TextField("без названия", text: $title)
+                    .textFieldStyle(.plain)
+                    .font(Martian.heading.font(17))
+                    .onSubmit { tasks.rename(event, to: title, undo: undo); close() }
+            } else {
+                Text(event.title ?? "").font(Martian.heading.font(17)).foregroundStyle(Theme.ink)
+            }
+            Text(when).font(Martian.body.font(13)).foregroundStyle(Theme.ink.opacity(0.7))
+            HStack(spacing: 6) {
+                Circle().fill(Color(nsColor: event.calendar.color)).frame(width: 8, height: 8)
+                Text(event.calendar.title).font(Martian.body.font(12)).foregroundStyle(NotesLayout.gray)
+            }
+            if let task {
+                Text("задача из заметки «\(task.note.deletingPathExtension().lastPathComponent)» — время меняется перетаскиванием")
+                    .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Button("удалить") { tasks.remove(event, undo: undo); close() }
+                    .buttonStyle(QuietLinkStyle(size: 13, opacity: 0.6))
+            }
+        }
+        .padding(14)
+        .frame(width: 260, alignment: .leading)
+        .onAppear { title = event.title ?? "" }
+    }
+
+    private var when: String {
+        let ru = Locale(identifier: "ru_RU")
+        let day = event.startDate.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(ru))
+        return event.isAllDay ? "\(day), весь день" : "\(day), \(DayGrid.span(event.startDate, event.endDate))"
     }
 }
 
@@ -472,11 +625,16 @@ private struct MonthGrid: View {
                     Text("\(calendar.component(.day, from: day))")
                         .font(Martian.heading.font(13))
                         .foregroundStyle(calendar.isDateInToday(day) ? Theme.coral : Theme.ink.opacity(inMonth ? 1 : 0.3))
-                    ForEach(events.filter { calendar.isDate($0.startDate, inSameDayAs: day) }.prefix(3), id: \.slot) { event in
+                    let list = events.filter { calendar.isDate($0.startDate, inSameDayAs: day) }
+                    // Не влезло — «ещё N», как в Календаре Apple; клик открывает день.
+                    ForEach(list.prefix(list.count > 3 ? 2 : 3), id: \.slot) { event in
                         Text(event.title ?? "")
                             .font(Martian.body.font(10))
                             .foregroundStyle(tasks.calendar.isTaskEvent(event) ? Theme.coral : NotesLayout.gray)
                             .lineLimit(1)
+                    }
+                    if list.count > 3 {
+                        Text("ещё \(list.count - 2)").font(Martian.body.font(10)).foregroundStyle(Theme.ink.opacity(0.5))
                     }
                     Spacer(minLength: 0)
                 }

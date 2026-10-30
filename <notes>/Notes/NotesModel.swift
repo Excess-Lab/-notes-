@@ -379,6 +379,7 @@ extension NotesModel {
         if UserDefaults.standard.bool(forKey: "liveSelfTest") {
             CalendarSync.shared.selfTest(check)
             CalendarSync.shared.removalSelfTest(check)
+            tasks.editSelfTest(check)
             await video.selfTest(check)
         }
         exit(0)

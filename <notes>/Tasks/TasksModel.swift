@@ -69,6 +69,60 @@ import NotesCore
         undo.setActionName(task.done ? "Снять отметку" : "Отметку")
     }
 
+    // MARK: - Правка событий прямо в календаре (удобство «как у Apple», 31.10.2026)
+
+    // Задача, из которой сделано событие, — по связи «ключ задачи → id события».
+    func task(for event: EKEvent) -> NoteTask? {
+        guard let key = calendar.links.first(where: { $0.value == event.eventIdentifier })?.key else { return nil }
+        return tasks.first { $0.key == key }
+    }
+
+    // Перетащили или растянули. Событие задачи двигаем через её строку в заметке — иначе синхронизация
+    // вернула бы старое время. ⌘Z — обратно.
+    func move(_ event: EKEvent, start: Date, end: Date, undo: UndoManager?) {
+        let old = (event.startDate!, event.endDate!)
+        guard old != (start, end) else { return }
+        if let task = task(for: event) {
+            let minutes = Int(end.timeIntervalSince(start) / 60)
+            do { try NoteTasks.setDue(task, start, hasTime: true, minutes: minutes, library: library) } catch { NSSound.beep(); return }
+            reload()
+        } else {
+            event.startDate = start
+            event.endDate = end
+            do { try calendar.store.save(event, span: .thisEvent, commit: true) } catch { NSSound.beep(); return }
+        }
+        undo?.registerUndo(withTarget: self) { model in
+            guard let fresh = model.calendar.store.event(withIdentifier: event.eventIdentifier) else { return }
+            model.move(fresh, start: old.0, end: old.1, undo: undo)
+        }
+        undo?.setActionName("Перенос события")
+    }
+
+    func rename(_ event: EKEvent, to title: String, undo: UndoManager?) {
+        let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let old = event.title ?? ""
+        guard !clean.isEmpty, clean != old, task(for: event) == nil else { return }
+        event.title = clean
+        do { try calendar.store.save(event, span: .thisEvent, commit: true) } catch { NSSound.beep(); return }
+        undo?.registerUndo(withTarget: self) { model in
+            if let fresh = model.calendar.store.event(withIdentifier: event.eventIdentifier) { model.rename(fresh, to: old, undo: undo) }
+        }
+        undo?.setActionName("Переименование")
+    }
+
+    // Удалить обычное событие (задача удаляется в своей заметке). ⌘Z — создаём такое же заново.
+    func remove(_ event: EKEvent, undo: UndoManager?) {
+        guard task(for: event) == nil else { return }
+        let copy = (event.title, event.startDate, event.endDate, event.isAllDay, event.calendar, event.notes, event.location)
+        do { try calendar.store.remove(event, span: .thisEvent, commit: true) } catch { NSSound.beep(); return }
+        undo?.registerUndo(withTarget: self) { model in
+            let back = EKEvent(eventStore: model.calendar.store)
+            (back.title, back.startDate, back.endDate, back.isAllDay, back.calendar, back.notes, back.location) = copy
+            try? model.calendar.store.save(back, span: .thisEvent, commit: true)
+        }
+        undo?.setActionName("Удаление события")
+    }
+
     // «сегодня», «чт 16 окт», «в календаре, 15:00».
     func when(_ task: NoteTask) -> String? {
         guard let due = task.due else { return task.done ? nil : nil }
@@ -289,7 +343,16 @@ extension CalendarSync {
               let done = NoteTasks.parse("- [x] \(title) 📅 \(when)", note: note, index: 0) else { return log("разбор задачи", false) }
         let wasEnabled = enabled
         enabled = true
-        defer { enabled = wasEnabled }
+        // Только своя связь: синхронизация удаляет события всех связей, которых нет в списке, — с общими
+        // связями проверка 31.10.2026 стёрла события задач Макара (PITFALLS.md). Чужие связи откладываем
+        // и возвращаем, файл связей переписываем как было.
+        let saved = links
+        links = [:]
+        defer {
+            enabled = wasEnabled
+            links = saved
+            try? JSONEncoder().encode(links).write(to: Self.linksURL)
+        }
         sync([open])
         let id = links[open.key]
         let event = id.flatMap { store.event(withIdentifier: $0) }
@@ -346,6 +409,48 @@ extension CalendarSync {
             moved == 1 && after?.calendar.calendarIdentifier == target.calendarIdentifier)
         log("временного календаря больше нет", store.calendar(withIdentifier: temp.calendarIdentifier) == nil)
         if let after { try? store.remove(after, span: .thisEvent, commit: true) }
+    }
+}
+#endif
+
+#if DEBUG
+extension TasksModel {
+    // Живая проверка правки событий: временный календарь, событие в нём → перенос, растягивание,
+    // переименование, удаление и ⌘Z каждого → календарь удаляется. Чужие события не трогает.
+    func editSelfTest(_ log: (String, Bool) -> Void) {
+        let store = calendar.store
+        guard calendar.hasAccess, let source = store.defaultCalendarForNewEvents?.source else { return log("доступ к календарю", false) }
+        let temp = EKCalendar(for: .event, eventStore: store)
+        temp.title = "<notes> проверка правки"
+        temp.source = source
+        do { try store.saveCalendar(temp, commit: true) } catch { return log("временный календарь", false) }
+        defer { try? store.removeCalendar(temp, commit: true) }
+        let event = EKEvent(eventStore: store)
+        event.calendar = temp
+        event.title = "<notes> правка"
+        event.startDate = Calendar.current.date(bySettingHour: 10, minute: 0, second: 0, of: Date().addingTimeInterval(86_400))!
+        event.endDate = event.startDate.addingTimeInterval(3600)
+        try? store.save(event, span: .thisEvent, commit: true)
+        let id = event.eventIdentifier!, start = event.startDate!, undo = UndoManager()
+        undo.groupsByEvent = false
+        func fresh() -> EKEvent? { store.event(withIdentifier: id) }
+        func step(_ action: () -> Void) { undo.beginUndoGrouping(); action(); undo.endUndoGrouping() }
+
+        step { move(event, start: start.addingTimeInterval(86_400 + 1800), end: start.addingTimeInterval(86_400 + 5400), undo: undo) }
+        log("перенос на день и полчаса", fresh()?.startDate == start.addingTimeInterval(86_400 + 1800))
+        undo.undo()
+        log("⌘Z вернул время", fresh()?.startDate == start && fresh()?.endDate == start.addingTimeInterval(3600))
+        step { move(fresh()!, start: start, end: start.addingTimeInterval(5400), undo: undo) }
+        log("растянуто до 1,5 ч", fresh()?.endDate == start.addingTimeInterval(5400))
+        step { rename(fresh()!, to: "<notes> новое имя", undo: undo) }
+        log("переименовано", fresh()?.title == "<notes> новое имя")
+        undo.undo()
+        log("⌘Z вернул имя", fresh()?.title == "<notes> правка")
+        step { remove(fresh()!, undo: undo) }
+        log("удалено", fresh() == nil)
+        undo.undo()
+        let back = store.events(matching: store.predicateForEvents(withStart: start.addingTimeInterval(-60), end: start.addingTimeInterval(7200), calendars: [temp]))
+        log("⌘Z вернул удалённое", back.first?.title == "<notes> правка" && back.first?.endDate == start.addingTimeInterval(5400))
     }
 }
 #endif

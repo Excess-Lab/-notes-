@@ -39,6 +39,22 @@ struct NoteTasksTests {
         #expect(throws: NoteTasks.EditError.self) { try NoteTasks.setDone(task, false, library: lib) }
     }
 
+    // Событие задачи перетащили в календаре — меняется только дата в её строке, срочность и текст остаются.
+    @Test("новая дата правит хвост с 📅, остальное в строке как было")
+    func setDue() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("tasks-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let lib = NoteLibrary(root: root)
+        let url = root.appendingPathComponent("a.md")
+        try "  - [ ] Дело !! 📅 2026-10-16 9:00–10:00\n- [ ] Без даты".write(to: url, atomically: true, encoding: .utf8)
+        let tasks = NoteTasks.all(in: lib)
+        let due = try #require(NoteTasks.parseDate("2026-10-18 15:30").0)
+        try NoteTasks.setDue(tasks[0], due, hasTime: true, minutes: 45, library: lib)
+        try NoteTasks.setDue(NoteTasks.all(in: lib)[1], due, hasTime: false, minutes: nil, library: lib)
+        #expect(try lib.read(url) == "  - [ ] Дело !! 📅 2026-10-18 15:30–16:15\n- [ ] Без даты 📅 2026-10-18")
+        #expect(throws: NoteTasks.EditError.self) { try NoteTasks.setDue(tasks[0], nil, hasTime: false, minutes: nil, library: lib) }
+    }
+
     @Test("группы: просроченное — сегодня, неделя, позже, без даты, готово")
     func groups() {
         let now = Date(timeIntervalSince1970: 1_792_000_000)

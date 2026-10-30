@@ -104,12 +104,30 @@ public enum NoteTasks {
         guard !clean.isEmpty else { return }
         var text = (try? library.read(url)) ?? ""
         if !text.isEmpty && !text.hasSuffix("\n") { text += "\n" }
-        var date = due.map { " \(marker) \(format($0, withTime: hasTime))" } ?? ""
-        if let due, hasTime, let minutes, minutes > 0 {
+        try library.write(text + "- [ ] \(clean)\(urgent ? " !!" : "")\(dateText(due, hasTime: hasTime, minutes: minutes))\n", to: url)
+    }
+
+    // « 📅 2026-10-31 15:00–16:30» — хвост строки задачи; пусто, если даты нет.
+    static func dateText(_ due: Date?, hasTime: Bool, minutes: Int?) -> String {
+        guard let due else { return "" }
+        var date = " \(marker) \(format(due, withTime: hasTime))"
+        if hasTime, let minutes, minutes > 0 {
             let end = Calendar.current.dateComponents([.hour, .minute], from: due.addingTimeInterval(TimeInterval(minutes * 60)))
             date += String(format: "–%02d:%02d", end.hour ?? 0, end.minute ?? 0)
         }
-        try library.write(text + "- [ ] \(clean)\(urgent ? " !!" : "")\(date)\n", to: url)
+        return date
+    }
+
+    // Новая дата задачи — событие перетащили в календаре. Меняем только хвост с 📅, остальное в строке
+    // как было. Строку с тех пор поменяли — не трогаем, как в setDone.
+    public static func setDue(_ task: NoteTask, _ due: Date?, hasTime: Bool, minutes: Int?, library: NoteLibrary) throws {
+        var lines = try library.read(task.note).components(separatedBy: "\n")
+        guard lines.indices.contains(task.line), lines[task.line] == task.raw else { throw EditError.changedOnDisk }
+        var line = lines[task.line]
+        if let range = line.range(of: marker) { line = String(line[..<range.lowerBound]) }
+        while line.hasSuffix(" ") { line.removeLast() }
+        lines[task.line] = line + dateText(due, hasTime: hasTime, minutes: minutes)
+        try library.write(lines.joined(separator: "\n"), to: task.note)
     }
 
     // Отметить задачу (не)сделанной — правим только её строку. Если файл с тех пор поменяли и строки
