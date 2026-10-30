@@ -44,8 +44,8 @@ import NotesCore
     }
 
     // Добавить из календаря: в «Входящие.md» в корне хранилища, дальше — обычная синхронизация.
-    func add(_ title: String, due: Date?, hasTime: Bool, urgent: Bool = false) {
-        try? NoteTasks.append(title, due: due, hasTime: hasTime, urgent: urgent,
+    func add(_ title: String, due: Date?, hasTime: Bool, urgent: Bool = false, minutes: Int? = nil) {
+        try? NoteTasks.append(title, due: due, hasTime: hasTime, urgent: urgent, minutes: minutes,
                               to: library.root.appendingPathComponent("Входящие.md"), library: library)
         reload()
     }
@@ -208,7 +208,7 @@ import NotesCore
         event.title = plan.title
         event.isAllDay = plan.allDay
         event.startDate = plan.start
-        event.endDate = plan.allDay ? plan.start : plan.start.addingTimeInterval(TimeInterval(minutes * 60))
+        event.endDate = plan.allDay ? plan.start : plan.start.addingTimeInterval(TimeInterval((plan.minutes ?? minutes) * 60))
         event.notes = "Задача из заметок <notes>."
     }
 

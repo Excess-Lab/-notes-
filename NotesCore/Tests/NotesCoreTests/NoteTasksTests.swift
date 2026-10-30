@@ -97,4 +97,12 @@ struct NoteTasksTests {
         try NoteTasks.append("Купить хлеб", due: nil, hasTime: false, urgent: true, to: url, library: lib)
         #expect(try lib.read(url) == "- [ ] Купить хлеб !!\n")
     }
+
+    @Test("длительность: конец после тире")
+    func duration() {
+        let task = NoteTasks.parse("- [ ] Созвон 📅 2026-10-31 15:00–16:30", note: URL(fileURLWithPath: "/n.md"), index: 0)
+        #expect(task?.minutes == 90)
+        #expect(task?.title == "Созвон")
+        #expect(task?.hasTime == true)
+    }
 }

@@ -238,6 +238,8 @@ private struct DayGrid: View {
     let tasks: TasksModel
     let uploads: [VideoModel.Item]
     @Binding var draft: Date?
+    @State private var draftEnd: Date?
+    @State private var dragging = false
     private let gutter: CGFloat = 44, hour: CGFloat = 44, head: CGFloat = 44
 
     var body: some View {
@@ -274,15 +276,24 @@ private struct DayGrid: View {
                             Text("\(h):00").font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
                                 .offset(y: CGFloat(h) * hour - 6).id(h)
                         }
-                        // Клик по пустому месту — новая задача на этот час, с шагом полчаса.
+                        // Клик по пустому месту — задача на час; протянуть — сразу задать период. Шаг — 15 минут.
                         Color.clear.contentShape(Rectangle())
                             .frame(width: 832 - gutter, height: 24 * hour)
                             .offset(x: gutter)
-                            .onTapGesture { point in
-                                let column = min(Int(point.x / colW), days.count - 1)
-                                let half = (point.y / (hour / 2)).rounded(.down) / 2
-                                draft = Calendar.current.date(byAdding: .minute, value: Int(half * 60), to: days[column])
-                            }
+                            .gesture(DragGesture(minimumDistance: 0)
+                                .onChanged { drag in
+                                    let column = max(0, min(Int(drag.startLocation.x / colW), days.count - 1))
+                                    func at(_ y: CGFloat) -> Date {
+                                        let quarters = max(0, min(96, Int((y / (hour / 4)).rounded(.down))))
+                                        return Calendar.current.date(byAdding: .minute, value: quarters * 15, to: days[column])!
+                                    }
+                                    let a = at(drag.startLocation.y), b = at(drag.location.y)
+                                    dragging = true
+                                    draft = min(a, b)
+                                    let end = max(a, b).addingTimeInterval(15 * 60)
+                                    draftEnd = abs(drag.translation.height) < 6 ? draft!.addingTimeInterval(3600) : end
+                                }
+                                .onEnded { _ in dragging = false })
                         ForEach(events, id: \.eventIdentifier) { event in
                             if let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: event.startDate) }) {
                                 let lane = lanes[event.eventIdentifier] ?? (0, 1)
@@ -293,13 +304,17 @@ private struct DayGrid: View {
                             }
                         }
                         if let start = draft, let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: start) }) {
-                            RoundedRectangle(cornerRadius: 10).fill(Theme.coral.opacity(0.12))
-                                .frame(width: colW - 6, height: hour - 4)
+                            let end = draftEnd ?? start.addingTimeInterval(3600)
+                            RoundedRectangle(cornerRadius: 10).fill(Theme.coral.opacity(0.18))
+                                .overlay(alignment: .topLeading) {
+                                    Text(Self.span(start, end)).font(Martian.body.font(11)).foregroundStyle(Theme.coral).padding(6)
+                                }
+                                .frame(width: colW - 6, height: max(hour / 4, CGFloat(end.timeIntervalSince(start) / 3600) * hour) - 4)
                                 .offset(x: gutter + CGFloat(column) * colW + 3, y: top(at: start) + 2)
-                                .popover(isPresented: Binding(get: { draft != nil }, set: { if !$0 { draft = nil } }), arrowEdge: .trailing) {
-                                    NewTaskPopover(start: start) { title, due, hasTime in
-                                        tasks.add(title, due: due, hasTime: hasTime)
-                                        draft = nil
+                                .popover(isPresented: Binding(get: { draft != nil && !dragging }, set: { if !$0 { draft = nil; draftEnd = nil } }), arrowEdge: .trailing) {
+                                    NewTaskPopover(start: start, minutes: Int(end.timeIntervalSince(start) / 60)) { title, due, hasTime, minutes in
+                                        tasks.add(title, due: due, hasTime: hasTime, minutes: minutes)
+                                        draft = nil; draftEnd = nil
                                     }
                                 }
                         }
@@ -311,6 +326,11 @@ private struct DayGrid: View {
                 .onAppear { scroll.scrollTo(8, anchor: .top) }
             }
         }
+    }
+
+    static func span(_ start: Date, _ end: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "H:mm"
+        return "\(f.string(from: start))–\(f.string(from: end))"
     }
 
     private func top(at date: Date) -> CGFloat {
@@ -417,7 +437,8 @@ private struct MonthGrid: View {
 // Под названием одна строка: когда (можно поменять) и «весь день». Длительность — из настроек календаря.
 private struct NewTaskPopover: View {
     let start: Date
-    let add: (String, Date, Bool) -> Void
+    @State var minutes: Int
+    let add: (String, Date, Bool, Int?) -> Void
     @State private var title = ""
     @State private var date = Date()
     @State private var allDay = false
@@ -431,9 +452,23 @@ private struct NewTaskPopover: View {
                 .focused($focused)
                 .onSubmit(save)
             HStack(spacing: 8) {
-                DatePicker("", selection: $date, displayedComponents: allDay ? [.date] : [.date, .hourAndMinute])
+                DatePicker("", selection: $date, displayedComponents: [.date])
                     .labelsHidden().datePickerStyle(.field).font(Martian.body.font(13))
                 Toggle("весь день", isOn: $allDay).toggleStyle(.checkbox).font(Martian.body.font(13))
+            }
+            if !allDay {
+                // Начало и конец — две ячейки; конец не раньше начала + 15 минут.
+                HStack(spacing: 8) {
+                    Text("начало").font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+                    DatePicker("", selection: $date, displayedComponents: [.hourAndMinute])
+                        .labelsHidden().datePickerStyle(.field)
+                    Text("конец").font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+                    DatePicker("", selection: Binding(get: { date.addingTimeInterval(TimeInterval(minutes * 60)) },
+                                                      set: { minutes = max(15, Int($0.timeIntervalSince(date) / 60)) }),
+                               displayedComponents: [.hourAndMinute])
+                        .labelsHidden().datePickerStyle(.field)
+                }
+                .font(Martian.body.font(13))
             }
             Text("enter — добавить")
                 .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
@@ -445,7 +480,7 @@ private struct NewTaskPopover: View {
 
     private func save() {
         guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
-        add(title, date, !allDay)
+        add(title, date, !allDay, allDay ? nil : minutes)
     }
 }
 

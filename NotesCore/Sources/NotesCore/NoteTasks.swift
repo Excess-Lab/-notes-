@@ -14,6 +14,8 @@ public struct NoteTask: Hashable, Sendable, Identifiable {
     public let hasTime: Bool
     // Срочная — «!!» в строке: `- [ ] Позвонить !! 📅 2026-10-31`.
     public var urgent = false
+    // Длительность в минутах — конец после тире: `📅 2026-10-31 15:00–16:30`. Нет — берётся из настроек.
+    public var minutes: Int?
 
     // Ключ для связки с событием календаря: заметка + текст. Переставили строку — связь не теряется.
     public var key: String { note.path + "|" + title }
@@ -33,9 +35,19 @@ public enum NoteTasks {
         var text = String(trimmed.dropFirst(5)).trimmingCharacters(in: .whitespaces)
         var due: Date?
         var hasTime = false
+        var minutes: Int?
         if let range = text.range(of: marker) {
-            let tail = text[range.upperBound...].trimmingCharacters(in: .whitespaces)
-            (due, hasTime) = parseDate(String(tail))
+            var tail = text[range.upperBound...].trimmingCharacters(in: .whitespaces)
+            if let dash = tail.range(of: "–") {
+                let end = tail[dash.upperBound...].split(separator: ":").compactMap { Int($0) }
+                tail = String(tail[..<dash.lowerBound])
+                let start = tail.split(separator: " ").last?.split(separator: ":").compactMap { Int($0) } ?? []
+                if end.count == 2, start.count == 2 {
+                    let length = (end[0] * 60 + end[1]) - (start[0] * 60 + start[1])
+                    if length > 0 { minutes = length }
+                }
+            }
+            (due, hasTime) = parseDate(tail)
             text = String(text[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
         }
         var urgent = false
@@ -45,7 +57,9 @@ public enum NoteTasks {
                 .trimmingCharacters(in: .whitespaces)
         }
         guard !text.isEmpty else { return nil }
-        return NoteTask(note: note, line: index, raw: line, title: text, done: box != " ", due: due, hasTime: hasTime, urgent: urgent)
+        var task = NoteTask(note: note, line: index, raw: line, title: text, done: box != " ", due: due, hasTime: hasTime, urgent: urgent)
+        task.minutes = minutes
+        return task
     }
 
     // «2026-10-16» или «2026-10-16 15:00», время — в часовом поясе Mac.
@@ -84,13 +98,17 @@ public enum NoteTasks {
     public enum EditError: Error { case changedOnDisk }
 
     // Задача из календаря: строка дописывается в конец заметки (заметку создаём, если её нет).
-    public static func append(_ title: String, due: Date?, hasTime: Bool, urgent: Bool = false,
+    public static func append(_ title: String, due: Date?, hasTime: Bool, urgent: Bool = false, minutes: Int? = nil,
                               to url: URL, library: NoteLibrary) throws {
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         var text = (try? library.read(url)) ?? ""
         if !text.isEmpty && !text.hasSuffix("\n") { text += "\n" }
-        let date = due.map { " \(marker) \(format($0, withTime: hasTime))" } ?? ""
+        var date = due.map { " \(marker) \(format($0, withTime: hasTime))" } ?? ""
+        if let due, hasTime, let minutes, minutes > 0 {
+            let end = Calendar.current.dateComponents([.hour, .minute], from: due.addingTimeInterval(TimeInterval(minutes * 60)))
+            date += String(format: "–%02d:%02d", end.hour ?? 0, end.minute ?? 0)
+        }
         try library.write(text + "- [ ] \(clean)\(urgent ? " !!" : "")\(date)\n", to: url)
     }
 
@@ -129,10 +147,12 @@ public enum CalendarPlan {
         public let title: String
         public let start: Date
         public let allDay: Bool
-        public init(title: String, start: Date, allDay: Bool) {
+        public var minutes: Int?
+        public init(title: String, start: Date, allDay: Bool, minutes: Int? = nil) {
             self.title = title
             self.start = start
             self.allDay = allDay
+            self.minutes = minutes
         }
     }
 
@@ -149,7 +169,7 @@ public enum CalendarPlan {
         var wanted: Set<String> = []
         for task in tasks where !task.done {
             guard let due = task.due else { continue }
-            let event = Event(title: task.title, start: due, allDay: !task.hasTime)
+            let event = Event(title: task.title, start: due, allDay: !task.hasTime, minutes: task.minutes)
             wanted.insert(task.key)
             if let id = links[task.key], let current = existing[id] {
                 if current != event { actions.append(.update(key: task.key, eventID: id, event)) }
