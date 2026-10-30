@@ -359,6 +359,74 @@ struct SectionContent: View {
     }
 }
 
+// Календари в боковой панели: клик — показать или скрыть на экране, цвет — как в Календаре Apple.
+// При наведении — «задачи сюда» и корзина; новый календарь вписывается прямо в список, Enter — создать.
+private struct CalendarList: View {
+    let sync: CalendarSync
+    @State private var hovered: String?
+    @State private var adding = false
+    @State private var name = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        let _ = sync.revision
+        let main = sync.store.defaultCalendarForNewEvents?.calendarIdentifier
+        ForEach(sync.calendars, id: \.calendarIdentifier) { calendar in
+            let id = calendar.calendarIdentifier
+            let shown = !sync.hidden.contains(id)
+            let color = Color(cgColor: calendar.cgColor)
+            HStack(spacing: 8) {
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(color, lineWidth: 1.5)
+                    .background(RoundedRectangle(cornerRadius: 4).fill(shown ? color : .clear))
+                    .overlay { if shown { Image(systemName: "checkmark").font(.system(size: 8, weight: .heavy)).foregroundStyle(.white) } }
+                    .frame(width: 14, height: 14)
+                Text(calendar.title)
+                    .font(Martian.body.font(13)).kerning(Theme.tracking(-7, size: 13))
+                    .foregroundStyle(Theme.ink.opacity(shown ? 1 : 0.4)).lineLimit(1)
+                Spacer(minLength: 0)
+                if id == sync.tasksCalendar?.calendarIdentifier {
+                    Text("задачи").font(Martian.body.font(10)).foregroundStyle(NotesLayout.gray)
+                } else if hovered == id {
+                    Button("задачи сюда") { sync.tasksCalendar = calendar }
+                        .buttonStyle(QuietLinkStyle(size: 10, opacity: 0.4))
+                }
+                if hovered == id, id != main {
+                    Button { CalendarRemoval.confirm(calendar, sync: sync) } label: {
+                        Image(systemName: "trash").font(.system(size: 11)).foregroundStyle(NotesLayout.gray)
+                    }.buttonStyle(.plain).help("удалить календарь")
+                }
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 28)
+            .background(RoundedRectangle(cornerRadius: 8).fill(Theme.fg.opacity(hovered == id ? 0.05 : 0)))
+            .contentShape(RoundedRectangle(cornerRadius: 8))
+            .onTapGesture { withAnimation(.smooth(duration: 0.2)) { sync.toggleShown(calendar) } }
+            .onHover { hovered = $0 ? id : (hovered == id ? nil : hovered) }
+        }
+        if adding {
+            TextField("название", text: $name)
+                .textFieldStyle(.plain).font(Martian.body.font(13))
+                .focused($focused)
+                .padding(.horizontal, 8).frame(height: 28)
+                .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.coral.opacity(0.5)))
+                .onSubmit(create)
+                .onExitCommand { adding = false; name = "" }
+                .onAppear { focused = true }
+        } else {
+            SidebarRow(glyph: .plus, title: "новый календарь", selected: false) { adding = true }
+                .opacity(0.5)
+        }
+    }
+
+    private func create() {
+        let title = name.trimmingCharacters(in: .whitespaces)
+        adding = false; name = ""
+        guard !title.isEmpty else { return }
+        do { try sync.createCalendar(title) } catch { NSAlert(error: error).runModal() }
+    }
+}
+
 // Боковая панель своего раздела: дерево заметок, фильтры задач, календари, видео, страницы настроек.
 struct SectionSidebar: View {
     let model: NotesModel
@@ -376,19 +444,7 @@ struct SectionSidebar: View {
             }
         case .calendar:
             SidebarList(title: "календари") {
-                let _ = model.tasks.calendar.revision
-                ForEach(model.tasks.calendar.calendars, id: \.calendarIdentifier) { calendar in
-                    SidebarRow(glyph: .calendar, title: calendar.title,
-                               selected: calendar.calendarIdentifier == model.tasks.calendar.tasksCalendar?.calendarIdentifier) {}
-                        .contextMenu {
-                            Button("Удалить календарь…") { CalendarRemoval.confirm(calendar, sync: model.tasks.calendar) }
-                                .disabled(calendar.calendarIdentifier == model.tasks.calendar.store.defaultCalendarForNewEvents?.calendarIdentifier)
-                        }
-                }
-                SidebarRow(glyph: .plus, title: "новый календарь", selected: false) {
-                    CalendarCreation.ask(sync: model.tasks.calendar)
-                }
-                .opacity(0.5)
+                CalendarList(sync: model.tasks.calendar)
             }
         case .video:
             SidebarList(title: "видео") {

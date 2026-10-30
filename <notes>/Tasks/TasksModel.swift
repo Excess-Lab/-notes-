@@ -111,10 +111,19 @@ import NotesCore
             UserDefaults.standard.string(forKey: Self.calendarKey).flatMap { store.calendar(withIdentifier: $0) }
                 ?? store.defaultCalendarForNewEvents
         }
-        set { UserDefaults.standard.set(newValue?.calendarIdentifier, forKey: Self.calendarKey) }
+        set { UserDefaults.standard.set(newValue?.calendarIdentifier, forKey: Self.calendarKey); revision += 1 }
     }
 
     var calendars: [EKCalendar] { store.calendars(for: .event).filter(\.allowsContentModifications) }
+
+    // Скрытые на экране календаря — галочка в боковой панели. Только вид: в Календаре Apple ничего не меняется.
+    private(set) var hidden = Set(UserDefaults.standard.stringArray(forKey: "hiddenCalendars") ?? [])
+
+    func toggleShown(_ calendar: EKCalendar) {
+        if hidden.remove(calendar.calendarIdentifier) == nil { hidden.insert(calendar.calendarIdentifier) }
+        UserDefaults.standard.set(Array(hidden), forKey: "hiddenCalendars")
+        revision += 1
+    }
 
     // Сколько длится событие задачи, у которой есть время, но нет конца.
     var minutes: Int {
@@ -250,7 +259,8 @@ import NotesCore
     func events(from start: Date, to end: Date) -> [EKEvent] {
         guard hasAccess else { return [] }
         let predicate = store.predicateForEvents(withStart: start, end: end, calendars: nil)
-        return store.events(matching: predicate).sorted { $0.startDate < $1.startDate }
+        return store.events(matching: predicate).filter { !hidden.contains($0.calendar.calendarIdentifier) }
+            .sorted { $0.startDate < $1.startDate }
     }
 }
 
@@ -278,25 +288,6 @@ extension CalendarSync {
     }
 }
 #endif
-
-// Новый календарь: системное окно с полем для названия.
-enum CalendarCreation {
-    static func ask(sync: CalendarSync) {
-        let alert = NSAlert()
-        alert.messageText = "Новый календарь"
-        alert.informativeText = "Появится и в Календаре Apple."
-        let field = NSTextField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
-        field.placeholderString = "название"
-        alert.accessoryView = field
-        alert.addButton(withTitle: "Создать")
-        alert.addButton(withTitle: "Отмена")
-        alert.window.initialFirstResponder = field
-        guard alert.runModal() == .alertFirstButtonReturn else { return }
-        let title = field.stringValue.trimmingCharacters(in: .whitespaces)
-        guard !title.isEmpty else { return }
-        do { try sync.createCalendar(title) } catch { NSAlert(error: error).runModal() }
-    }
-}
 
 // Подтверждение перед удалением календаря — системным окном, обычным языком (UI.md).
 enum CalendarRemoval {
