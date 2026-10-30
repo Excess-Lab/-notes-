@@ -23,6 +23,10 @@ final class SyncController {
     // и что история не уходит на GitHub, было не видно (30.10.2026).
     private(set) var lastCommit: Date?
     private(set) var lastError: String?
+    // libgit2 на отозванный токен отвечает «too many redirects or authentication replays».
+    var needsLogin: Bool { lastError.map { $0.contains("authentication") || $0.contains("401") } ?? false }
+    var errorText: String? { needsLogin ? "вход в github устарел — нажми «войти заново»" : lastError }
+    func clearError() { lastError = nil }
     private var vault: URL?
     private var loop: Task<Void, Never>?
 

@@ -1,3 +1,4 @@
+import AppKit
 import EventKit
 import NotesCore
 import NotesSpeech
@@ -94,6 +95,7 @@ private struct SyncPage: View {
     @State private var sync = SyncController.shared
     @State private var sending = false
     @State private var isRepo = false
+    @State private var relogin = false
 
     var body: some View {
         let vault = model.library.root
@@ -121,7 +123,11 @@ private struct SyncPage: View {
             }
         }
         SettingRow(title: "github", subtitle: TokenStore().exists ? "приватный notes, отправка раз в сутки" : "вход по коду — на первом входе") {
-            if TokenStore().exists { GrantedLabel(text: "подключено") } else { Text("не подключено").font(Martian.body.font(13)).foregroundStyle(Theme.fg.opacity(0.3)) }
+            if TokenStore().exists && !sync.needsLogin {
+                GrantedLabel(text: "подключено")
+            } else {
+                Button("войти заново") { relogin = true }.buttonStyle(WhitePillStyle())
+            }
         }
         SettingRow(title: "последний коммит", subtitle: sync.lastCommit.map { NoteEditor.date($0) } ?? "с запуска правок не было") {
             EmptyView()
@@ -136,7 +142,7 @@ private struct SyncPage: View {
             .disabled(sending || !TokenStore().exists || !sync.isRunning)
         }
         // Ошибка — целиком и выделяемой, чтобы её можно было скопировать и прислать.
-        if let error = sync.lastError {
+        if let error = sync.errorText {
             Text(error)
                 .font(Martian.body.font(11)).foregroundStyle(Theme.coral)
                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
@@ -144,6 +150,13 @@ private struct SyncPage: View {
         }
         Note(text: "конфликты не теряют текст: версия с другого mac ляжет рядом")
             .onAppear { isRepo = GitVault.isRepository(vault) }
+            .sheet(isPresented: $relogin) {
+                ReloginSheet(vault: vault) {
+                    relogin = false
+                    sync.clearError()
+                    Task { _ = await sync.pushNow() }
+                }
+            }
     }
 }
 
@@ -275,5 +288,38 @@ private struct FolderPicks: View {
             }
         }
         .onAppear { excluded = sync.excludedFolders }
+    }
+}
+
+// Повторный вход в GitHub по коду — тот же поток, что на первом входе: код, «открыть github»,
+// подтвердил — новый токен в Связке ключей, папка привязана к notes и отправлена.
+private struct ReloginSheet: View {
+    let vault: URL
+    let done: () -> Void
+    @State private var login = GitHubLogin()
+    @State private var attempt = 0
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 18) {
+            Text("войти в github")
+                .font(Martian.heading.font(22)).foregroundStyle(Theme.ink)
+            Text("старый вход больше не действует — введи код на github.com/login/device")
+                .font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray)
+            DeviceCodeCapsule(state: login.state, renew: { attempt += 1 })
+                .offset(y: -(207 - Layout.sheetTop))
+                .frame(height: 110)
+            HStack(spacing: 10) {
+                Button("открыть github") {
+                    if case .waiting(let code, let url) = login.state { DeviceCode.copy(code); NSWorkspace.shared.open(url) }
+                    else { DeviceCode.openGitHub() }
+                }
+                .buttonStyle(CoralCapsuleStyle())
+                Button("отмена") { dismiss() }.buttonStyle(QuietLinkStyle(size: 13, opacity: 0.4))
+            }
+        }
+        .padding(28)
+        .frame(width: 600)
+        .task(id: attempt) { await login.run(vault: vault) { _ in done() } }
     }
 }
