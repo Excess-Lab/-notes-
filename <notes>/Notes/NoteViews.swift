@@ -244,7 +244,7 @@ struct SearchOverlay: View {
             VStack(spacing: 0) {
                 HStack(spacing: 12) {
                     DotIcon(glyph: .search, size: 20)
-                    TextField("найти в заметках", text: $model.query)
+                    TextField("найти", text: $model.query)
                         .textFieldStyle(.plain)
                         .font(Martian.heading.font(20))
                         .foregroundStyle(Theme.ink)
@@ -254,7 +254,7 @@ struct SearchOverlay: View {
                         .onKeyPress(.upArrow) { move(-1) }
                         .onKeyPress(.escape) { model.searchShown = false; return .handled }
                     if !model.query.isEmpty {
-                        Text("\(model.hits.count)")
+                        Text("\(model.results.count)")
                             .font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray)
                     }
                 }
@@ -271,16 +271,17 @@ struct SearchOverlay: View {
                                 ResultRow(title: note.title, path: path(note.url), snippet: nil, word: nil, selected: false)
                             }.buttonStyle(.plain)
                         }
-                    } else if model.hits.isEmpty {
+                    } else if model.results.isEmpty {
                         Text("ничего не нашлось")
                             .font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray)
                             .frame(maxWidth: .infinity).frame(height: 70)
                     } else {
-                        ForEach(Array(model.hits.enumerated()), id: \.element.id) { index, hit in
+                        ForEach(Array(model.results.enumerated()), id: \.element.id) { index, found in
+                            if index == 0 || model.results[index - 1].kind != found.kind { Caption(text: found.kind.rawValue) }
                             Button { model.highlighted = index; model.openHighlighted() } label: {
-                                ResultRow(title: hit.note.title, path: path(hit.note.url), snippet: hit.snippet,
+                                ResultRow(title: found.title, path: found.detail, snippet: found.snippet,
                                           word: model.query.split(separator: " ").first.map(String.init),
-                                          selected: index == model.highlighted)
+                                          selected: index == model.highlighted, glyph: found.kind.glyph)
                             }.buttonStyle(.plain)
                         }
                     }
@@ -290,7 +291,7 @@ struct SearchOverlay: View {
                 HStack(spacing: 16) {
                     Hint(key: "↑↓", text: "выбрать"); Hint(key: "enter", text: "открыть"); Hint(key: "esc", text: "закрыть")
                     Spacer()
-                    Text(!model.semanticOn ? "по тексту" : model.indexReady ? "по смыслу (бета) и тексту" : "по тексту, смысл готовлю")
+                    Text("заметки, задачи, события, видео")
                         .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
                 }
                 .padding(.horizontal, 22)
@@ -318,8 +319,8 @@ struct SearchOverlay: View {
     }
 
     private func move(_ delta: Int) -> KeyPress.Result {
-        guard !model.hits.isEmpty else { return .ignored }
-        model.highlighted = (model.highlighted + delta + model.hits.count) % model.hits.count
+        guard !model.results.isEmpty else { return .ignored }
+        model.highlighted = (model.highlighted + delta + model.results.count) % model.results.count
         return .handled
     }
 }
@@ -349,10 +350,11 @@ private struct ResultRow: View {
     let snippet: String?
     let word: String?
     let selected: Bool
+    var glyph: DotGlyph = .file
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            DotIcon(glyph: .file).padding(.top, 2)
+            DotIcon(glyph: glyph).padding(.top, 2)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
                     Text(title).font(Martian.body.font(14)).foregroundStyle(Theme.ink).lineLimit(1)
@@ -377,5 +379,16 @@ private struct ResultRow: View {
               let range = text.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) else { return Text(text) }
         let head = String(text[..<range.lowerBound]), match = String(text[range]), tail = String(text[range.upperBound...])
         return Text("\(head)\(Text(match).foregroundStyle(Theme.ink))\(tail)")
+    }
+}
+
+private extension NotesModel.Found.Kind {
+    var glyph: DotGlyph {
+        switch self {
+        case .note: .file
+        case .task: .task
+        case .event: .calendar
+        case .video: .video
+        }
     }
 }

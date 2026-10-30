@@ -26,7 +26,7 @@ struct SettingsScreen: View {
                 switch page {
                 case .sync: SyncPage(model: model)
                 case .dictation: DictationPage()
-                case .search: SearchPage(model: model)
+                case .search: SearchPage()
                 case .lock: LockPage(model: model)
                 case .calendar:
                     CalendarPage(sync: model.tasks.calendar, reload: model.tasks.reload)
@@ -45,7 +45,7 @@ struct SettingsScreen: View {
         switch page {
         case .sync: "где лежат заметки и куда уходят"
         case .dictation: "говоришь — текст в буфере"
-        case .search: "по тексту и по смыслу"
+        case .search: "заметки, задачи, события, видео"
         case .lock: "пинкод и touch id"
         case .calendar: "задачи со сроком попадают в календарь"
         }
@@ -189,33 +189,13 @@ private struct DictationPage: View {
     }
 }
 
-// Поиск: по тексту — всегда, по смыслу — бета, включается здесь.
+// Поиск: один на всё — заметки, задачи, события, видео и расшифровки (ТЗ 30.10.2026).
 private struct SearchPage: View {
-    let model: NotesModel
-    @AppStorage(NotesModel.semanticKey) private var semantic = false
-
     var body: some View {
-        SettingRow(title: "поиск по тексту", subtitle: "⌘K из любого места") {
+        SettingRow(title: "поиск", subtitle: "⌘K из любого места") {
             GrantedLabel(text: "работает")
         }
-        GlassRow(width: 640) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text("поиск по смыслу").font(Martian.body.font(13)).foregroundStyle(Theme.ink)
-                    // Метка «бета»: модель Apple угадывает не всё (3 из 4 в тесте).
-                    Text("бета")
-                        .font(Martian.body.font(10)).foregroundStyle(NotesLayout.gray)
-                        .padding(.horizontal, 6).padding(.vertical, 1)
-                        .overlay(Capsule().strokeBorder(NotesLayout.gray.opacity(0.5), lineWidth: 1))
-                }
-                Text("найдёт заметку, даже если не помнишь точных слов")
-                    .font(Martian.body.font(11)).foregroundStyle(Theme.fg.opacity(0.3))
-            }
-            Spacer(minLength: 0)
-            Toggle("", isOn: $semantic).toggleStyle(.switch).tint(Theme.coral).labelsHidden()
-                .onChange(of: semantic) { _, on in if on { model.refreshIndex() } }
-        }
-        Note(text: "индекс хранится отдельно от заметок и в историю не попадает")
+        Note(text: "находит заметки, задачи, события календаря, видео и слова внутри расшифровок")
     }
 }
 

@@ -191,6 +191,16 @@ struct CalendarScreen: View {
         .onKeyPress(.rightArrow) { shift(1); return .handled }
         .focusable()
         .focusEffectDisabled()
+        .onAppear(perform: takeFocus)
+        .onChange(of: tasks.calendar.focus) { takeFocus() }
+    }
+
+    // Событие из поиска — открываем его день.
+    private func takeFocus() {
+        guard let date = tasks.calendar.focus else { return }
+        anchor = date
+        mode = .day
+        tasks.calendar.focus = nil
     }
 
     private var week: [Date] {

@@ -1,4 +1,5 @@
 import AppKit
+import EventKit
 import NotesCore
 import SwiftUI
 
@@ -41,20 +42,12 @@ import SwiftUI
     }
     var settingsPage: SettingsPage = .sync
 
-    // Поиск по смыслу: встроенная модель Apple + индекс в Application Support (кэш, не в хранилище).
-    private(set) var indexReady = false
-    // Поиск по смыслу — бета, включается в настройках → поиск (30.10.2026). Выключен — индекс не строим.
-    static let semanticKey = "semanticSearch"
-    var semanticOn: Bool { UserDefaults.standard.bool(forKey: Self.semanticKey) }
-    private let embedder = AppleEmbedder()
-    private let index = SemanticIndex(store: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        .appendingPathComponent("semantic-index.json"))
-
-    var searchShown = false
+    // Открыли поиск — берём события календаря за год назад и вперёд один раз, а не на каждую букву.
+    var searchShown = false { didSet { if searchShown { loadEvents() } } }
     // Окно пинкода из настроек («задать» / «сменить»).
     var pinEntryShown = false
     var query = "" { didSet { runSearch() } }
-    private(set) var hits: [NoteLibrary.Hit] = []
+    private(set) var results: [Found] = []
     var highlighted = 0
 
     private var watcher: FolderWatcher?
@@ -66,7 +59,6 @@ import SwiftUI
         tree = library.tree()
         selection = .folder(library.root)
         tasks = TasksModel(library: library)
-        defer { refreshIndex() }
         video = VideoModel(library: library)
         // Слежка идёт не на главном потоке: оттуда только сигнал, а разбираемся уже на главном.
         watcher = FolderWatcher(folder: vault) {
@@ -172,7 +164,6 @@ import SwiftUI
     private func externalChange() {
         reloadTree()
         tasks.reload()
-        refreshIndex()
         guard let url = openNote, text == savedText else { return }
         guard FileManager.default.fileExists(atPath: url.path) else { return open(.folder(library.root)) }
         if let disk = try? library.read(url), disk != savedText {
@@ -191,51 +182,76 @@ import SwiftUI
 
     // MARK: - Поиск
 
-    // Смесь: по смыслу (модель Apple) + по словам. Где совпали слова — выше; найденное только словами
-    // не теряем. Пока индекс собирается — только по словам. Решение Макара: «делаем микс» (30.10.2026).
-    private func runSearch() {
-        let words = library.search(query, limit: 20)
-        guard semanticOn, indexReady, let embedder else { hits = Array(words.prefix(8)); highlighted = 0; return }
-        let notes = Dictionary(library.allNotes(in: tree).map { ($0.url.standardizedFileURL, $0) }, uniquingKeysWith: { a, _ in a })
-        var merged: [URL: NoteLibrary.Hit] = [:]
-        for hit in index.search(query, embedder: embedder, limit: 12) {
-            let url = hit.note.standardizedFileURL
-            if let note = notes[url] { merged[url] = NoteLibrary.Hit(note: note, snippet: hit.snippet, score: hit.score) }
-        }
-        for (rank, hit) in words.enumerated() {
-            let url = hit.note.url.standardizedFileURL
-            let bonus = 0.3 - Double(min(rank, 10)) * 0.01
-            merged[url] = NoteLibrary.Hit(note: hit.note, snippet: hit.snippet, score: (merged[url]?.score ?? 0) + 1 + bonus)
-        }
-        hits = Array(merged.values.sorted { $0.score > $1.score }.prefix(8))
-        highlighted = 0
+    // Один поиск по всему: заметки, задачи, события, видео и упоминания в расшифровках (ТЗ 30.10.2026).
+    // «По смыслу» и «по тексту» убраны по ТЗ; выдача — группами в этом порядке.
+    struct Found: Identifiable {
+        enum Kind: String { case note = "заметки", task = "задачи", event = "события", video = "видео" }
+        enum Target { case note(URL), event(Date), video(UUID) }
+        let id: String
+        let kind: Kind
+        let title: String
+        let detail: String
+        let snippet: String?
+        let target: Target
     }
 
-    // Индекс — в фоне: модель считает векторы только для новых и изменённых заметок.
-    // Одно обновление за раз: раньше каждое изменение папки запускало своё, и они дёргали модель
-    // одновременно — приложение зависало. Пришли правки посреди обновления — ещё один проход после.
-    private var indexing = false
-    private var indexAgain = false
+    private struct EventItem { let title: String, start: Date, place: String, notes: String }
+    private var events: [EventItem] = []
 
-    func refreshIndex() {
-        guard semanticOn, let embedder else { return }
-        guard !indexing else { indexAgain = true; return }
-        indexing = true
-        let library = library, index = index
-        Task {
-            await Task.detached(priority: .utility) {
-                try? await embedder.prepare()
-                index.update(library: library, embedder: embedder)
-            }.value
-            indexReady = true
-            indexing = false
-            if indexAgain { indexAgain = false; refreshIndex() }
+    private func loadEvents() {
+        let year: TimeInterval = 365 * 24 * 3600
+        events = tasks.calendar.events(from: Date().addingTimeInterval(-year), to: Date().addingTimeInterval(year))
+            .map { EventItem(title: $0.title ?? "", start: $0.startDate, place: $0.location ?? "", notes: $0.notes ?? "") }
+    }
+
+    private func runSearch() {
+        let query = SearchQuery(self.query)
+        highlighted = 0
+        guard !query.isEmpty else { results = []; return }
+        var found: [Found] = []
+        // Расшифровки, сохранённые заметками, найдутся и здесь — среди заметок.
+        for hit in library.search(self.query, limit: 6) {
+            found.append(Found(id: "n" + hit.note.url.path, kind: .note, title: hit.note.title, detail: path(hit.note.url),
+                               snippet: hit.snippet, target: .note(hit.note.url)))
         }
+        for task in tasks.tasks.filter({ query.matches($0.title) }).prefix(5) {
+            let when = task.done ? "готово" : task.due.map { NoteEditor.short($0) } ?? "без даты"
+            found.append(Found(id: "t" + task.id, kind: .task, title: task.title,
+                               detail: when + " · " + task.note.deletingPathExtension().lastPathComponent,
+                               snippet: nil, target: .note(task.note)))
+        }
+        let now = Date()
+        // Ближайшие — сначала: будущие по возрастанию, потом прошедшие от свежих.
+        let matched = events.filter { query.matches($0.title, $0.place, $0.notes) }
+            .sorted { ($0.start >= now) != ($1.start >= now) ? $0.start >= now : $0.start >= now ? $0.start < $1.start : $0.start > $1.start }
+        for (index, event) in matched.prefix(5).enumerated() {
+            let note = query.matches(event.title) ? nil : [event.place, event.notes].first { query.matches($0) }
+            found.append(Found(id: "e\(index)", kind: .event, title: event.title,
+                               detail: NoteEditor.date(event.start), snippet: note, target: .event(event.start)))
+        }
+        for item in video.items {
+            let mention = video.transcript(item.id)?.mention(of: query)
+            guard query.matches(item.title) || mention != nil else { continue }
+            found.append(Found(id: "v" + item.id.uuidString, kind: .video, title: item.title,
+                               detail: mention.map { Transcript.clock($0.start) } ?? "видео",
+                               snippet: mention?.text, target: .video(item.id)))
+            if found.filter({ $0.kind == .video }).count == 5 { break }
+        }
+        results = found
+    }
+
+    private func path(_ url: URL) -> String {
+        let parts = library.breadcrumb(for: url).dropLast()
+        return parts.isEmpty ? "без папки" : parts.joined(separator: " / ")
     }
 
     func openHighlighted() {
-        guard hits.indices.contains(highlighted) else { return }
-        open(.note(hits[highlighted].note.url))
+        guard results.indices.contains(highlighted) else { return }
+        switch results[highlighted].target {
+        case .note(let url): open(.note(url))
+        case .event(let date): flush(); tasks.calendar.focus = date; section = .calendar
+        case .video(let id): flush(); video.open = id; section = .video
+        }
         searchShown = false
     }
 }
@@ -268,7 +284,7 @@ extension NotesModel {
               && currentFolder.name == "новая")
 
         query = "первая"
-        check("поиск находит новую заметку", hits.first?.note.title == "проверка")
+        check("поиск находит новую заметку", results.first?.title == "проверка")
 
         // Правка снаружи: другой редактор пишет в открытую заметку — экран подхватывает.
         open(.note(library.root.appendingPathComponent("проверка.md")))
