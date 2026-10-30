@@ -113,6 +113,11 @@ public struct NoteLibrary: Sendable {
         public let snippet: String
         public let score: Double
         public var id: URL { note.url }
+        public init(note: Note, snippet: String, score: Double) {
+            self.note = note
+            self.snippet = snippet
+            self.score = score
+        }
     }
 
     // Все слова запроса должны встретиться в заметке (без учёта регистра и ё/е).

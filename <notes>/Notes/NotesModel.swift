@@ -41,6 +41,16 @@ import SwiftUI
     }
     var settingsPage: SettingsPage = .sync
 
+    // Поиск по смыслу: встроенная модель Apple + индекс в Application Support (кэш, не в хранилище).
+    enum SearchMode { case meaning, text }
+    // По умолчанию — по тексту: встроенная модель Apple по смыслу угадывает не всегда (3 из 4 в тесте,
+    // 30.10.2026). «по смыслу» — переключателем в поиске.
+    var searchMode: SearchMode = .text { didSet { runSearch() } }
+    private(set) var indexReady = false
+    private let embedder = AppleEmbedder()
+    private let index = SemanticIndex(store: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("semantic-index.json"))
+
     var searchShown = false
     // Окно пинкода из настроек («задать» / «сменить»).
     var pinEntryShown = false
@@ -57,6 +67,7 @@ import SwiftUI
         tree = library.tree()
         selection = .folder(library.root)
         tasks = TasksModel(library: library)
+        defer { refreshIndex() }
         video = VideoModel(library: library)
         // Слежка идёт не на главном потоке: оттуда только сигнал, а разбираемся уже на главном.
         watcher = FolderWatcher(folder: vault) {
@@ -162,6 +173,7 @@ import SwiftUI
     private func externalChange() {
         reloadTree()
         tasks.reload()
+        refreshIndex()
         guard let url = openNote, text == savedText else { return }
         guard FileManager.default.fileExists(atPath: url.path) else { return open(.folder(library.root)) }
         if let disk = try? library.read(url), disk != savedText {
@@ -181,8 +193,45 @@ import SwiftUI
     // MARK: - Поиск
 
     private func runSearch() {
-        hits = library.search(query, limit: 8)
+        let words = library.search(query, limit: 20)
+        if searchMode == .meaning, indexReady, let embedder {
+            // По смыслу — с подсказкой от слов: где слова совпали, заметка поднимается выше.
+            let byText = Dictionary(words.map { ($0.note.url.standardizedFileURL, $0) }, uniquingKeysWith: { a, _ in a })
+            let notes = Dictionary(library.allNotes(in: tree).map { ($0.url.standardizedFileURL, $0) }, uniquingKeysWith: { a, _ in a })
+            hits = index.search(query, embedder: embedder, limit: 12).compactMap { hit in
+                let url = hit.note.standardizedFileURL
+                guard let note = notes[url] else { return nil }
+                let bonus = byText[url] == nil ? 0 : 0.15
+                return NoteLibrary.Hit(note: note, snippet: byText[url]?.snippet ?? hit.snippet, score: hit.score + bonus)
+            }
+            .sorted { $0.score > $1.score }
+            .prefix(8).map { $0 }
+        } else {
+            hits = Array(words.prefix(8))
+        }
         highlighted = 0
+    }
+
+    // Индекс — в фоне: модель считает векторы только для новых и изменённых заметок.
+    // Одно обновление за раз: раньше каждое изменение папки запускало своё, и они дёргали модель
+    // одновременно — приложение зависало. Пришли правки посреди обновления — ещё один проход после.
+    private var indexing = false
+    private var indexAgain = false
+
+    func refreshIndex() {
+        guard let embedder else { return }
+        guard !indexing else { indexAgain = true; return }
+        indexing = true
+        let library = library, index = index
+        Task {
+            await Task.detached(priority: .utility) {
+                try? await embedder.prepare()
+                index.update(library: library, embedder: embedder)
+            }.value
+            indexReady = true
+            indexing = false
+            if indexAgain { indexAgain = false; refreshIndex() }
+        }
     }
 
     func openHighlighted() {

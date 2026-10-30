@@ -290,8 +290,14 @@ struct SearchOverlay: View {
                 HStack(spacing: 16) {
                     Hint(key: "↑↓", text: "выбрать"); Hint(key: "enter", text: "открыть"); Hint(key: "esc", text: "закрыть")
                     Spacer()
-                    Text("по тексту · по смыслу скоро")
-                        .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+                    // Переключатель: «по смыслу» — пока индекс не готов, честно говорим, что ищем по тексту.
+                    ForEach([(NotesModel.SearchMode.meaning, model.indexReady ? "по смыслу" : "по смыслу — готовлю"),
+                             (.text, "по тексту")], id: \.1) { mode, title in
+                        Button(title) { model.searchMode = mode }
+                            .buttonStyle(.plain)
+                            .font(Martian.body.font(11))
+                            .foregroundStyle(model.searchMode == mode ? Theme.ink : NotesLayout.gray)
+                    }
                 }
                 .padding(.horizontal, 22)
                 .frame(height: 38)
