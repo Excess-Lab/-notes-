@@ -32,6 +32,7 @@ struct SettingsScreen: View {
                 case .calendar:
                     CalendarPage(sync: model.tasks.calendar, reload: model.tasks.reload)
                     FolderPicks(folders: model.tree.folders.map(\.name), sync: model.tasks.calendar, reload: model.tasks.reload)
+                case .templates: TemplatesPage(model: model)
                 }
             }
             .frame(width: min(832, pageWidth), alignment: .leading)
@@ -49,6 +50,7 @@ struct SettingsScreen: View {
         case .search: "заметки, задачи, события, видео"
         case .lock: "пинкод и touch id"
         case .calendar: "задачи со сроком попадают в календарь"
+        case .templates: "шаблоны заметок и автоматизация"
         }
     }
 }
@@ -221,6 +223,37 @@ private struct LockPage: View {
         SettingRow(title: "когда спрашивать", subtitle: "после блокировки mac или 15 минут без дела") { EmptyView() }
         Note(text: "пинкод закрывает приложение, сами заметки остаются обычными файлами")
             .onChange(of: model.pinEntryShown) { _, shown in if !shown { pinSet = PinStore().isSet } }
+    }
+}
+
+// Шаблоны — .md в папке «шаблоны» хранилища; автоматизация — заметка на каждый день (ТЗ 30.10.2026).
+private struct TemplatesPage: View {
+    let model: NotesModel
+    @AppStorage(NotesModel.dailyKey) private var daily = false
+
+    var body: some View {
+        let count = Templates.list(in: model.library).count
+        SettingRow(title: "папка шаблонов", subtitle: count == 0 ? "пока пусто — положи туда .md" : "\(count) \(NoteEditor.plural(count, "шаблон", "шаблона", "шаблонов"))") {
+            Button("открыть") {
+                let dir = model.library.root.appendingPathComponent(Templates.folder, isDirectory: true)
+                try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                model.reloadTree()
+                model.open(.folder(dir))
+            }
+            .buttonStyle(WhitePillStyle())
+        }
+        Note(text: "в шаблоне можно писать {{дата}}, {{время}} и {{название}} — подставятся сами. новая заметка из шаблона — правый клик по плюсу или по папке")
+        GlassRow(width: 640) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("заметка на каждый день").font(Martian.body.font(13)).foregroundStyle(Theme.ink)
+                Text("в папке «\(Templates.dailyFolder)», имя — дата, текст — из шаблона «\(Templates.dailyTemplate)»")
+                    .font(Martian.body.font(11)).foregroundStyle(Theme.fg.opacity(0.3))
+            }
+            Spacer(minLength: 0)
+            Toggle("", isOn: $daily).toggleStyle(.switch).tint(Theme.coral).labelsHidden()
+                .onChange(of: daily) { _, on in if on { model.openDaily() } }
+        }
+        .padding(.top, 20)
     }
 }
 

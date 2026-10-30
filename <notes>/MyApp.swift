@@ -98,6 +98,7 @@ private struct RootView: View {
         .onChange(of: onboarding.vaultURL, initial: true) { _, vault in
             guard let vault, notes?.library.root != vault.standardizedFileURL else { return }
             let model = NotesModel(vault: vault)
+            model.openDaily()
             #if DEBUG
             if let path = UserDefaults.standard.string(forKey: "notesOpen") {
                 let url = vault.appendingPathComponent(path)

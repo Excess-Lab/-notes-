@@ -131,10 +131,27 @@ struct NoteMenu: View {
         Button("Копировать") { model.copy(url) }
         if folder {
             Button("Вставить сюда") { model.paste(into: url) }.disabled(!model.canPaste)
+            Menu("Новая из шаблона") { TemplateItems(model: model, folder: url) }
         }
         Button("Дублировать") { model.duplicate(url) }
         Button("Показать в Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
         Divider()
         Button("Удалить", role: .destructive) { model.trash(url) }
+    }
+}
+
+// Шаблоны из папки «шаблоны» пунктами меню; пусто — подсказка, где их взять.
+struct TemplateItems: View {
+    let model: NotesModel
+    let folder: URL?
+
+    var body: some View {
+        let templates = Templates.list(in: model.library)
+        if templates.isEmpty {
+            Button("Шаблонов нет — настройки → шаблоны") { model.flush(); model.settingsPage = .templates; model.section = .settings }
+        }
+        ForEach(templates, id: \.self) { url in
+            Button(url.deletingPathExtension().lastPathComponent) { model.newNote(from: url, in: folder) }
+        }
     }
 }

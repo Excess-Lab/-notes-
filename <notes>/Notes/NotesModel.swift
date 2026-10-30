@@ -32,6 +32,7 @@ import SwiftUI
 
     enum SettingsPage: String, CaseIterable {
         case sync = "синхронизация", dictation = "надиктовка", search = "поиск", lock = "вход", calendar = "календарь"
+        case templates = "шаблоны"
         var glyph: DotGlyph {
             switch self {
             case .sync: .git
@@ -39,6 +40,7 @@ import SwiftUI
             case .search: .search
             case .lock: .check
             case .calendar: .calendar
+            case .templates: .file
             }
         }
     }
@@ -118,6 +120,24 @@ import SwiftUI
 
     func newNote() {
         guard let url = try? library.createNote(in: currentFolder.url) else { return NSSound.beep() }
+        reloadTree()
+        open(.note(url))
+    }
+
+    func newNote(from template: URL, in folder: URL? = nil) {
+        guard let url = try? Templates.create(from: template, in: folder ?? currentFolder.url, library: library) else {
+            return NSSound.beep()
+        }
+        reloadTree()
+        open(.note(url))
+    }
+
+    // Автоматизация: заметка на каждый день (настройки → шаблоны). Включена — при запуске есть и открыта.
+    static let dailyKey = "dailyNote"
+
+    func openDaily() {
+        guard UserDefaults.standard.bool(forKey: Self.dailyKey),
+              let url = try? Templates.daily(in: library) else { return }
         reloadTree()
         open(.note(url))
     }

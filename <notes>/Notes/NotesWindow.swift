@@ -458,8 +458,9 @@ struct SectionContent: View {
                 switch model.section {
                 case .notes:
                     IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
-                    IconButton(glyph: .newNote, help: "новая заметка") { model.newNote() }
+                    IconButton(glyph: .newNote, help: "новая заметка · правый клик — из шаблона") { model.newNote() }
                         .keyboardShortcut("n", modifiers: .command)
+                        .contextMenu { TemplateItems(model: model, folder: nil) }
                 case .tasks:
                     IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
                     IconButton(glyph: .plus, help: "новая задача") { model.tasks.focusNew += 1 }
