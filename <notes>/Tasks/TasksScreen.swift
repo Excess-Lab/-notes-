@@ -20,9 +20,11 @@ struct TasksScreen: View {
                     .foregroundStyle(NotesLayout.gray)
                     .padding(.top, 6)
 
+                NewTaskBar(model: model).padding(.top, 24)
+
                 if model.visible.isEmpty {
                     Text(model.tasks.isEmpty
-                         ? "задач пока нет — напиши в любой заметке «- [ ] дело 📅 2026-10-30 15:00»"
+                         ? "задач нет — впиши первую выше или в любой заметке строкой «- [ ] дело»"
                          : "здесь пусто")
                         .font(Martian.body.font(13))
                         .kerning(Theme.tracking(-7, size: 13))
@@ -71,6 +73,9 @@ private struct TaskRow: View {
             }
             .buttonStyle(.plain)
             .help(task.done ? "вернуть" : "готово")
+            if task.urgent {
+                Text("!!").font(Martian.heading.font(13)).foregroundStyle(Theme.coral).help("срочно")
+            }
             // Текст задачи — то, что ввёл человек: регистр не трогаем.
             Text(task.title)
                 .font(Martian.body.font(13))
@@ -422,5 +427,49 @@ private struct NewTaskPopover: View {
     private func save() {
         guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
         add(title, date, !allDay)
+    }
+}
+
+// Новая задача прямо на экране задач: пишешь, Enter — готово. Срок и срочность — по желанию,
+// одним кликом. Задача ложится строкой во «Входящие.md».
+private struct NewTaskBar: View {
+    let model: TasksModel
+    @State private var title = ""
+    @State private var withDate = false
+    @State private var date = Calendar.current.date(bySettingHour: 18, minute: 0, second: 0, of: Date()) ?? Date()
+    @State private var urgent = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            DotIcon(glyph: .plus)
+            TextField("новая задача", text: $title)
+                .textFieldStyle(.plain)
+                .font(Martian.body.font(15))
+                .focused($focused)
+                .onSubmit(save)
+            if withDate {
+                DatePicker("", selection: $date, displayedComponents: [.date, .hourAndMinute])
+                    .labelsHidden().datePickerStyle(.field).font(Martian.body.font(12))
+            }
+            Button { withDate.toggle() } label: {
+                DotIcon(glyph: .calendar, color: withDate ? Theme.coral : NotesLayout.gray)
+            }.buttonStyle(.plain).help(withDate ? "без срока" : "со сроком — уйдёт в календарь")
+            Button { urgent.toggle() } label: {
+                Text("!!").font(Martian.heading.font(13)).foregroundStyle(urgent ? Theme.coral : NotesLayout.gray)
+            }.buttonStyle(.plain).help("срочно")
+        }
+        .padding(.horizontal, 14)
+        .frame(width: 832, height: 44)
+        .background(Capsule().fill(Theme.fg.opacity(0.04)))
+        .overlay(Capsule().strokeBorder(focused ? Theme.coral.opacity(0.5) : .clear, lineWidth: 1))
+        .animation(.smooth(duration: 0.25), value: withDate)
+    }
+
+    private func save() {
+        guard !title.trimmingCharacters(in: .whitespaces).isEmpty else { return }
+        model.add(title, due: withDate ? date : nil, hasTime: true, urgent: urgent)
+        title = ""; urgent = false
+        focused = true
     }
 }

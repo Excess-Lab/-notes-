@@ -85,4 +85,16 @@ struct NoteTasksTests {
         #expect(try lib.read(url).hasPrefix("купить хлеб\n- [ ] Созвон 📅 "))
         #expect(tasks.first?.title == "Созвон" && tasks.first?.hasTime == true)
     }
+
+    // Иначе «!!» оставалось бы в названии задачи и в событии календаря.
+    @Test("срочность: «!!» в строке, в названии её нет; задача без даты дописывается")
+    func urgent() throws {
+        let task = try #require(NoteTasks.parse("- [ ] Позвонить !! 📅 2026-10-31", note: note, index: 0))
+        #expect(task.urgent && task.title == "Позвонить" && task.due != nil)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("urg-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let lib = NoteLibrary(root: root), url = root.appendingPathComponent("Входящие.md")
+        try NoteTasks.append("Купить хлеб", due: nil, hasTime: false, urgent: true, to: url, library: lib)
+        #expect(try lib.read(url) == "- [ ] Купить хлеб !!\n")
+    }
 }

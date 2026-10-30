@@ -142,18 +142,19 @@ private struct TopBar: View {
 
             // Разделы задач, календаря и видео ещё не сделаны: в макете «задачи» яркие, но пока они
             // ведут в никуда — все три приглушены (30 %, как неактивные в кадре) и не нажимаются.
-            HeaderGroup(width: 420) {
+            HeaderGroup(width: 540) {
                 HStack(spacing: 10) {
                     section("заметки", .notes, .notes)
                     section("задачи", .taskDone, .tasks)
                     section("календарь", .calendar, .calendar)
                     section("видео", .video, .video)
+                    section("настройки", .settings, .settings)
                 }
                 .offset(x: 11)
             }
             .offset(x: 449, y: 15)
 
-            HeaderGroup(width: 235) {
+            HeaderGroup(width: 180) {
                 HStack(spacing: 6) {
                     DotIcon(glyph: .git)
                     TimelineView(.periodic(from: .now, by: 30)) { context in
@@ -167,12 +168,7 @@ private struct TopBar: View {
                 .opacity(0.4)
                 .offset(x: 16)
             }
-            .offset(x: 884, y: 15)
-
-            // Настройки — круглая кнопка справа от статуса, как кнопки над листом.
-            Button { model.section = .settings } label: { IconButtonLabel(glyph: .settings) }
-                .buttonStyle(.plain).help("настройки")
-                .offset(x: 1134, y: 23)
+            .offset(x: 1004, y: 15)
         }
     }
 

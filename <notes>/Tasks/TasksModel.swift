@@ -28,7 +28,8 @@ import NotesCore
 
     func count(_ filter: Filter) -> Int { tasks.filter { matches($0, filter) }.count }
 
-    var visible: [NoteTask] { tasks.filter { matches($0, filter) } }
+    // Срочные — первыми в своей группе.
+    var visible: [NoteTask] { tasks.filter { matches($0, filter) }.sorted { $0.urgent && !$1.urgent } }
 
     func matches(_ task: NoteTask, _ filter: Filter) -> Bool {
         let group = NoteTasks.group(task)
@@ -43,8 +44,8 @@ import NotesCore
     }
 
     // Добавить из календаря: в «Входящие.md» в корне хранилища, дальше — обычная синхронизация.
-    func add(_ title: String, due: Date, hasTime: Bool) {
-        try? NoteTasks.append(title, due: due, hasTime: hasTime,
+    func add(_ title: String, due: Date?, hasTime: Bool, urgent: Bool = false) {
+        try? NoteTasks.append(title, due: due, hasTime: hasTime, urgent: urgent,
                               to: library.root.appendingPathComponent("Входящие.md"), library: library)
         reload()
     }

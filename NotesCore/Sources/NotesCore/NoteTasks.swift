@@ -12,6 +12,8 @@ public struct NoteTask: Hashable, Sendable, Identifiable {
     public let done: Bool
     public let due: Date?
     public let hasTime: Bool
+    // Срочная — «!!» в строке: `- [ ] Позвонить !! 📅 2026-10-31`.
+    public var urgent = false
 
     // Ключ для связки с событием календаря: заметка + текст. Переставили строку — связь не теряется.
     public var key: String { note.path + "|" + title }
@@ -36,8 +38,14 @@ public enum NoteTasks {
             (due, hasTime) = parseDate(String(tail))
             text = String(text[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
         }
+        var urgent = false
+        if text.hasSuffix("!!") || text.contains(" !! ") {
+            urgent = true
+            text = text.replacingOccurrences(of: " !! ", with: " ").replacingOccurrences(of: "!!", with: "")
+                .trimmingCharacters(in: .whitespaces)
+        }
         guard !text.isEmpty else { return nil }
-        return NoteTask(note: note, line: index, raw: line, title: text, done: box != " ", due: due, hasTime: hasTime)
+        return NoteTask(note: note, line: index, raw: line, title: text, done: box != " ", due: due, hasTime: hasTime, urgent: urgent)
     }
 
     // «2026-10-16» или «2026-10-16 15:00», время — в часовом поясе Mac.
@@ -76,12 +84,14 @@ public enum NoteTasks {
     public enum EditError: Error { case changedOnDisk }
 
     // Задача из календаря: строка дописывается в конец заметки (заметку создаём, если её нет).
-    public static func append(_ title: String, due: Date, hasTime: Bool, to url: URL, library: NoteLibrary) throws {
+    public static func append(_ title: String, due: Date?, hasTime: Bool, urgent: Bool = false,
+                              to url: URL, library: NoteLibrary) throws {
         let clean = title.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !clean.isEmpty else { return }
         var text = (try? library.read(url)) ?? ""
         if !text.isEmpty && !text.hasSuffix("\n") { text += "\n" }
-        try library.write(text + "- [ ] \(clean) \(marker) \(format(due, withTime: hasTime))\n", to: url)
+        let date = due.map { " \(marker) \(format($0, withTime: hasTime))" } ?? ""
+        try library.write(text + "- [ ] \(clean)\(urgent ? " !!" : "")\(date)\n", to: url)
     }
 
     // Отметить задачу (не)сделанной — правим только её строку. Если файл с тех пор поменяли и строки
