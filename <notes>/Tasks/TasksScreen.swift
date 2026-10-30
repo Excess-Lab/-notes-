@@ -40,7 +40,10 @@ struct TasksScreen: View {
                             .kerning(Theme.tracking(-7, size: 15))
                             .foregroundStyle(Theme.ink)
                             .padding(.top, 26)
-                        ForEach(items) { task in TaskRow(model: model, task: task) }
+                        ForEach(items) { task in
+                            TaskRow(model: model, task: task)
+                                .transition(AnyTransition.opacity.combined(with: .scale(scale: 0.98, anchor: .leading)))
+                        }
                     }
                 }
                 if !model.calendar.hasAccess && model.tasks.contains(where: { $0.due != nil }) {
@@ -63,16 +66,26 @@ struct TasksScreen: View {
 private struct TaskRow: View {
     let model: TasksModel
     let task: NoteTask
+    // Отметили — галочка и зачёркивание сразу, а строка уходит через полсекунды плавно (ТЗ 30.10.2026).
+    @State private var checking = false
 
     var body: some View {
         let linked = model.calendar.isLinked(task)
+        let done = task.done != checking
         HStack(spacing: 10) {
-            Button { model.toggle(task) } label: {
-                DotIcon(glyph: task.done ? .taskDone : .task,
-                        color: task.done ? Color(red: 52 / 255, green: 199 / 255, blue: 89 / 255) : Theme.ink)
+            Button {
+                withAnimation(.smooth(duration: 0.25)) { checking = true }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                    withAnimation(.smooth(duration: 0.45)) { model.toggle(task) }
+                    checking = false
+                }
+            } label: {
+                DotIcon(glyph: done ? .taskDone : .task,
+                        color: done ? Color(red: 52 / 255, green: 199 / 255, blue: 89 / 255) : Theme.ink)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(checking)
             .help(task.done ? "вернуть" : "готово")
             if task.urgent {
                 Text("!!").font(Martian.heading.font(13)).foregroundStyle(Theme.coral).help("срочно")
@@ -81,7 +94,8 @@ private struct TaskRow: View {
             Text(task.title)
                 .font(Martian.body.font(13))
                 .kerning(Theme.tracking(-7, size: 13))
-                .foregroundStyle(Theme.ink.opacity(task.done ? 0.4 : 1))
+                .foregroundStyle(Theme.ink.opacity(done ? 0.4 : 1))
+                .strikethrough(done && !task.done, color: Theme.ink.opacity(0.4))
                 .lineLimit(1)
             Text(model.library.breadcrumb(for: task.note).joined(separator: " / "))
                 .font(Martian.body.font(11))
@@ -548,6 +562,8 @@ private struct NewTaskBar: View {
         .frame(width: min(832, page), height: 44)
         .background(Capsule().fill(Theme.fg.opacity(0.04)))
         .overlay(Capsule().strokeBorder(focused ? Theme.coral.opacity(0.5) : .clear, lineWidth: 1))
+        // Плюс справа сверху — сюда, в строку новой задачи.
+        .onChange(of: model.focusNew) { focused = true }
         .animation(.smooth(duration: 0.25), value: withDate)
     }
 

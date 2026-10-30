@@ -453,10 +453,25 @@ struct SectionContent: View {
                     .transition(.opacity)
             }
 
+            // Кнопки справа сверху — свои в каждом разделе, в настройках никаких (ТЗ 30.10.2026).
             HStack(spacing: 8) {
-                IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
-                IconButton(glyph: .newNote, help: "новая заметка") { model.newNote() }
-                    .keyboardShortcut("n", modifiers: .command)
+                switch model.section {
+                case .notes:
+                    IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
+                    IconButton(glyph: .newNote, help: "новая заметка") { model.newNote() }
+                        .keyboardShortcut("n", modifiers: .command)
+                case .tasks:
+                    IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
+                    IconButton(glyph: .plus, help: "новая задача") { model.tasks.focusNew += 1 }
+                        .keyboardShortcut("n", modifiers: .command)
+                case .calendar:
+                    IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
+                case .video:
+                    IconButton(glyph: .plus, help: "добавить видео или аудио") { model.video.choose() }
+                        .keyboardShortcut("n", modifiers: .command)
+                case .settings:
+                    EmptyView()
+                }
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.trailing, 15)

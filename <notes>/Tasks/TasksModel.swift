@@ -13,6 +13,8 @@ import NotesCore
     let library: NoteLibrary
     private(set) var tasks: [NoteTask] = []
     var filter: Filter = .all
+    // Растёт по плюсу справа сверху — строка новой задачи берёт фокус.
+    var focusNew = 0
     let calendar = CalendarSync.shared
 
     init(library: NoteLibrary) {
