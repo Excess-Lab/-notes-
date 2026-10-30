@@ -19,11 +19,17 @@ final class SyncController {
     private var engine: SyncEngine?
     // Когда последний раз прошёл цикл синхронизации — для «синхронизировано 2 мин назад» в шапке.
     private(set) var lastSync: Date?
+    // Последний коммит и последняя ошибка — раньше ошибки писались только в системный журнал,
+    // и что история не уходит на GitHub, было не видно (30.10.2026).
+    private(set) var lastCommit: Date?
+    private(set) var lastError: String?
+    private var vault: URL?
     private var loop: Task<Void, Never>?
 
     // Запускаем, только если папка уже git-репозиторий: без «инициализировать» историю не ведём.
     func start(vault: URL) {
         guard engine == nil, GitVault.isRepository(vault) else { return }
+        self.vault = vault
         let engine = SyncEngine(folder: vault)
         self.engine = engine
         loop = Task { [weak self] in
@@ -37,12 +43,16 @@ final class SyncController {
 
     private func tick() async {
         guard let engine else { return }
+        lastError = nil
+        await connectIfNeeded()
         do {
             if let message = try await engine.commitNow() {
                 log.info("коммит: \(message, privacy: .private)")
+                lastCommit = Date()
             }
         } catch {
             log.error("не закоммитили: \(String(describing: error), privacy: .public)")
+            lastError = "коммит: \(error.localizedDescription)"
         }
         await pull()
         await pushIfDue()
@@ -50,14 +60,42 @@ final class SyncController {
     }
 
     var isRunning: Bool { engine != nil }
+
+    // Вход в GitHub есть, а папка к нему не привязана (сменили папку или пересоздали приложение) —
+    // привязываем к своему notes, забираем его историю и отправляем свою. Раньше история так и
+    // оставалась только на Mac.
+    private func connectIfNeeded() async {
+        guard let vault, let token = await Self.token() else { return }
+        let hasRemote = await Task.detached { (try? GitVault.open(at: vault))?.remoteURL() != nil }.value
+        guard !hasRemote else { return }
+        do {
+            let repo = try await GitHubRepositories(token: token).ensureNotes()
+            try await Task.detached {
+                let git = try GitVault.open(at: vault)
+                try git.setRemote(repo.cloneURL)
+                _ = try git.pull(token: token)
+                try git.push(token: token)
+            }.value
+            Self.markPushed()
+            log.info("папка привязана к \(repo.fullName, privacy: .public)")
+        } catch {
+            lastError = "привязать к github: \(error.localizedDescription)"
+        }
+    }
     static var lastPush: Date? { UserDefaults.standard.object(forKey: lastPushKey) as? Date }
 
     // «отправить сейчас» в настройках: коммит накопившегося и отправка, не дожидаясь суток.
     func pushNow() async -> Bool {
         guard let engine, let token = await Self.token() else { return false }
         _ = try? await engine.commitNow()
-        let sent = (try? await engine.pushIfDue(token: token, lastPush: .distantPast)) ?? false
-        if sent { Self.markPushed() }
+        await connectIfNeeded()
+        var sent = false
+        do {
+            sent = try await engine.pushIfDue(token: token, lastPush: .distantPast)
+            if sent { Self.markPushed() }
+        } catch {
+            lastError = "отправить на github: \(error.localizedDescription)"
+        }
         lastSync = Date()
         return sent
     }
@@ -65,6 +103,7 @@ final class SyncController {
     // Подпись в шапке главного экрана.
     func status(now: Date) -> String {
         guard engine != nil else { return "без git — история не ведётся" }
+        if lastError != nil { return "не отправилось — см. настройки" }
         guard let lastSync else { return "синхронизируем…" }
         let minutes = Int(now.timeIntervalSince(lastSync) / 60)
         switch minutes {
@@ -97,6 +136,7 @@ final class SyncController {
             }
         } catch {
             log.error("не забрали с github: \(String(describing: error), privacy: .public)")
+            lastError = "забрать с github: \(error.localizedDescription)"
         }
     }
 
@@ -111,6 +151,7 @@ final class SyncController {
             }
         } catch {
             log.error("не отправили на github: \(String(describing: error), privacy: .public)")
+            lastError = "отправить на github: \(error.localizedDescription)"
         }
     }
 }

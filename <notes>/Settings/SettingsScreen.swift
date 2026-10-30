@@ -123,8 +123,11 @@ private struct SyncPage: View {
         SettingRow(title: "github", subtitle: TokenStore().exists ? "приватный notes, отправка раз в сутки" : "вход по коду — на первом входе") {
             if TokenStore().exists { GrantedLabel(text: "подключено") } else { Text("не подключено").font(Martian.body.font(13)).foregroundStyle(Theme.fg.opacity(0.3)) }
         }
+        SettingRow(title: "последний коммит", subtitle: sync.lastCommit.map { NoteEditor.date($0) } ?? "с запуска правок не было") {
+            EmptyView()
+        }
         SettingRow(title: "последняя отправка",
-                   subtitle: SyncController.lastPush.map { NoteEditor.date($0) } ?? "ещё не отправляли") {
+                   subtitle: sync.lastError ?? (SyncController.lastPush.map { NoteEditor.date($0) } ?? "ещё не отправляли")) {
             Button(sending ? "отправляем…" : "отправить сейчас") {
                 sending = true
                 Task { _ = await sync.pushNow(); sending = false }
