@@ -8,7 +8,7 @@ import SwiftUI
     init() {
         FontRegistrar.registerBundledFonts()
         // Смена темы вслед за системой — плавно (ThemeCrossfade).
-        DispatchQueue.main.async { ThemeCrossfade.shared.start() }
+        DispatchQueue.main.async { ThemeCrossfade.shared.start(); DockIcon.shared.start() }
         #if DEBUG
         // `--args -themeFlipTest YES` — через 3 с приложение само меняет тему: снять кадр посреди наплыва.
         if UserDefaults.standard.bool(forKey: "themeFlipTest") {
