@@ -50,6 +50,8 @@ import SwiftUI
                     #endif
                 }
         }
+        // Окно сжимается до 820, но открывается в размер кадра 1200×760.
+        .defaultSize(width: 1200, height: 760)
         .windowResizability(.contentSize)
         .commands {
             // Чтобы смотреть анимацию загрузки много раз подряд, не перезапуская приложение.

@@ -6,7 +6,7 @@ import SwiftUI
 // и поиск поверх (79:12603). Окно 1200×760, все координаты — из кадров.
 enum NotesLayout {
     static let window = CGSize(width: 1200, height: 760)
-    static let minWidth: CGFloat = 1000
+    static let minWidth: CGFloat = 820
     static let header: CGFloat = 92
     static let gray = Color(red: 134 / 255, green: 134 / 255, blue: 139 / 255)
     static let line = Color(light: Color(red: 227 / 255, green: 227 / 255, blue: 232 / 255), dark: .white.opacity(0.1))
@@ -35,7 +35,7 @@ struct NotesWindow: View {
                 .transition(.opacity.combined(with: .blurReplace))
             }
         }
-        // Окно тянется; сжимается до 1000 (31.10.2026, «окно не сжимается»): разделы берут ширину листа,
+        // Окно тянется; сжимается до 820 (31.10.2026, «окно не сжимается»): разделы берут ширину листа,
         // шапка прячет подписи в значки.
         .frame(minWidth: NotesLayout.minWidth, maxWidth: .infinity,
                minHeight: NotesLayout.window.height, maxHeight: .infinity, alignment: .topLeading)
@@ -57,31 +57,34 @@ struct NotesWindow: View {
             TopBar(model: model)
                 .modifier(Arrival(shown: arrived, delay: 0.05))
 
-            // Боковая панель и лист содержимого — отдельные стеклянные листы под шапкой.
+            // Кадр 152:32854: один стеклянный лист на панель и раздел; путь — капсулой над панелью,
+            // строки панели с 161, раздел — с 283.
+            GlassSheet(radius: 18)
+                .frame(width: w - 34, height: h - 92)
+                .offset(x: 17, y: 92)
+                .modifier(Arrival(shown: arrived, delay: 0.15))
+
             Group {
-                GlassSheet(radius: 14)
-                    .frame(width: 247, height: h - 92)
-                // Смена раздела: панель уходит в размытие и проявляется новой, вместе с листом справа.
+                SectionCrumb(model: model)
+                    .offset(x: 10, y: 15)
+                // Смена раздела: панель уходит в размытие и проявляется новой, вместе с разделом справа.
                 SectionSidebar(model: model)
                     .id(model.section)
                     .transition(.blurReplace)
-                    .frame(width: 247, height: h - 92, alignment: .topLeading)
+                    .frame(width: 247, height: h - 146, alignment: .topLeading)
+                    .offset(y: 54)
             }
             .animation(.smooth(duration: 0.45), value: model.section)
             .offset(x: 17, y: 92)
-            .modifier(Arrival(shown: arrived, delay: 0.15))
+            .modifier(Arrival(shown: arrived, delay: 0.2))
 
-            Group {
-                GlassSheet(radius: 18)
-                    .frame(width: w - 294, height: h - 92)
-                // Обрезаем до сдвига: после .offset обрезка шла по старому месту, и правый край листа пропадал.
-                SectionContent(model: model)
-                    .environment(\.pageWidth, w - 294 - 116)
-                    .frame(width: w - 294, height: h - 92, alignment: .topLeading)
-                    .clipped()
-            }
-            .offset(x: 279, y: 92)
-            .modifier(Arrival(shown: arrived, delay: 0.25))
+            // Обрезаем до сдвига: после .offset обрезка шла по старому месту, и правый край листа пропадал.
+            SectionContent(model: model)
+                .environment(\.pageWidth, w - 300 - 116)
+                .frame(width: w - 300, height: h - 92, alignment: .topLeading)
+                .clipped()
+                .offset(x: 283, y: 92)
+                .modifier(Arrival(shown: arrived, delay: 0.25))
         }
         }
         .onAppear { arrived = true }
@@ -144,14 +147,20 @@ private struct TopBar: View {
     let model: NotesModel
     @State private var sync = SyncController.shared
     @State private var hovered: NotesModel.Section?
+    @State private var fullSections: CGFloat = 518
+    @State private var syncText: CGFloat = 0
     @Namespace private var hover
 
     var body: some View {
         GeometryReader { geo in
-        // Сжимаем по очереди (31.10.2026): сперва синхронизация — её текст не влезает и растворяется к краю
-        // («он будет просто затемняться»), разделы теряют слова, только когда и значку не хватает места.
-        let compact = geo.size.width < 449 + 540 + 15 + 48 + 17
-        ZStack(alignment: .topLeading) {
+        // Сжимаем по очереди (31.10.2026): сперва синхронизация — её текст не влезает и растворяется к краю,
+        // разделы теряют слова, только когда рядом с ними не остаётся места и для значка синхронизации.
+        // Ширину разделов со словами меряем (невидимая копия ниже), а не берём 540 из кадра: у Макара
+        // подписи вылезали под синхронизацию.
+        let compact = geo.size.width < 449 + fullSections + 22 + 16 + 48 + 17
+        // Группы — в ряд (HStack): синхронизация встаёт сразу за разделами. На отступах .offset она съезжала
+        // под разделы — TimelineView тянется на всю ширину и сдвигал её.
+        HStack(alignment: .top, spacing: 0) {
             HeaderGroup(width: 417) {
                 Button { model.section = .notes } label: {
                     Text("<notes>")
@@ -179,56 +188,84 @@ private struct TopBar: View {
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut("k", modifiers: .command)
+                .background {
+                    // Настройки ушли из шапки (кадр 152:32854) — открываются ⌘,.
+                    Button("") { model.flush(); model.section = .settings }
+                        .keyboardShortcut(",", modifiers: .command)
+                        .opacity(0).allowsHitTesting(false)
+                }
                 .offset(x: 146)
             }
-            .offset(x: 17, y: 15)
+            .padding(.leading, 17)
+            .padding(.trailing, 15)
 
             // Узкое окно — значки, название — подсказкой при наведении; широкое — со словами, как в кадрах.
             // Подсветка наведения одна на группу и переезжает между кнопками, не вылезая за них.
-            let sections: CGFloat = compact ? 5 * 34 + 4 * 6 + 22 : 540
+            let sections: CGFloat = compact ? 3 * 34 + 2 * 6 + 22 : fullSections + 22
             HeaderGroup(width: sections) {
-                HStack(spacing: compact ? 6 : 10) {
-                    section("заметки", .notes, .notes, compact)
-                    section("задачи", .taskDone, .tasks, compact)
-                    section("календарь", .calendar, .calendar, compact)
-                    section("видео", .video, .video, compact)
-                    section("настройки", .settings, .settings, compact)
-                }
-                .offset(x: 11)
+                sectionButtons(compact: compact)
+                    .offset(x: 11)
                 .animation(.smooth(duration: 0.25), value: hovered)
             }
-            .offset(x: 449, y: 15)
+            .padding(.trailing, 16)
 
-            // Синхронизация тянется до правого края окна с тем же отступом, что слева.
-            let left = 449 + sections + 15
-            TimelineView(.periodic(from: .now, by: 30)) { context in
-                HeaderGroup(width: max(48, geo.size.width - left - 17)) {
-                    // Не влезает — к краю текст уходит в размытие, как под стеклом, и растворяется
-                    // (31.10.2026, «он размывается прям с эффектом размытия»).
-                    let line = HStack(spacing: 6) {
-                        DotIcon(glyph: .git)
+            let left = 449 + sections + 16
+            // По ширине текста, как в кадре; места нет — сжимается первой.
+            let width = max(48, min(16 + 16 + 6 + syncText + 16, geo.size.width - left - 17))
+            HeaderGroup(width: width) {
+                // Не влезает — к краю текст уходит в размытие и растворяется («он размывается прям
+                // с эффектом размытия»); влезает — чистый, без размытия (31.10.2026).
+                let line = HStack(spacing: 6) {
+                    DotIcon(glyph: .git)
+                    TimelineView(.periodic(from: .now, by: 30)) { context in
                         Text(sync.status(now: context.date))
                             .font(Martian.body.font(11))
                             .kerning(Theme.tracking(-7, size: 11))
                             .foregroundStyle(Theme.fg)
                             .fixedSize()
+                            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { syncText = $0 }
                     }
-                    .opacity(0.4)
-                    .padding(.leading, 16)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-                    ZStack {
-                        line.mask(Self.edge([(.black, 0), (.black, 0.6), (.clear, 0.82)]))
-                        line.blur(radius: 4)
-                            .mask(Self.edge([(.clear, 0.55), (.black, 0.78), (.clear, 0.97)]))
-                    }
-                    .clipped()
-                    .contentShape(Rectangle())
-                    .help(sync.status(now: context.date))
+                    .fixedSize()
                 }
+                .opacity(0.4)
+                .padding(.leading, 16)
+                // Ширина строки — ровно капсула: длинный текст раньше раздувал её, и капсула
+                // вылезала по центру поверх разделов.
+                .frame(width: width, height: 48, alignment: .leading)
+                let fade = 16 + 16 + 6 + syncText + 14 > width
+                let end = 1 - 10 / width, mid = 1 - 30 / width, start = 1 - 50 / width
+                ZStack {
+                    if fade {
+                        line.mask(Self.edge([(.black, 0), (.black, start), (.clear, mid)]))
+                        line.blur(radius: 4).mask(Self.edge([(.clear, start), (.black, mid), (.clear, end)]))
+                    } else {
+                        line
+                    }
+                }
+                .clipped()
+                .contentShape(Rectangle())
+                .help(sync.status(now: .now))
             }
-            .offset(x: left, y: 15)
+            Spacer(minLength: 0)
+        }
+        .padding(.top, 15)
+        .background(alignment: .topLeading) {
+            sectionButtons(compact: false)
+                .fixedSize()
+                .hidden()
+                .allowsHitTesting(false)
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { fullSections = $0 }
         }
         .animation(.smooth(duration: 0.35), value: compact)
+        }
+    }
+
+    private func sectionButtons(compact: Bool) -> some View {
+        // Кадр 152:32854: в группе только задачи, календарь, видео; заметки — по логотипу, настройки — ⌘,.
+        HStack(spacing: compact ? 6 : 10) {
+            section("задачи", .taskDone, .tasks, compact)
+            section("календарь", .calendar, .calendar, compact)
+            section("видео", .video, .video, compact)
         }
     }
 
@@ -279,15 +316,6 @@ struct NotesSidebar: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Button { model.open(.folder(model.library.root)) } label: {
-                Text("заметки")
-                    .font(Martian.body.font(11))
-                    .kerning(Theme.tracking(-7, size: 11))
-                    .foregroundStyle(Theme.fg.opacity(0.2))
-            }
-            .buttonStyle(.plain)
-            .padding(.leading, 10)
-            .padding(.top, 12)
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 2) {
@@ -416,16 +444,6 @@ struct SectionContent: View {
             .transition(.blurReplace)
             .padding(.top, 51)
 
-            Text(crumb)
-                .contentTransition(.interpolate)
-                .font(Martian.body.font(13))
-                .kerning(Theme.tracking(-7, size: 13))
-                .foregroundStyle(NotesLayout.gray)
-                .lineLimit(1)
-                .padding(.horizontal, 15)
-                .frame(height: 36)
-                .background(Capsule().fill(Theme.bg.opacity(0.2)))
-                .offset(x: 15, y: 15)
 
             HStack(spacing: 8) {
                 IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
@@ -447,7 +465,7 @@ struct SectionContent: View {
         }
     }
 
-    private var crumb: String {
+    static func crumb(_ model: NotesModel) -> String {
         switch model.section {
         case .notes: model.breadcrumb
         case .tasks: "задачи / " + model.tasks.filter.rawValue
@@ -455,6 +473,28 @@ struct SectionContent: View {
         case .video: model.video.crumb
         case .settings: "настройки / " + model.settingsPage.rawValue
         }
+    }
+}
+
+// Путь раздела капсулой над боковой панелью; в заметках клик — ко всем заметкам.
+private struct SectionCrumb: View {
+    let model: NotesModel
+
+    var body: some View {
+        Button { if model.section == .notes { model.open(.folder(model.library.root)) } } label: {
+            Text(SectionContent.crumb(model))
+                .contentTransition(.interpolate)
+                .font(Martian.body.font(13))
+                .kerning(Theme.tracking(-7, size: 13))
+                .foregroundStyle(NotesLayout.gray)
+                .lineLimit(1)
+                .padding(.horizontal, 15)
+                .frame(maxWidth: 227, minHeight: 36, alignment: .leading)
+                .fixedSize()
+                .background(Capsule().fill(Theme.bg.opacity(0.2)))
+        }
+        .buttonStyle(.plain)
+        .animation(.smooth(duration: 0.45), value: SectionContent.crumb(model))
     }
 }
 
@@ -573,12 +613,7 @@ struct SidebarList<Rows: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(title)
-                .font(Martian.body.font(11))
-                .kerning(Theme.tracking(-7, size: 11))
-                .foregroundStyle(Theme.fg.opacity(0.2))
-                .padding(.leading, 10)
-                .padding(.top, 12)
+            // Заголовка над строками в кадре 152:32854 нет — раздел виден по пути над панелью.
             VStack(alignment: .leading, spacing: 2) { rows() }
                 .padding(.horizontal, 10)
                 .padding(.top, 15)

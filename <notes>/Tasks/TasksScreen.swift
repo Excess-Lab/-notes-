@@ -126,44 +126,17 @@ struct CalendarScreen: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(Martian.heading.font(26))
-                        .kerning(Theme.tracking(-7, size: 26))
-                        .foregroundStyle(Theme.ink)
-                    Text(tasks.calendar.hasAccess ? "синхронизировано с apple calendar" : "нет доступа к календарю")
-                        .font(Martian.body.font(13))
-                        .kerning(Theme.tracking(-7, size: 13))
-                        .foregroundStyle(NotesLayout.gray)
+            // Узкое окно — кнопки уходят под заголовок, а не сжимают его в столбик (31.10.2026).
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top) {
+                    header
+                    Spacer()
+                    controls
                 }
-                Spacer()
-                // Листать: ‹ сегодня › — раньше только стрелками с клавиатуры, и то не всегда.
-                HStack(spacing: 4) {
-                    Button { shift(-1) } label: { IconButtonLabel(glyph: .chevronLeft) }.buttonStyle(.plain)
-                    Button("сегодня") { withAnimation(.smooth(duration: 0.4)) { anchor = Date() } }
-                        .buttonStyle(QuietLinkStyle(size: 13, opacity: 0.6))
-                    Button { shift(1) } label: { IconButtonLabel(glyph: .chevronRight) }.buttonStyle(.plain)
+                VStack(alignment: .leading, spacing: 16) {
+                    header
+                    HStack(alignment: .top, spacing: 0) { controls }
                 }
-                .padding(.trailing, 8).padding(.top, 2)
-                // Плюс — новая задача на ближайший час сегодня (или на выбранный день).
-                Button {
-                    mode = mode == .month ? .day : mode
-                    let hour = Calendar.current.component(.hour, from: Date()) + 1
-                    draft = Calendar.current.date(bySettingHour: min(max(hour, 9), 16), minute: 0, second: 0,
-                                                  of: mode == .day ? anchor : Date())
-                } label: { IconButtonLabel(glyph: .plus) }
-                    .buttonStyle(.plain).help("новая задача").padding(.trailing, 8).padding(.top, 2)
-                HStack(spacing: 2) {
-                    ForEach(Mode.allCases, id: \.self) { item in
-                        Button { withAnimation(.smooth(duration: 0.4)) { mode = item } } label: { ModeChip(title: item.rawValue, on: mode == item) }
-                            .buttonStyle(.plain)
-                    }
-                }
-                .padding(3)
-                .background(Capsule().fill(Theme.bg.opacity(0.45)))
-                .overlay(Capsule().strokeBorder(Theme.edge.opacity(0.75), lineWidth: 1))
-                .padding(.top, 4)
             }
             .frame(width: page)
 
@@ -203,6 +176,49 @@ struct CalendarScreen: View {
         anchor = date
         mode = .day
         tasks.calendar.focus = nil
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(Martian.heading.font(26))
+                .kerning(Theme.tracking(-7, size: 26))
+                .foregroundStyle(Theme.ink)
+            Text(tasks.calendar.hasAccess ? "синхронизировано с apple calendar" : "нет доступа к календарю")
+                .font(Martian.body.font(13))
+                .kerning(Theme.tracking(-7, size: 13))
+                .foregroundStyle(NotesLayout.gray)
+        }
+        .fixedSize()
+    }
+
+    @ViewBuilder private var controls: some View {
+        // Листать: ‹ сегодня › — раньше только стрелками с клавиатуры, и то не всегда.
+        HStack(spacing: 4) {
+            Button { shift(-1) } label: { IconButtonLabel(glyph: .chevronLeft) }.buttonStyle(.plain)
+            Button("сегодня") { withAnimation(.smooth(duration: 0.4)) { anchor = Date() } }
+                .buttonStyle(QuietLinkStyle(size: 13, opacity: 0.6))
+            Button { shift(1) } label: { IconButtonLabel(glyph: .chevronRight) }.buttonStyle(.plain)
+        }
+        .padding(.trailing, 8).padding(.top, 2)
+        // Плюс — новая задача на ближайший час сегодня (или на выбранный день).
+        Button {
+            mode = mode == .month ? .day : mode
+            let hour = Calendar.current.component(.hour, from: Date()) + 1
+            draft = Calendar.current.date(bySettingHour: min(max(hour, 9), 16), minute: 0, second: 0,
+                                          of: mode == .day ? anchor : Date())
+        } label: { IconButtonLabel(glyph: .plus) }
+            .buttonStyle(.plain).help("новая задача").padding(.trailing, 8).padding(.top, 2)
+        HStack(spacing: 2) {
+            ForEach(Mode.allCases, id: \.self) { item in
+                Button { withAnimation(.smooth(duration: 0.4)) { mode = item } } label: { ModeChip(title: item.rawValue, on: mode == item) }
+                    .buttonStyle(.plain)
+            }
+        }
+        .padding(3)
+        .background(Capsule().fill(Theme.bg.opacity(0.45)))
+        .overlay(Capsule().strokeBorder(Theme.edge.opacity(0.75), lineWidth: 1))
+        .padding(.top, 4)
     }
 
     private var week: [Date] {
