@@ -127,13 +127,20 @@ private struct SyncPage: View {
             EmptyView()
         }
         SettingRow(title: "последняя отправка",
-                   subtitle: sync.lastError ?? (SyncController.lastPush.map { NoteEditor.date($0) } ?? "ещё не отправляли")) {
+                   subtitle: SyncController.lastPush.map { NoteEditor.date($0) } ?? "ещё не отправляли") {
             Button(sending ? "отправляем…" : "отправить сейчас") {
                 sending = true
                 Task { _ = await sync.pushNow(); sending = false }
             }
             .buttonStyle(WhitePillStyle())
             .disabled(sending || !TokenStore().exists || !sync.isRunning)
+        }
+        // Ошибка — целиком и выделяемой, чтобы её можно было скопировать и прислать.
+        if let error = sync.lastError {
+            Text(error)
+                .font(Martian.body.font(11)).foregroundStyle(Theme.coral)
+                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+                .frame(width: 640, alignment: .leading).padding(.top, 8)
         }
         Note(text: "конфликты не теряют текст: версия с другого mac ляжет рядом")
             .onAppear { isRepo = GitVault.isRepository(vault) }

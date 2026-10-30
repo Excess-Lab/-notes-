@@ -12,10 +12,13 @@ public struct FileChange: Equatable, Sendable {
     }
 }
 
-public struct GitError: Error, CustomStringConvertible, Equatable {
+public struct GitError: LocalizedError, CustomStringConvertible, Equatable {
     public let code: Int32
     public let message: String
     public var description: String { "git: \(message) (\(code))" }
+    // Текст для экрана — сообщение самого libgit2. Без этого в настройках было только
+    // «The operation couldn't be completed (NotesCore.GitError …)».
+    public var errorDescription: String? { "\(message) (\(code))" }
 }
 
 // libgit2 возвращает отрицательный код при ошибке, а текст кладёт в «последнюю ошибку» потока.
