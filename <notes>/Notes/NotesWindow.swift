@@ -6,6 +6,7 @@ import SwiftUI
 // и поиск поверх (79:12603). Окно 1200×760, все координаты — из кадров.
 enum NotesLayout {
     static let window = CGSize(width: 1200, height: 760)
+    static let minWidth: CGFloat = 1000
     static let header: CGFloat = 92
     static let gray = Color(red: 134 / 255, green: 134 / 255, blue: 139 / 255)
     static let line = Color(light: Color(red: 227 / 255, green: 227 / 255, blue: 232 / 255), dark: .white.opacity(0.1))
@@ -34,8 +35,9 @@ struct NotesWindow: View {
                 .transition(.opacity.combined(with: .blurReplace))
             }
         }
-        // Окно тянется: минимум — размер кадра 1200×760.
-        .frame(minWidth: NotesLayout.window.width, maxWidth: .infinity,
+        // Окно тянется; сжимается до 1000 (31.10.2026, «окно не сжимается»): разделы берут ширину листа,
+        // шапка прячет подписи в значки.
+        .frame(minWidth: NotesLayout.minWidth, maxWidth: .infinity,
                minHeight: NotesLayout.window.height, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.bg)
         .animation(.smooth(duration: 0.3), value: model.searchShown)
@@ -74,6 +76,7 @@ struct NotesWindow: View {
                     .frame(width: w - 294, height: h - 92)
                 // Обрезаем до сдвига: после .offset обрезка шла по старому месту, и правый край листа пропадал.
                 SectionContent(model: model)
+                    .environment(\.pageWidth, w - 294 - 116)
                     .frame(width: w - 294, height: h - 92, alignment: .topLeading)
                     .clipped()
             }
@@ -97,6 +100,12 @@ private struct Arrival: ViewModifier {
             .offset(y: shown ? 0 : 14)
             .animation(.smooth(duration: 0.7).delay(delay), value: shown)
     }
+}
+
+// Ширина страницы раздела: лист минус поля 58 с каждой стороны. Тексты не шире 832, как в кадрах;
+// календарь тянется на всю ширину.
+extension EnvironmentValues {
+    @Entry var pageWidth: CGFloat = 832
 }
 
 // Стеклянный лист: #F9F9F9 20 % и светлый кант, как лист шагов первого входа.

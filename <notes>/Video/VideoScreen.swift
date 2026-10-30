@@ -16,6 +16,7 @@ struct VideoScreen: View {
 }
 
 private struct VideoList: View {
+    @Environment(\.pageWidth) private var page
     let video: VideoModel
     @State private var targeted = false
 
@@ -47,7 +48,7 @@ private struct VideoList: View {
                             .kerning(Theme.tracking(-7, size: 11))
                             .foregroundStyle(.white.opacity(0.55))
                     }
-                    .frame(width: 832, height: 148)
+                    .frame(width: min(832, page), height: 148)
                     .background {
                         TimelineView(.animation) { context in
                             Rectangle().fill(.white)
@@ -78,7 +79,7 @@ private struct VideoList: View {
                 group("готово", video.visible.filter { $0.status == .done })
                 group("не получилось", video.visible.filter { $0.status == .failed })
             }
-            .frame(width: 832, alignment: .leading)
+            .frame(width: min(832, page), alignment: .leading)
             .padding(.leading, 58)
             .padding(.top, 36)
             .padding(.bottom, 40)
@@ -171,6 +172,7 @@ extension VideoModel {
 // Расшифровка: заголовок — имя файла, главная кнопка «сохранить как заметку», рядом «копировать текст»
 // и «экспорт .srt», ниже строки с метками времени.
 private struct TranscriptView: View {
+    @Environment(\.pageWidth) private var page
     let model: NotesModel
     let item: VideoModel.Item
 
@@ -208,13 +210,13 @@ private struct TranscriptView: View {
                                 .kerning(Theme.tracking(-7, size: 15))
                                 .foregroundStyle(Theme.ink)
                                 .textSelection(.enabled)
-                                .frame(width: 600, alignment: .leading)
+                                .frame(width: min(600, page - 60), alignment: .leading)
                         }
                     }
                 }
                 .padding(.top, 24)
             }
-            .frame(width: 660, alignment: .leading)
+            .frame(width: min(660, page), alignment: .leading)
             .padding(.leading, 126)
             .padding(.top, 36)
             .padding(.bottom, 40)

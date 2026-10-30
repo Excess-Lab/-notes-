@@ -5,6 +5,7 @@ import SwiftUI
 // Задачи — кадр «задачи» (секция «Задачи и календарь»): заголовок, «N открыто | M в календаре»,
 // группы «сегодня / на неделе / позже / без даты / готово», строки с линией снизу.
 struct TasksScreen: View {
+    @Environment(\.pageWidth) private var page
     let model: TasksModel
 
     var body: some View {
@@ -50,7 +51,7 @@ struct TasksScreen: View {
                     .padding(.top, 20)
                 }
             }
-            .frame(width: 832, alignment: .leading)
+            .frame(width: min(832, page), alignment: .leading)
             .padding(.leading, 58)
             .padding(.top, 36)
             .padding(.bottom, 40)
@@ -106,6 +107,7 @@ private struct TaskRow: View {
 // Календарь — кадр «календарь»: неделя с часами 9–17, сегодня коралловым, события — серые плашки,
 // задачи из заметок — коралловые. Переключатель «день / неделя / месяц» как в поиске.
 struct CalendarScreen: View {
+    @Environment(\.pageWidth) private var page
     let tasks: TasksModel
     // Загруженные на расшифровку видео — серой строкой в день загрузки.
     var uploads: [VideoModel.Item] = []
@@ -163,7 +165,7 @@ struct CalendarScreen: View {
                 .overlay(Capsule().strokeBorder(Theme.edge.opacity(0.75), lineWidth: 1))
                 .padding(.top, 4)
             }
-            .frame(width: 832)
+            .frame(width: page)
 
             if tasks.calendar.hasAccess {
                 Group {
@@ -244,6 +246,7 @@ private struct ModeChip: View {
 // Колонки дней на сутки 0:00–23:59 с прокруткой, открываются на 8:00. Пересекающиеся события стоят
 // рядом, а не друг на друге (раньше всё после 17:00 прижималось к низу и налезало).
 private struct DayGrid: View {
+    @Environment(\.pageWidth) private var page
     let days: [Date]
     let tasks: TasksModel
     let uploads: [VideoModel.Item]
@@ -253,7 +256,7 @@ private struct DayGrid: View {
     private let gutter: CGFloat = 44, hour: CGFloat = 44, head: CGFloat = 44
 
     var body: some View {
-        let colW = (832 - gutter) / CGFloat(days.count)
+        let colW = (page - gutter) / CGFloat(days.count)
         let events = tasks.calendar.events(from: days[0], to: Calendar.current.date(byAdding: .day, value: 1, to: days.last!)!)
         let lanes = Self.lanes(events)
         VStack(alignment: .leading, spacing: 0) {
@@ -275,20 +278,20 @@ private struct DayGrid: View {
                     .offset(x: gutter + CGFloat(index) * colW + 6)
                 }
             }
-            .frame(width: 832, height: head, alignment: .topLeading)
+            .frame(width: page, height: head, alignment: .topLeading)
 
             ScrollViewReader { scroll in
                 ScrollView {
                     ZStack(alignment: .topLeading) {
                         ForEach(0..<24, id: \.self) { h in
-                            Rectangle().fill(NotesLayout.line).frame(width: 832 - gutter, height: 1)
+                            Rectangle().fill(NotesLayout.line).frame(width: page - gutter, height: 1)
                                 .offset(x: gutter, y: CGFloat(h) * hour)
                             Text("\(h):00").font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
                                 .offset(y: CGFloat(h) * hour - 6).id(h)
                         }
                         // Клик по пустому месту — задача на час; протянуть — сразу задать период. Шаг — 15 минут.
                         Color.clear.contentShape(Rectangle())
-                            .frame(width: 832 - gutter, height: 24 * hour)
+                            .frame(width: page - gutter, height: 24 * hour)
                             .offset(x: gutter)
                             .gesture(DragGesture(minimumDistance: 0)
                                 .onChanged { drag in
@@ -329,7 +332,7 @@ private struct DayGrid: View {
                                 }
                         }
                     }
-                    .frame(width: 832, height: 24 * hour + 10, alignment: .topLeading)
+                    .frame(width: page, height: 24 * hour + 10, alignment: .topLeading)
                     .padding(.top, 6)
                 }
                 .scrollIndicators(.never)
@@ -407,6 +410,7 @@ private struct EventBlock: View {
 
 // Месяц: сетка 7 × 6, в ячейке — число и до трёх событий строчками.
 private struct MonthGrid: View {
+    @Environment(\.pageWidth) private var page
     let month: Date
     let calendar: Calendar
     let tasks: TasksModel
@@ -416,7 +420,7 @@ private struct MonthGrid: View {
         let start = calendar.dateInterval(of: .weekOfYear, for: calendar.dateInterval(of: .month, for: month)!.start)!.start
         let days = (0..<42).map { calendar.date(byAdding: .day, value: $0, to: start)! }
         let events = tasks.calendar.events(from: days[0], to: days[41])
-        LazyVGrid(columns: Array(repeating: GridItem(.fixed(832 / 7 - 4), spacing: 4), count: 7), spacing: 4) {
+        LazyVGrid(columns: Array(repeating: GridItem(.fixed(page / 7 - 4), spacing: 4), count: 7), spacing: 4) {
             ForEach(days, id: \.self) { day in
                 let inMonth = calendar.isDate(day, equalTo: month, toGranularity: .month)
                 VStack(alignment: .leading, spacing: 2) {
@@ -439,7 +443,7 @@ private struct MonthGrid: View {
                 .onTapGesture { openDay(day) }
             }
         }
-        .frame(width: 832)
+        .frame(width: page)
     }
 }
 
@@ -497,6 +501,7 @@ private struct NewTaskPopover: View {
 // Новая задача прямо на экране задач: пишешь, Enter — готово. Срок и срочность — по желанию,
 // одним кликом. Задача ложится строкой во «Входящие.md».
 private struct NewTaskBar: View {
+    @Environment(\.pageWidth) private var page
     let model: TasksModel
     @State private var title = ""
     @State private var withDate = false
@@ -524,7 +529,7 @@ private struct NewTaskBar: View {
             }.buttonStyle(.plain).help("срочно")
         }
         .padding(.horizontal, 14)
-        .frame(width: 832, height: 44)
+        .frame(width: min(832, page), height: 44)
         .background(Capsule().fill(Theme.fg.opacity(0.04)))
         .overlay(Capsule().strokeBorder(focused ? Theme.coral.opacity(0.5) : .clear, lineWidth: 1))
         .animation(.smooth(duration: 0.25), value: withDate)

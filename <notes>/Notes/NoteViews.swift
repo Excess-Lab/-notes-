@@ -4,6 +4,7 @@ import SwiftUI
 // Открытая заметка — кадр 7:34: заголовок xWd xBd 28 на x = 120 листа, под ним «изменено … · N слов»,
 // текст Std Rg 15 шириной 660. Заголовок — имя файла: правка заголовка переименовывает файл.
 struct NoteEditor: View {
+    @Environment(\.pageWidth) private var page
     let model: NotesModel
     let url: URL
     @State private var title = ""
@@ -29,8 +30,9 @@ struct NoteEditor: View {
             MarkdownEditor(text: $model.text)
                 .padding(.top, 28)
         }
-        .frame(width: 660, alignment: .topLeading)
-        .padding(.leading, 120 + 6)
+        // Узкое окно — колонка текста уже и ближе к краю, а не обрезается.
+        .frame(width: min(660, page + 16), alignment: .topLeading)
+        .padding(.leading, min(120 + 6, page + 116 - min(660, page + 16) - 40))
         .padding(.top, 36)
         .onAppear {
             title = url.deletingPathExtension().lastPathComponent

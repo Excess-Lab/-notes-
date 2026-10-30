@@ -7,6 +7,7 @@ import SwiftUI
 // Настройки — кадры «настройки — …» (секция «настройки»): заголовок страницы, серая подпись,
 // стеклянные строки 640 с кнопкой справа, внизу пояснение. Всё на настоящих данных.
 struct SettingsScreen: View {
+    @Environment(\.pageWidth) private var pageWidth
     let model: NotesModel
 
     var body: some View {
@@ -33,7 +34,7 @@ struct SettingsScreen: View {
                     FolderPicks(folders: model.tree.folders.map(\.name), sync: model.tasks.calendar, reload: model.tasks.reload)
                 }
             }
-            .frame(width: 832, alignment: .leading)
+            .frame(width: min(832, pageWidth), alignment: .leading)
             .padding(.leading, 58)
             .padding(.top, 36)
             .padding(.bottom, 40)
@@ -146,7 +147,7 @@ private struct SyncPage: View {
             Text(error)
                 .font(Martian.body.font(11)).foregroundStyle(Theme.coral)
                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                .frame(width: 640, alignment: .leading).padding(.top, 8)
+                .frame(maxWidth: 640, alignment: .leading).padding(.top, 8)
         }
         Note(text: "правили на двух mac — сохраним обе версии")
             .onAppear { isRepo = GitVault.isRepository(vault) }
