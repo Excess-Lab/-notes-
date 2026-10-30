@@ -42,10 +42,6 @@ import SwiftUI
     var settingsPage: SettingsPage = .sync
 
     // Поиск по смыслу: встроенная модель Apple + индекс в Application Support (кэш, не в хранилище).
-    enum SearchMode { case meaning, text }
-    // По умолчанию — по тексту: встроенная модель Apple по смыслу угадывает не всегда (3 из 4 в тесте,
-    // 30.10.2026). «по смыслу» — переключателем в поиске.
-    var searchMode: SearchMode = .text { didSet { runSearch() } }
     private(set) var indexReady = false
     private let embedder = AppleEmbedder()
     private let index = SemanticIndex(store: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
@@ -192,23 +188,23 @@ import SwiftUI
 
     // MARK: - Поиск
 
+    // Смесь: по смыслу (модель Apple) + по словам. Где совпали слова — выше; найденное только словами
+    // не теряем. Пока индекс собирается — только по словам. Решение Макара: «делаем микс» (30.10.2026).
     private func runSearch() {
         let words = library.search(query, limit: 20)
-        if searchMode == .meaning, indexReady, let embedder {
-            // По смыслу — с подсказкой от слов: где слова совпали, заметка поднимается выше.
-            let byText = Dictionary(words.map { ($0.note.url.standardizedFileURL, $0) }, uniquingKeysWith: { a, _ in a })
-            let notes = Dictionary(library.allNotes(in: tree).map { ($0.url.standardizedFileURL, $0) }, uniquingKeysWith: { a, _ in a })
-            hits = index.search(query, embedder: embedder, limit: 12).compactMap { hit in
-                let url = hit.note.standardizedFileURL
-                guard let note = notes[url] else { return nil }
-                let bonus = byText[url] == nil ? 0 : 0.15
-                return NoteLibrary.Hit(note: note, snippet: byText[url]?.snippet ?? hit.snippet, score: hit.score + bonus)
-            }
-            .sorted { $0.score > $1.score }
-            .prefix(8).map { $0 }
-        } else {
-            hits = Array(words.prefix(8))
+        guard indexReady, let embedder else { hits = Array(words.prefix(8)); highlighted = 0; return }
+        let notes = Dictionary(library.allNotes(in: tree).map { ($0.url.standardizedFileURL, $0) }, uniquingKeysWith: { a, _ in a })
+        var merged: [URL: NoteLibrary.Hit] = [:]
+        for hit in index.search(query, embedder: embedder, limit: 12) {
+            let url = hit.note.standardizedFileURL
+            if let note = notes[url] { merged[url] = NoteLibrary.Hit(note: note, snippet: hit.snippet, score: hit.score) }
         }
+        for (rank, hit) in words.enumerated() {
+            let url = hit.note.url.standardizedFileURL
+            let bonus = 0.3 - Double(min(rank, 10)) * 0.01
+            merged[url] = NoteLibrary.Hit(note: hit.note, snippet: hit.snippet, score: (merged[url]?.score ?? 0) + 1 + bonus)
+        }
+        hits = Array(merged.values.sorted { $0.score > $1.score }.prefix(8))
         highlighted = 0
     }
 
