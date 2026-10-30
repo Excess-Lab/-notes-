@@ -298,7 +298,7 @@ extension Notification.Name {
     static let vaultChosen = Notification.Name("notes.vaultChosen")
 }
 
-// Из каких папок задачи уходят в календарь — по строке на папку верхнего уровня.
+// Из каких папок тянуть задачи — и в список задач, и в календарь. По строке на папку верхнего уровня.
 private struct FolderPicks: View {
     let folders: [String]
     let sync: CalendarSync
@@ -306,7 +306,7 @@ private struct FolderPicks: View {
     @State private var excluded: Set<String> = []
 
     var body: some View {
-        Text("папки в календаре")
+        Text("задачи из папок")
             .font(Martian.body.font(15)).foregroundStyle(Theme.ink).padding(.top, 26)
         ForEach(folders, id: \.self) { name in
             SettingRow(title: name) {

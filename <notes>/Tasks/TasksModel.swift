@@ -23,9 +23,10 @@ import NotesCore
     }
 
     func reload() {
-        tasks = NoteTasks.all(in: library)
-        // В календарь — только задачи из выбранных папок (настройки → календарь).
-        calendar.sync(tasks.filter { calendar.includes(library.breadcrumb(for: $0.note)) })
+        // Экран показывает ровно то, что уходит в календарь: задачи из выбранных папок (настройки → календарь,
+        // «задачи из папок»). Остальной Markdown не тянем (ТЗ 30.10.2026: «отображаем то, что с календаря»).
+        tasks = NoteTasks.all(in: library).filter { calendar.includes(library.breadcrumb(for: $0.note)) }
+        calendar.sync(tasks)
     }
 
     func count(_ filter: Filter) -> Int { tasks.filter { matches($0, filter) }.count }
