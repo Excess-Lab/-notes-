@@ -34,7 +34,8 @@
 - `<notes>/Icon/DockIcon.swift` — иконка в Доке темнеет вместе с темой приложения; `icon-dark.png` рядом собрана из слоёв AppIcon.icon.
 - `<notes>/Video/DropZone.metal` — шейдер зоны «перетащи» в видео: стеклянные планки поверх плывущих тёплых пятен.
 - `<notes>/Video/VideoScreen.swift` — список видео с зоной для файла и экран расшифровки.
-- `<notes>/Settings/SettingsScreen.swift` — пять страниц настроек на настоящих данных.
+- `<notes>/Settings/SettingsScreen.swift` — страницы настроек на настоящих данных: общие, синхронизация, надиктовка, поиск, вход, календарь, шаблоны.
+- `<notes>/Settings/AppSettings.swift` — подробные настройки в UserDefaults: тема, запуск при входе, размер текста, орфография, расписание синхронизации, язык речи, длина записи.
 - `<notes>/Vault/VaultStore.swift` — папка хранилища: выбор, security-scoped bookmark, iCloud.
 - `<notes>/Vault/BiometricLock.swift` — Touch ID: включить, войти, подтвердить хозяина для сброса пинкода.
 - `<notes>/Vault/SyncController.swift` — раз в час: коммит, pull, отправка раз в сутки.
