@@ -34,10 +34,11 @@ import SwiftUI
     let video: VideoModel
 
     enum SettingsPage: String, CaseIterable {
-        case sync = "синхронизация", dictation = "надиктовка", search = "поиск", lock = "вход", calendar = "календарь"
+        case general = "общие", sync = "синхронизация", dictation = "надиктовка", search = "поиск", lock = "вход", calendar = "календарь"
         case templates = "шаблоны"
         var glyph: DotGlyph {
             switch self {
+            case .general: .settings
             case .sync: .git
             case .dictation: .microphone
             case .search: .search
@@ -47,7 +48,7 @@ import SwiftUI
             }
         }
     }
-    var settingsPage: SettingsPage = .sync
+    var settingsPage: SettingsPage = .general
 
     // Открыли поиск — берём события календаря за год назад и вперёд один раз, а не на каждую букву.
     var searchShown = false { didSet { if searchShown { loadEvents() } } }

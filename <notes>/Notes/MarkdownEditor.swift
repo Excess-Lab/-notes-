@@ -23,8 +23,18 @@ struct MarkdownEditor: NSViewRepresentable {
         view.textContainerInset = .zero
         view.textContainer?.lineFragmentPadding = 0
         view.typingAttributes = Style.body
+        view.isContinuousSpellCheckingEnabled = AppSettings.spellCheck
         view.string = text
         Style.apply(to: view.textStorage)
+        // Размер текста и орфографию поменяли в настройках — перерисовать открытую заметку.
+        context.coordinator.styleObserver = NotificationCenter.default.addObserver(forName: .editorStyleChanged, object: nil, queue: .main) { [weak view] _ in
+            MainActor.assumeIsolated {
+                guard let view else { return }
+                view.typingAttributes = Style.body
+                view.isContinuousSpellCheckingEnabled = AppSettings.spellCheck
+                Style.apply(to: view.textStorage)
+            }
+        }
         return scroll
     }
 
@@ -44,7 +54,9 @@ struct MarkdownEditor: NSViewRepresentable {
         // Свой стек отмены у каждого редактора. С общим стеком окна ⌘Z после смены заметки звал
         // уже закрытый редактор — приложение падало (отчёты 30.10.2026, PITFALLS.md).
         let undo = UndoManager()
+        var styleObserver: NSObjectProtocol?
         init(text: Binding<String>) { self.text = text }
+        deinit { styleObserver.map(NotificationCenter.default.removeObserver) }
 
         func undoManager(for view: NSTextView) -> UndoManager? { undo }
 
@@ -62,8 +74,9 @@ struct MarkdownEditor: NSViewRepresentable {
             let paragraph = NSMutableParagraphStyle()
             paragraph.lineSpacing = 4
             paragraph.paragraphSpacing = 6
-            return [.font: NSFont(name: Martian.body.rawValue, size: 15) ?? .systemFont(ofSize: 15),
-                    .kern: Theme.tracking(-7, size: 15), .foregroundColor: ink, .paragraphStyle: paragraph]
+            let size = AppSettings.textSize
+            return [.font: NSFont(name: Martian.body.rawValue, size: size) ?? .systemFont(ofSize: size),
+                    .kern: Theme.tracking(-7, size: size), .foregroundColor: ink, .paragraphStyle: paragraph]
         }
 
         // Заголовки «#», «##», «###» — полужирные 24 / 20 / 17, как «Что делаем» в макете (Semibold 20).
@@ -76,7 +89,8 @@ struct MarkdownEditor: NSViewRepresentable {
                 guard let line, line.hasPrefix("#") else { return }
                 let level = line.prefix { $0 == "#" }.count
                 guard (1...3).contains(level), line.dropFirst(level).hasPrefix(" ") else { return }
-                let size: CGFloat = [24, 20, 17][level - 1]
+                // Заголовки растут вместе с размером текста из настроек (при 15 — как в макете).
+                let size: CGFloat = [24, 20, 17][level - 1] + AppSettings.textSize - 15
                 storage.addAttributes([.font: NSFont.systemFont(ofSize: size, weight: .semibold),
                                        .kern: Theme.tracking(-2, size: size)], range: range)
                 storage.addAttribute(.foregroundColor, value: ink.withAlphaComponent(0.25),

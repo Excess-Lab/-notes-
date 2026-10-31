@@ -143,7 +143,7 @@ import NotesSpeech
             guard let url = sources[id] else { update(id) { $0.status = .failed }; continue }
             update(id) { $0.status = .working; $0.progress = 0 }
             do {
-                let engine = try await Transcribers.make(model)
+                let engine = try await Transcribers.make(model, language: AppSettings.language)
                 let pieces = try await MediaTranscription.transcribe(url: url, engine: engine) { [model = self] progress, duration in
                     Task { @MainActor in model.update(id) { $0.progress = progress; $0.duration = duration } }
                 }

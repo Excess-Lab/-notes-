@@ -11,8 +11,9 @@ import os
 final class SyncController {
     static let shared = SyncController()
 
-    // Коммит раз в час, а не на каждую паузу в правках: история читается по часам, а не по словам.
-    static let commitInterval: Duration = .seconds(3600)
+    // Коммит по расписанию из настроек (по умолчанию раз в час), а не на каждую паузу в правках:
+    // история читается по часам, а не по словам.
+    static var commitInterval: Duration { .seconds(AppSettings.commitMinutes * 60) }
 
     private static let lastPushKey = "lastPush"
     private let log = Logger(subsystem: "notes", category: "sync")
@@ -149,7 +150,7 @@ final class SyncController {
         guard let engine, let token = await Self.token() else { return }
         let lastPush = UserDefaults.standard.object(forKey: Self.lastPushKey) as? Date
         do {
-            if try await engine.pushIfDue(token: token, lastPush: lastPush) {
+            if try await engine.pushIfDue(token: token, lastPush: lastPush, every: TimeInterval(AppSettings.pushMinutes * 60)) {
                 Self.markPushed()
                 log.info("история отправлена на github")
             }

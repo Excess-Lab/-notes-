@@ -37,10 +37,11 @@ public enum Transcribers {
 
     // Готовит распознаватель выбранной модели. Загрузка модели в память занимает секунды —
     // делаем один раз и держим, а не на каждую надиктовку.
-    public static func make(_ model: SpeechModel, store: ModelStore = .standard) async throws -> Transcriber {
+    // language — для Whisper: код языка («ru», «en») или «auto» — определить по речи. nil — язык модели.
+    public static func make(_ model: SpeechModel, language: String? = nil, store: ModelStore = .standard) async throws -> Transcriber {
         guard store.isInstalled(model) else { throw ModelError.notInstalled(model) }
         if model.whisperVariant != nil {
-            return try await WhisperTranscriber(folder: store.folder(for: model), language: model.language)
+            return try await WhisperTranscriber(folder: store.folder(for: model), language: language ?? model.language)
         }
         return try GigaAMTranscriber(folder: store.folder(for: model))
     }
@@ -108,7 +109,9 @@ public final class WhisperTranscriber: Transcriber, @unchecked Sendable {
     }
 
     public func transcribe(_ samples: [Float]) async throws -> String {
-        let options = DecodingOptions(language: language, detectLanguage: false)
+        // «auto» — Whisper сам слушает, на каком языке говорят (можно мешать русский и английский по фразам).
+        let options = language == "auto" ? DecodingOptions(language: nil, detectLanguage: true)
+                                         : DecodingOptions(language: language, detectLanguage: false)
         let results = try await pipe.transcribe(audioArray: samples, decodeOptions: options)
         return results.map(\.text).joined(separator: " ").trimmingCharacters(in: .whitespacesAndNewlines)
     }

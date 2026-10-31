@@ -69,6 +69,12 @@ struct PushScheduleTests {
 
     @Test("прошли сутки — пора")
     func dayPassed() { #expect(PushSchedule.isDue(lastPush: now.addingTimeInterval(-24 * 3600), now: now)) }
+
+    @Test("свой интервал из настроек: раз в час")
+    func customInterval() {
+        #expect(PushSchedule.isDue(lastPush: now.addingTimeInterval(-3600), now: now, every: 3600))
+        #expect(!PushSchedule.isDue(lastPush: now.addingTimeInterval(-3000), now: now, every: 3600))
+    }
 }
 
 @Suite("синхронизация хранилища")

@@ -51,9 +51,10 @@ public enum CommitMessage {
 public enum PushSchedule {
     public static let interval: TimeInterval = 24 * 60 * 60
 
-    public static func isDue(lastPush: Date?, now: Date = Date()) -> Bool {
+    // every — как часто отправлять (настройки → синхронизация); по умолчанию раз в сутки.
+    public static func isDue(lastPush: Date?, now: Date = Date(), every: TimeInterval = interval) -> Bool {
         guard let lastPush else { return true }
-        return now.timeIntervalSince(lastPush) >= interval
+        return now.timeIntervalSince(lastPush) >= every
     }
 }
 
@@ -88,8 +89,9 @@ public actor SyncEngine {
     }
 
     // Отправляет историю, если пора и есть что отправлять. true — отправили.
-    public func pushIfDue(token: String?, lastPush: Date?, now: Date = Date()) throws -> Bool {
-        guard PushSchedule.isDue(lastPush: lastPush, now: now) else { return false }
+    public func pushIfDue(token: String?, lastPush: Date?, now: Date = Date(),
+                          every: TimeInterval = PushSchedule.interval) throws -> Bool {
+        guard PushSchedule.isDue(lastPush: lastPush, now: now, every: every) else { return false }
         let vault = try GitVault.open(at: folder)
         guard vault.remoteURL() != nil, vault.hasUnpushedCommits else { return false }
         try vault.push(token: token)

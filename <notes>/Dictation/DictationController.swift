@@ -22,7 +22,7 @@ final class DictationController {
     private var hotKey: GlobalHotKey?
     private var panel: DictationPanel?
     // Модель загружается в память секунды — держим одну, пока не сменили в настройках.
-    private var transcriber: (model: SpeechModel, engine: Transcriber)?
+    private var transcriber: (model: SpeechModel, language: String, engine: Transcriber)?
 
     // Короче этого — случайное нажатие, а не фраза: не распознаём.
     private static let minimumSeconds = 0.4
@@ -75,7 +75,7 @@ final class DictationController {
 
     // Забыли нажать второй раз — через 5 минут останавливаем сами: дальше распознавание было бы
     // долгим, а запись — скорее всего случайной.
-    private static let maximumSeconds = 300
+    private static var maximumSeconds: Int { AppSettings.maxMinutes * 60 }
     private var limit: Task<Void, Never>?
 
     private func begin() {
@@ -173,10 +173,10 @@ final class DictationController {
     }
 
     private func loadTranscriber() async throws -> Transcriber {
-        let model = SpeechSettings.model
-        if let transcriber, transcriber.model == model { return transcriber.engine }
-        let engine = try await Transcribers.make(model)
-        transcriber = (model, engine)
+        let model = SpeechSettings.model, language = AppSettings.language
+        if let transcriber, transcriber.model == model, transcriber.language == language { return transcriber.engine }
+        let engine = try await Transcribers.make(model, language: language)
+        transcriber = (model, language, engine)
         return engine
     }
 

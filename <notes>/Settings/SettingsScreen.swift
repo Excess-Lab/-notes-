@@ -25,6 +25,7 @@ struct SettingsScreen: View {
                     .padding(.top, 1)
                     .padding(.bottom, 40)
                 switch page {
+                case .general: GeneralPage()
                 case .sync: SyncPage(model: model)
                 case .dictation: DictationPage()
                 case .search: SearchPage()
@@ -45,6 +46,7 @@ struct SettingsScreen: View {
 
     private func subtitle(_ page: NotesModel.SettingsPage) -> String {
         switch page {
+        case .general: "вид, запуск и текст заметок"
         case .sync: "где лежат заметки и куда уходят"
         case .dictation: "говоришь — текст в буфере"
         case .search: "заметки, задачи, события, видео"
@@ -99,6 +101,8 @@ private struct SyncPage: View {
     @State private var sending = false
     @State private var isRepo = false
     @State private var relogin = false
+    @State private var commit = AppSettings.commitMinutes
+    @State private var push = AppSettings.pushMinutes
 
     var body: some View {
         let vault = model.library.root
@@ -111,7 +115,7 @@ private struct SyncPage: View {
             }
             .buttonStyle(WhitePillStyle())
         }
-        SettingRow(title: "история в git", subtitle: "каждый час сохраняем версию") {
+        SettingRow(title: "история в git", subtitle: "версии правок — по расписанию ниже") {
             if isRepo {
                 GrantedLabel(text: "включено")
             } else {
@@ -125,12 +129,18 @@ private struct SyncPage: View {
                 .buttonStyle(WhitePillStyle())
             }
         }
-        SettingRow(title: "github", subtitle: TokenStore().exists ? "приватный notes, отправка раз в сутки" : "вход по коду — на первом входе") {
+        SettingRow(title: "github", subtitle: TokenStore().exists ? "приватный репозиторий notes" : "вход по коду — на первом входе") {
             if TokenStore().exists && !sync.needsLogin {
                 GrantedLabel(text: "подключено")
             } else {
                 Button("войти заново") { relogin = true }.buttonStyle(WhitePillStyle())
             }
+        }
+        ChoiceRow(title: "сохранять версию", value: AppSettings.every(commit), choices: AppSettings.commitChoices.map { ($0, AppSettings.every($0)) }) {
+            AppSettings.commitMinutes = $0; commit = $0
+        }
+        ChoiceRow(title: "отправлять на github", value: AppSettings.every(push), choices: AppSettings.pushChoices.map { ($0, AppSettings.every($0)) }) {
+            AppSettings.pushMinutes = $0; push = $0
         }
         SettingRow(title: "последний коммит", subtitle: sync.lastCommit.map { NoteEditor.date($0) } ?? "с запуска правок не было") {
             EmptyView()
@@ -166,9 +176,20 @@ private struct SyncPage: View {
 private struct DictationPage: View {
     @State private var selected = SpeechSettings.model
     @State private var downloads = ModelDownloads.shared
+    @State private var language = AppSettings.language
+    @State private var minutes = AppSettings.maxMinutes
 
     var body: some View {
         HotKeyRow(width: 640)
+        ChoiceRow(title: "язык речи", subtitle: "для whisper",
+                  value: AppSettings.languages.first { $0.code == language }?.title ?? language,
+                  choices: AppSettings.languages.map { ($0.code, $0.title) }) {
+            AppSettings.language = $0; language = $0
+        }
+        ChoiceRow(title: "длина записи", subtitle: "потом распознается сама",
+                  value: "до \(minutes) мин", choices: AppSettings.lengthChoices.map { ($0, "до \($0) мин") }) {
+            AppSettings.maxMinutes = $0; minutes = $0
+        }
         ForEach(SpeechModel.allCases, id: \.self) { model in
             SettingRow(title: model.displayName, subtitle: subtitle(model)) {
                 if model == selected {
@@ -189,6 +210,62 @@ private struct DictationPage: View {
         let size = model.downloadMB >= 1000 ? String(format: "%.1f гб", Double(model.downloadMB) / 1000) : "\(model.downloadMB) мб"
         let kind = model == .gigaAM ? "только русский, сразу с пунктуацией" : "99 языков"
         return "\(kind), \(size)" + (ModelStore.standard.isInstalled(model) ? " · скачано" : "")
+    }
+}
+
+// Общие: тема, запуск при входе, текст заметок.
+private struct GeneralPage: View {
+    @State private var theme = AppSettings.theme
+    @State private var login = AppSettings.launchAtLogin
+    @State private var size = AppSettings.textSize
+    @State private var spell = AppSettings.spellCheck
+
+    var body: some View {
+        ChoiceRow(title: "тема", value: theme.rawValue, choices: AppSettings.Theme.allCases.map { ($0, $0.rawValue) }) {
+            AppSettings.theme = $0; theme = $0
+        }
+        SwitchRow(title: "открывать при входе в mac", subtitle: "чтобы хоткей надиктовки работал сразу", isOn: $login) {
+            AppSettings.launchAtLogin = $0; login = AppSettings.launchAtLogin
+        }
+        ChoiceRow(title: "размер текста заметок", value: "\(Int(size))", choices: AppSettings.textSizes.map { ($0, "\(Int($0))") }) {
+            AppSettings.textSize = $0; size = $0
+        }
+        SwitchRow(title: "проверка орфографии", subtitle: "подчёркивать слова с ошибками", isOn: $spell) {
+            AppSettings.spellCheck = $0; spell = $0
+        }
+        Note(text: "настройки хранятся на этом mac, в заметки не попадают")
+    }
+}
+
+// Строка с выбором из списка: справа «изменить», под заголовком — что выбрано.
+private struct ChoiceRow<Value: Hashable>: View {
+    let title: String
+    var subtitle: String? = nil
+    let value: String
+    let choices: [(Value, String)]
+    let pick: (Value) -> Void
+
+    var body: some View {
+        SettingRow(title: title, subtitle: subtitle.map { "\(value) · \($0)" } ?? value) {
+            Menu("изменить") {
+                ForEach(choices, id: \.0) { choice in Button(choice.1) { pick(choice.0) } }
+            }
+            .menuStyle(.button).buttonStyle(WhitePillStyle()).fixedSize()
+        }
+    }
+}
+
+private struct SwitchRow: View {
+    let title: String
+    let subtitle: String
+    @Binding var isOn: Bool
+    let change: (Bool) -> Void
+
+    var body: some View {
+        SettingRow(title: title, subtitle: subtitle) {
+            Toggle("", isOn: Binding(get: { isOn }, set: { change($0) }))
+                .toggleStyle(.switch).tint(Theme.coral).labelsHidden()
+        }
     }
 }
 
