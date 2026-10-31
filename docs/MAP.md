@@ -58,6 +58,7 @@
 - `NotesCore/Sources/NotesCore/TokenStore.swift` — записи в Связке ключей, пересоздание старых без запросов.
 - `NotesCore/Sources/NotesCore/Sync.swift` — подпись коммита, расписание отправки, движок синхронизации.
 - `NotesCore/Sources/NotesCore/NoteLibrary.swift` — заметки в папке: дерево, чтение и запись, создание, переименование, поиск по тексту.
+- `NotesCore/Sources/NotesCore/NoteSections.swift` — разделы от Apple Intelligence в заметке: «## Кратко» и «## Задачи».
 - `NotesCore/Sources/NotesCore/NoteTasks.swift` — задачи из строк заметок: разбор, отметка, группы, план синхронизации с календарём.
 - `NotesCore/Sources/NotesCore/Transcript.swift` — расшифровка: куски с временем, .srt, заметка Markdown.
 - `NotesCore/Sources/NotesCore/Templates.swift` — шаблоны из папки «шаблоны» с подстановками {{дата}}, {{время}}, {{название}} и заметка на каждый день в «дневник».
