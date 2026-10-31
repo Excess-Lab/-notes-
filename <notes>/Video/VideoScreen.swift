@@ -198,17 +198,19 @@ private struct TranscriptView: View {
                     .kerning(Theme.tracking(-7, size: 11))
                     .foregroundStyle(NotesLayout.gray)
                     .padding(.top, 10)
-                HStack(spacing: 10) {
+                // Узкое окно — кнопки переносятся на строку ниже целиком, а не ломаются посреди слова.
+                Flow(spacing: 10) {
                     Button("сохранить как заметку") {
                         if let url = model.video.saveAsNote(item.id) { model.open(.note(url)) }
                     }
                     .buttonStyle(CoralCapsuleStyle())
                     if Intelligence.isReady {
-                        Button(model.video.summarizing.contains(item.id) ? "сжимаю…" : "кратко") {
-                            Task { await model.video.summarize(item.id) }
+                        Button(model.video.found[item.id].map { $0 == 0 ? "задач нет" : "задач: \($0)" } ?? "задачи в календарь") {
+                            Task { await model.video.extractTasks(item.id) }
                         }
                         .buttonStyle(WhitePillStyle())
                         .disabled(model.video.summarizing.contains(item.id))
+                        .help("найти задачи и дописать их в заметку расшифровки — оттуда они попадут в календарь")
                     }
                     Button("копировать текст") { model.video.copy(item.id) }.buttonStyle(WhitePillStyle())
                     Button("экспорт .srt") { model.video.exportSRT(item.id) }.buttonStyle(WhitePillStyle())
@@ -216,25 +218,15 @@ private struct TranscriptView: View {
                 }
                 .padding(.top, 16)
 
-                if let summary = model.video.transcript(item.id)?.summary {
-                    Text(summary)
-                        .font(Martian.body.font(15))
-                        .kerning(Theme.tracking(-7, size: 15))
-                        .foregroundStyle(Theme.ink)
-                        .textSelection(.enabled)
-                        .frame(width: min(600, page - 60), alignment: .leading)
-                        .padding(.leading, 60)
-                        .padding(.top, 24)
-                }
-
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 28) {
                     let transcript = model.video.transcript(item.id)
                     ForEach(Array((transcript?.segments ?? []).enumerated()), id: \.offset) { index, segment in
                         if let transcript, let speaker = segment.speaker,
                            index == 0 || transcript.segments[index - 1].speaker != speaker {
                             SpeakerName(transcript: transcript, speaker: speaker) { model.video.rename(item.id, speaker: speaker, to: $0) }
                                 .padding(.leading, 60)
-                                .padding(.top, index == 0 ? 0 : 8)
+                                .padding(.top, index == 0 ? 0 : 16)
+                                .padding(.bottom, -18)
                         }
                         HStack(alignment: .firstTextBaseline, spacing: 0) {
                             Text(Transcript.clock(segment.start))
@@ -242,6 +234,7 @@ private struct TranscriptView: View {
                                 .frame(width: 60, alignment: .leading)
                             Text(segment.text)
                                 .font(Martian.body.font(15))
+                                .lineSpacing(7)
                                 .kerning(Theme.tracking(-7, size: 15))
                                 .foregroundStyle(Theme.ink)
                                 .textSelection(.enabled)
@@ -260,7 +253,7 @@ private struct TranscriptView: View {
                         }
                     }
                 }
-                .padding(.top, 24)
+                .padding(.top, 36)
             }
             .frame(width: min(660, page), alignment: .leading)
             .padding(.leading, 126)
@@ -300,5 +293,43 @@ private struct SpeakerName: View {
         .kerning(Theme.tracking(-7, size: 11))
         .foregroundStyle(Theme.coral)
         .frame(width: 240, alignment: .leading)
+    }
+}
+
+// Ряд, который переносится: элементы своего размера слева направо, не влезло — на новую строку.
+private struct Flow: SwiftUI.Layout {
+    var spacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(proposal.width ?? .infinity, subviews)
+        return CGSize(width: rows.map(\.width).max() ?? 0, height: rows.last.map { $0.y + $0.height } ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for row in arrange(bounds.width, subviews) {
+            var x = bounds.minX
+            for index in row.items {
+                let size = subviews[index].sizeThatFits(.unspecified)
+                subviews[index].place(at: CGPoint(x: x, y: bounds.minY + row.y + (row.height - size.height) / 2), proposal: .unspecified)
+                x += size.width + spacing
+            }
+        }
+    }
+
+    private struct Row { var items: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0; var y: CGFloat = 0 }
+
+    private func arrange(_ limit: CGFloat, _ subviews: Subviews) -> [Row] {
+        var rows = [Row()]
+        for index in subviews.indices {
+            let size = subviews[index].sizeThatFits(.unspecified)
+            if !rows[rows.count - 1].items.isEmpty, rows[rows.count - 1].width + spacing + size.width > limit {
+                rows.append(Row(y: rows[rows.count - 1].y + rows[rows.count - 1].height + spacing))
+            }
+            let gap = rows[rows.count - 1].items.isEmpty ? 0 : spacing
+            rows[rows.count - 1].items.append(index)
+            rows[rows.count - 1].width += gap + size.width
+            rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
+        }
+        return rows
     }
 }

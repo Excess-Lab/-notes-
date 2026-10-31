@@ -40,6 +40,45 @@ enum Intelligence {
         return try await summary(of: partial.joined(separator: "\n"))
     }
 
+    // Задачи из расшифровки: модель отвечает структурой (guided generation), а не текстом, который надо разбирать.
+    @Generable struct Found {
+        @Guide(description: "Задачи и поручения, о которых договорились в тексте. Пусто, если их нет.", .maximumCount(10))
+        var tasks: [Item]
+    }
+    @Generable struct Item {
+        @Guide(description: "Задача целиком: глагол в неопределённой форме, кому и о чём. Например: «Позвонить Ивану насчёт дизайна»")
+        var title: String
+        @Guide(description: "Срок из списка дат в инструкции в формате yyyy-MM-dd, если в тексте назван срок; иначе пустая строка")
+        var date: String
+    }
+
+    static func tasks(from text: String, today: Date = .now) async throws -> [(title: String, date: String?)] {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        // Считать даты модель не умеет («завтра» превращала в сегодня), поэтому даём ей готовый список дней.
+        let named = DateFormatter()
+        named.locale = Locale(identifier: "ru_RU")
+        named.dateFormat = "yyyy-MM-dd (EEEE)"
+        let words = ["сегодня — ", "завтра — ", "послезавтра — "]
+        let days = (0..<8).map { i in
+            (i < 3 ? words[i] : "") + named.string(from: Calendar.current.date(byAdding: .day, value: i, to: today)!)
+        }.joined(separator: "\n")
+        var found: [(String, String?)] = []
+        for part in split(text) {
+            let session = LanguageModelSession(instructions: """
+                Найди в тексте задачи, о которых договорились. Не придумывай задач, которых нет. Даты ближайших дней:
+                \(days)
+                """)
+            let answer = try await session.respond(to: "Текст:\n\"\"\"\n\(part)\n\"\"\"", generating: Found.self).content
+            for item in answer.tasks where !item.title.trimmingCharacters(in: .whitespaces).isEmpty {
+                // Дату берём, только если она настоящая: модель иногда пишет «нет» или «2026-13-40».
+                found.append((item.title.trimmingCharacters(in: .whitespaces), formatter.date(from: item.date) != nil ? item.date : nil))
+            }
+        }
+        return found
+    }
+
     private static func ask(_ text: String) async throws -> String {
         let session = LanguageModelSession(instructions: instructions)
         return try await session.respond(to: "Текст:\n\"\"\"\n\(text)\n\"\"\"").content.trimmingCharacters(in: .whitespacesAndNewlines)

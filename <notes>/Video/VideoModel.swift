@@ -198,15 +198,24 @@ import NotesSpeech
     func rename(_ id: UUID, speaker: Int, to name: String) { change(id) { $0.rename(speaker, to: name) } }
     func mark(_ id: UUID, segment: Int, as speaker: Int) { change(id) { $0.mark(segment, as: speaker) } }
 
-    // Краткое содержание через Apple Intelligence; summarizing — какие расшифровки сейчас сжимаются.
+    // Какие расшифровки сейчас разбирает Apple Intelligence.
     private(set) var summarizing: Set<UUID> = []
-    func summarize(_ id: UUID) async {
-        guard let text = transcript(id)?.text, !summarizing.contains(id) else { return }
+
+    // Задачи из расшифровки — разделом «## Задачи» в её заметке: оттуда их берут список задач и календарь.
+    // Возвращает, сколько задач нашлось; nil — не получилось.
+    @discardableResult
+    func extractTasks(_ id: UUID) async -> Int? {
+        guard let text = transcript(id)?.text, !summarizing.contains(id), let note = writeNote(id) else { return nil }
         summarizing.insert(id)
         defer { summarizing.remove(id) }
-        guard let summary = try? await Intelligence.summary(of: text) else { return }
-        change(id) { $0.summary = summary }
+        guard let tasks = try? await Intelligence.tasks(from: text),
+              let current = try? String(contentsOf: note, encoding: .utf8) else { return nil }
+        if !tasks.isEmpty { try? library.write(NoteSections.setTasks(tasks, in: current), to: note) }
+        found[id] = tasks.count
+        return tasks.count
     }
+    // Сколько задач нашлось в последний раз — подпись у кнопки.
+    private(set) var found: [UUID: Int] = [:]
 
     private func change(_ id: UUID, _ edit: (inout Transcript) -> Void) {
         guard var transcript = transcript(id) else { return }
@@ -267,6 +276,8 @@ extension VideoModel {
     // расшифровывается, открывается, через 40 с убирается из списка — чтобы не остаться у человека в видео.
     func speakerPreview() async {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("разговор.caf")
+        // Хвост прошлого превью, если его закрыли раньше, чем оно убрало за собой.
+        for old in items where old.name == url.lastPathComponent { remove(old.id) }
         await Self.speak([("ru-RU", "Привет. Давай обсудим, как устроена синхронизация заметок и когда отправлять их на гитхаб."),
                           ("en-GB", "Sure. I think once a day is enough, and every commit stays local until then."),
                           ("ru-RU", "Хорошо, тогда так и оставим. Ещё нужно проверить календарь.")], to: url)
@@ -278,7 +289,7 @@ extension VideoModel {
         guard let item = items.first(where: { $0.name == url.lastPathComponent }) else { return }
         rename(item.id, speaker: 0, to: "Макар")
         open = item.id
-        if Intelligence.unavailableReason == nil { await summarize(item.id) }
+        if Intelligence.unavailableReason == nil { await extractTasks(item.id) }
         try? await Task.sleep(for: .seconds(40))
         let note = library.root.appendingPathComponent("расшифровки/\(item.title).md")
         try? FileManager.default.removeItem(at: note)
@@ -311,8 +322,11 @@ extension VideoModel {
         let parts = Intelligence.split(long)
         log("длинный текст режется на части по предложениям", parts.count > 1 && parts.allSatisfy { $0.count <= 5000 } && parts.joined() == long)
         if Intelligence.unavailableReason == nil {
-            await summarize(item.id)
-            log("кратко от apple intelligence: «\(transcript(item.id)?.summary?.prefix(60) ?? "")»", !(transcript(item.id)?.summary ?? "").isEmpty)
+            let tomorrow = Calendar.current.date(byAdding: .day, value: 1, to: .now)!
+            let tasks = (try? await Intelligence.tasks(from: "Договорились: завтра Макар звонит Ивану по поводу дизайна, а отчёт я отправлю сам когда-нибудь.")) ?? []
+            let day = { let f = DateFormatter(); f.dateFormat = "yyyy-MM-dd"; return f.string(from: tomorrow) }()
+            log("задачи из текста: \(tasks.map { "\($0.title) \($0.date ?? "-")" })",
+                !tasks.isEmpty && tasks.contains { $0.date == day })
         }
         log("реплика переотмечена и спикер переименован", transcript(item.id).map { $0.segments[0].speaker == 4 && $0.name(4) == "Проверка" } ?? false)
         let note = library.root.appendingPathComponent("расшифровки/\(item.title).md")

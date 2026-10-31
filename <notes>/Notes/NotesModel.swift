@@ -26,6 +26,17 @@ import SwiftUI
 
     // Открытая заметка: текст, как он сейчас в редакторе.
     var text = "" { didSet { if text != savedText { scheduleSave() } } }
+    // Apple Intelligence пишет «## Кратко» в открытую заметку.
+    private(set) var summarizing = false
+    func summarizeNote() async {
+        guard case .note(let url) = selection, !summarizing else { return }
+        summarizing = true
+        defer { summarizing = false }
+        let source = NoteSections.remove("Кратко", from: text, upToBlank: true)
+        guard let summary = try? await Intelligence.summary(of: source), case .note(url) = selection else { return }
+        text = NoteSections.setSummary(summary, in: text)
+        NotificationCenter.default.post(name: .editorStyleChanged, object: nil)
+    }
     private var savedText = ""
     // Номер последней правки: запись через полсекунды делает только последняя из них.
     private var editGeneration = 0
@@ -415,6 +426,14 @@ extension NotesModel {
             try? await ModelDownloads.shared.downloadSpeakers()
             check("модели спикеров скачаны", Diarization.isInstalled())
             await video.selfTest(check)
+            if Intelligence.unavailableReason == nil, let note = library.allNotes(in: tree).first {
+                open(.note(note.url))
+                let before = text
+                await summarizeNote()
+                check("кратко в заметке «\(note.url.lastPathComponent)»", text.contains("## Кратко") && text.count > before.count)
+                text = before
+                flush()
+            }
         }
         exit(0)
     }

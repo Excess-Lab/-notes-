@@ -507,6 +507,12 @@ struct SectionContent: View {
             HStack(spacing: 8) {
                 switch model.section {
                 case .notes:
+                    if Intelligence.isReady, case .note = model.selection {
+                        IconButton(glyph: .spark, help: model.summarizing ? "сжимаю…" : "кратко — apple intelligence") {
+                            Task { await model.summarizeNote() }
+                        }
+                        .disabled(model.summarizing)
+                    }
                     IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
                     IconButton(glyph: .newNote, help: "новая заметка · правый клик — из шаблона") { model.newNote() }
                         .keyboardShortcut("n", modifiers: .command)
