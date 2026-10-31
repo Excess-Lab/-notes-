@@ -35,6 +35,7 @@
 - `<notes>/Video/DropZone.metal` — шейдер зоны «перетащи» в видео: стеклянные планки поверх плывущих тёплых пятен.
 - `<notes>/Video/VideoScreen.swift` — список видео с зоной для файла и экран расшифровки.
 - `<notes>/Settings/SettingsScreen.swift` — страницы настроек на настоящих данных: общие, синхронизация, надиктовка, поиск, вход, календарь, шаблоны.
+- `<notes>/Intelligence/Intelligence.swift` — Apple Intelligence (Foundation Models): включение, доступность, краткое содержание по частям.
 - `<notes>/Settings/AppSettings.swift` — подробные настройки в UserDefaults: тема, запуск при входе, размер текста, орфография, расписание синхронизации, язык речи, длина записи.
 - `<notes>/Vault/VaultStore.swift` — папка хранилища: выбор, security-scoped bookmark, iCloud.
 - `<notes>/Vault/BiometricLock.swift` — Touch ID: включить, войти, подтвердить хозяина для сброса пинкода.
