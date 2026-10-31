@@ -198,6 +198,16 @@ import NotesSpeech
     func rename(_ id: UUID, speaker: Int, to name: String) { change(id) { $0.rename(speaker, to: name) } }
     func mark(_ id: UUID, segment: Int, as speaker: Int) { change(id) { $0.mark(segment, as: speaker) } }
 
+    // Краткое содержание через Apple Intelligence; summarizing — какие расшифровки сейчас сжимаются.
+    private(set) var summarizing: Set<UUID> = []
+    func summarize(_ id: UUID) async {
+        guard let text = transcript(id)?.text, !summarizing.contains(id) else { return }
+        summarizing.insert(id)
+        defer { summarizing.remove(id) }
+        guard let summary = try? await Intelligence.summary(of: text) else { return }
+        change(id) { $0.summary = summary }
+    }
+
     private func change(_ id: UUID, _ edit: (inout Transcript) -> Void) {
         guard var transcript = transcript(id) else { return }
         edit(&transcript)
@@ -268,6 +278,7 @@ extension VideoModel {
         guard let item = items.first(where: { $0.name == url.lastPathComponent }) else { return }
         rename(item.id, speaker: 0, to: "Макар")
         open = item.id
+        if Intelligence.unavailableReason == nil { await summarize(item.id) }
         try? await Task.sleep(for: .seconds(40))
         let note = library.root.appendingPathComponent("расшифровки/\(item.title).md")
         try? FileManager.default.removeItem(at: note)
@@ -296,6 +307,13 @@ extension VideoModel {
         mark(item.id, segment: 0, as: 4)
         rename(item.id, speaker: 4, to: "Проверка")
         transcripts[item.id] = nil
+        let long = String(repeating: "Это предложение для проверки нарезки длинного текста. ", count: 300)
+        let parts = Intelligence.split(long)
+        log("длинный текст режется на части по предложениям", parts.count > 1 && parts.allSatisfy { $0.count <= 5000 } && parts.joined() == long)
+        if Intelligence.unavailableReason == nil {
+            await summarize(item.id)
+            log("кратко от apple intelligence: «\(transcript(item.id)?.summary?.prefix(60) ?? "")»", !(transcript(item.id)?.summary ?? "").isEmpty)
+        }
         log("реплика переотмечена и спикер переименован", transcript(item.id).map { $0.segments[0].speaker == 4 && $0.name(4) == "Проверка" } ?? false)
         let note = library.root.appendingPathComponent("расшифровки/\(item.title).md")
         let saved = (try? String(contentsOf: note, encoding: .utf8)) ?? ""

@@ -203,11 +203,29 @@ private struct TranscriptView: View {
                         if let url = model.video.saveAsNote(item.id) { model.open(.note(url)) }
                     }
                     .buttonStyle(CoralCapsuleStyle())
+                    if Intelligence.isReady {
+                        Button(model.video.summarizing.contains(item.id) ? "сжимаю…" : "кратко") {
+                            Task { await model.video.summarize(item.id) }
+                        }
+                        .buttonStyle(WhitePillStyle())
+                        .disabled(model.video.summarizing.contains(item.id))
+                    }
                     Button("копировать текст") { model.video.copy(item.id) }.buttonStyle(WhitePillStyle())
                     Button("экспорт .srt") { model.video.exportSRT(item.id) }.buttonStyle(WhitePillStyle())
                     Button("удалить") { VideoModel.confirmRemove(item, video: model.video) }.buttonStyle(QuietLinkStyle(size: 13, opacity: 0.3))
                 }
                 .padding(.top, 16)
+
+                if let summary = model.video.transcript(item.id)?.summary {
+                    Text(summary)
+                        .font(Martian.body.font(15))
+                        .kerning(Theme.tracking(-7, size: 15))
+                        .foregroundStyle(Theme.ink)
+                        .textSelection(.enabled)
+                        .frame(width: min(600, page - 60), alignment: .leading)
+                        .padding(.leading, 60)
+                        .padding(.top, 24)
+                }
 
                 VStack(alignment: .leading, spacing: 16) {
                     let transcript = model.video.transcript(item.id)

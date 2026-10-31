@@ -233,6 +233,7 @@ private struct GeneralPage: View {
     @State private var login = AppSettings.launchAtLogin
     @State private var size = AppSettings.textSize
     @State private var spell = AppSettings.spellCheck
+    @State private var intelligence = Intelligence.enabled
 
     var body: some View {
         ChoiceRow(title: "тема", value: theme.rawValue, choices: AppSettings.Theme.allCases.map { ($0, $0.rawValue) }) {
@@ -246,6 +247,13 @@ private struct GeneralPage: View {
         }
         SwitchRow(title: "проверка орфографии", subtitle: "подчёркивать слова с ошибками", isOn: $spell) {
             AppSettings.spellCheck = $0; spell = $0
+        }
+        if let reason = Intelligence.unavailableReason {
+            SettingRow(title: "apple intelligence", subtitle: reason) { EmptyView() }
+        } else {
+            SwitchRow(title: "apple intelligence", subtitle: "кнопка «кратко» у расшифровок, работает на этом mac", isOn: $intelligence) {
+                Intelligence.enabled = $0; intelligence = $0
+            }
         }
         Note(text: "настройки хранятся на этом mac, в заметки не попадают")
     }

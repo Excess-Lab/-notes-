@@ -20,14 +20,17 @@ public struct Transcript: Codable, Hashable, Sendable {
     public var segments: [Segment]
     // Имена спикеров, которые дал человек: «0» → «Макар». Нет имени — «спикер 1».
     public var names: [Int: String] = [:]
+    // Краткое содержание от Apple Intelligence, если человек попросил.
+    public var summary: String?
     public init(segments: [Segment]) { self.segments = segments }
 
-    // В расшифровках до 31.10.2026 поля names нет — читаем без него, иначе старые бы не открылись.
-    enum CodingKeys: String, CodingKey { case segments, names }
+    // В расшифровках до 31.10.2026 полей names и summary нет — читаем без них, иначе старые бы не открылись.
+    enum CodingKeys: String, CodingKey { case segments, names, summary }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         segments = try c.decode([Segment].self, forKey: .segments)
         names = try c.decodeIfPresent([Int: String].self, forKey: .names) ?? [:]
+        summary = try c.decodeIfPresent(String.self, forKey: .summary)
     }
 
     // Отрезок речи одного голоса — то, что отдаёт разметка дикторов.
@@ -125,6 +128,7 @@ public struct Transcript: Codable, Hashable, Sendable {
             previous = segment.speaker ?? previous
             return "**\(label)** \(segment.text)"
         }
-        return "# \(title)\n\n" + lines.joined(separator: "\n\n") + "\n"
+        let brief = summary.map { "## Кратко\n\n\($0)\n\n## Расшифровка\n\n" } ?? ""
+        return "# \(title)\n\n" + brief + lines.joined(separator: "\n\n") + "\n"
     }
 }

@@ -10,6 +10,13 @@ struct TranscriptTests {
     ])
 
     // Иначе плееры не узнают субтитры: у .srt строгий формат времени с запятой и миллисекундами.
+    @Test("краткое содержание — перед расшифровкой")
+    func summary() {
+        var t = Transcript(segments: [.init(start: 0, end: 5, text: "текст")])
+        t.summary = "- решили"
+        #expect(t.markdown(title: "т") == "# т\n\n## Кратко\n\n- решили\n\n## Расшифровка\n\n**00:00** текст\n")
+    }
+
     @Test("имя спикера и переотметка реплики")
     func renameAndMark() {
         var t = Transcript(segments: [.init(start: 0, end: 5, text: "а", speaker: 0), .init(start: 5, end: 9, text: "б", speaker: 0)])
