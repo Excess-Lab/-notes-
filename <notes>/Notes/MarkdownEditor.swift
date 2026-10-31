@@ -60,9 +60,19 @@ struct MarkdownEditor: NSViewRepresentable {
 
         func undoManager(for view: NSTextView) -> UndoManager? { undo }
 
+        // Что поменялось — запоминаем, пока NSTextView правит текст, красим в textDidChange.
+        private var edited: NSRange?
+
+        func textView(_ view: NSTextView, shouldChangeTextIn range: NSRange, replacementString text: String?) -> Bool {
+            let length = (text as NSString?)?.length ?? 0
+            edited = NSRange(location: range.location, length: length)
+            return true
+        }
+
         func textDidChange(_ notification: Notification) {
             guard let view = notification.object as? NSTextView else { return }
-            Style.apply(to: view.textStorage)
+            Style.apply(to: view.textStorage, in: edited)
+            edited = nil
             text.wrappedValue = view.string
         }
     }
@@ -80,12 +90,17 @@ struct MarkdownEditor: NSViewRepresentable {
         }
 
         // Заголовки «#», «##», «###» — полужирные 24 / 20 / 17, как «Что делаем» в макете (Semibold 20).
-        static func apply(to storage: NSTextStorage?) {
+        // range — только эти абзацы. При наборе красим лишь тронутое: раньше каждое нажатие перекрашивало
+        // всю заметку, и длинные заметки подтормаживали (31.10.2026).
+        static func apply(to storage: NSTextStorage?, in range: NSRange? = nil) {
             guard let storage else { return }
             let string = storage.string as NSString
+            let whole = NSRange(location: 0, length: string.length)
+            let target = range.map { string.paragraphRange(for: NSIntersectionRange($0, whole)) } ?? whole
+            let attributes = body
             storage.beginEditing()
-            storage.setAttributes(body, range: NSRange(location: 0, length: string.length))
-            string.enumerateSubstrings(in: NSRange(location: 0, length: string.length), options: .byLines) { line, range, _, _ in
+            storage.setAttributes(attributes, range: target)
+            string.enumerateSubstrings(in: target, options: .byLines) { line, range, _, _ in
                 guard let line, line.hasPrefix("#") else { return }
                 let level = line.prefix { $0 == "#" }.count
                 guard (1...3).contains(level), line.dropFirst(level).hasPrefix(" ") else { return }

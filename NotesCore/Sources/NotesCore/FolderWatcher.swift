@@ -7,9 +7,10 @@ import Foundation
 // изменённые заметки.
 public final class FolderWatcher {
     private var stream: FSEventStreamRef?
-    private let onChange: @Sendable () -> Void
+    // Пути изменённых файлов (без .git): по ним приложение отличает своё сохранение от правки снаружи.
+    private let onChange: @Sendable ([String]) -> Void
 
-    public init(folder: URL, onChange: @escaping @Sendable () -> Void) {
+    public init(folder: URL, onChange: @escaping @Sendable ([String]) -> Void) {
         self.onChange = onChange
         var context = FSEventStreamContext()
         context.info = Unmanaged.passUnretained(self).toOpaque()
@@ -17,9 +18,8 @@ public final class FolderWatcher {
             guard let info else { return }
             let watcher = Unmanaged<FolderWatcher>.fromOpaque(info).takeUnretainedValue()
             let list = unsafeBitCast(paths, to: NSArray.self) as? [String] ?? []
-            if list.prefix(count).contains(where: { !FolderWatcher.isInternal($0) }) {
-                watcher.onChange()
-            }
+            let changed = list.prefix(count).filter { !FolderWatcher.isInternal($0) }
+            if !changed.isEmpty { watcher.onChange(Array(changed)) }
         }
         stream = FSEventStreamCreate(nil, callback, &context, [folder.path] as CFArray,
                                      FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.5,

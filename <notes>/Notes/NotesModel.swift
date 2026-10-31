@@ -20,6 +20,8 @@ import SwiftUI
     var tabs: [URL] = []
     // ⌘Z, когда окна ещё нет (самопроверка в фоне); обычно — undoManager окна.
     let fallbackUndo = UndoManager()
+    // Сколько раз перечитывали дерево — самопроверка следит, что своё сохранение его не будит.
+    private(set) var treeReloads = 0
 
     // Открытая заметка: текст, как он сейчас в редакторе.
     var text = "" { didSet { if text != savedText { scheduleSave() } } }
@@ -69,11 +71,12 @@ import SwiftUI
         tasks = TasksModel(library: library)
         video = VideoModel(library: library)
         // Слежка идёт не на главном потоке: оттуда только сигнал, а разбираемся уже на главном.
-        watcher = FolderWatcher(folder: vault) {
-            NotificationCenter.default.post(name: NotesModel.changed, object: nil)
+        watcher = FolderWatcher(folder: vault) { paths in
+            NotificationCenter.default.post(name: NotesModel.changed, object: paths)
         }
-        observer = NotificationCenter.default.addObserver(forName: Self.changed, object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.externalChange() }
+        observer = NotificationCenter.default.addObserver(forName: Self.changed, object: nil, queue: .main) { [weak self] note in
+            let paths = note.object as? [String] ?? []
+            MainActor.assumeIsolated { self?.externalChange(paths) }
         }
     }
 
@@ -197,7 +200,16 @@ import SwiftUI
 
     // Файлы поменяли снаружи (другой редактор, pull с другого Mac): обновляем дерево, а открытую
     // заметку перечитываем, только если в ней нет несохранённых правок.
-    private func externalChange() {
+    private func externalChange(_ paths: [String] = []) {
+        // Своё автосохранение открытой заметки: на диске ровно то, что мы записали. Раньше каждая пауза
+        // в наборе перечитывала всё хранилище, задачи и календарь — набор подлагивал (31.10.2026).
+        // Тогда пересобираем задачи только из этой заметки.
+        if let url = openNote, !paths.isEmpty,
+           paths.allSatisfy({ URL(fileURLWithPath: $0).standardizedFileURL == url.standardizedFileURL }),
+           (try? library.read(url)) == savedText {
+            tasks.reload(note: url, text: savedText)
+            return
+        }
         reloadTree()
         tasks.reload()
         guard let url = openNote, text == savedText else { return }
@@ -210,6 +222,7 @@ import SwiftUI
 
     // Файл удалили или перенесли — его вкладка закрывается.
     func reloadTree() {
+        treeReloads += 1
         tree = library.tree()
         tabs.removeAll { !FileManager.default.fileExists(atPath: $0.path) }
         if case .file(let url) = selection, !FileManager.default.fileExists(atPath: url.path) {
@@ -377,6 +390,22 @@ extension NotesModel {
             closeTab(url)
             check("вкладка закрылась и открылась соседняя", tabs.count == before - 1 && openNote != url && openNote != nil)
         }
+        // Своё автосохранение не перечитывает хранилище: дерево не трогаем, задача из набранной строки — есть.
+        let own = library.root.appendingPathComponent("Входящие.md")
+        open(.note(own))
+        try? await Task.sleep(for: .seconds(1.5))
+        let reloads = treeReloads
+        text += "\n- [ ] Задача из набора"
+        flush()
+        try? await Task.sleep(for: .seconds(2))
+        check("своё сохранение не перечитало хранилище, задача подхватилась",
+              treeReloads == reloads && tasks.tasks.contains { $0.title == "Задача из набора" })
+        // Скорость набора: длинная заметка, перекраска всей против одного абзаца (как при нажатии клавиши).
+        let big = NSTextStorage(string: (0..<20_000).map { $0 % 50 == 0 ? "## Заголовок \($0)" : "строка текста номер \($0)" }.joined(separator: "\n"))
+        func ms(_ work: () -> Void) -> Double { let t = Date(); work(); return Date().timeIntervalSince(t) * 1000 }
+        let full = ms { MarkdownEditor.Style.apply(to: big) }
+        let one = ms { MarkdownEditor.Style.apply(to: big, in: NSRange(location: 300_000, length: 1)) }
+        check(String(format: "перекраска при наборе %.2f мс, вся заметка %.0f мс", one, full), one < 2 && one * 20 < full)
         if UserDefaults.standard.bool(forKey: "liveSelfTest") {
             CalendarSync.shared.selfTest(check)
             CalendarSync.shared.removalSelfTest(check)

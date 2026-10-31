@@ -147,7 +147,7 @@ struct FolderWatcherTests {
     func seesNoteChange() async throws {
         let folder = try tempFolder()
         let counter = Counter()
-        let watcher = FolderWatcher(folder: folder) { counter.increment() }
+        let watcher = FolderWatcher(folder: folder) { paths in if paths.contains(where: { $0.hasSuffix("заметка.md") }) { counter.increment() } }
 
         try await Task.sleep(for: .milliseconds(300))
         try write("текст", "заметка.md", in: folder)

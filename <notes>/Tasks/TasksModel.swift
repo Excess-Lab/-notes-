@@ -29,6 +29,20 @@ import NotesCore
         calendar.sync(tasks)
     }
 
+    // Поменялась одна заметка (своё сохранение): разбираем только её. Календарь трогаем, только если её
+    // задачи и правда изменились — обычный набор текста EventKit не будит.
+    func reload(note: URL, text: String) {
+        guard calendar.includes(library.breadcrumb(for: note)) else { return }
+        let fresh = NoteTasks.tasks(in: text, note: note)
+        let old = tasks.filter { $0.note.standardizedFileURL == note.standardizedFileURL }
+        guard fresh != old else { return }
+        // На место старых — порядок в списке не прыгает.
+        let at = tasks.firstIndex { $0.note.standardizedFileURL == note.standardizedFileURL } ?? tasks.count
+        tasks.removeAll { $0.note.standardizedFileURL == note.standardizedFileURL }
+        tasks.insert(contentsOf: fresh, at: min(at, tasks.count))
+        calendar.sync(tasks)
+    }
+
     func count(_ filter: Filter) -> Int { tasks.filter { matches($0, filter) }.count }
 
     // Срочные — первыми в своей группе.
