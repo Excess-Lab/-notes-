@@ -679,6 +679,45 @@ private struct CalendarList: View {
     }
 }
 
+// Папки расшифровок под фильтрами: клик — показать папку, бросить строку видео — переложить,
+// правый клик — удалить папку (расшифровки остаются). «новая папка» — имя прямо в строке.
+private struct VideoFolders: View {
+    let video: VideoModel
+    @State private var adding = false
+    @State private var name = ""
+    @State private var targeted: String?
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ForEach(video.folders, id: \.self) { folder in
+            SidebarRow(glyph: .folder, title: folder, count: video.count(folder: folder), selected: video.folderFilter == folder) {
+                video.filter = .all
+                video.folderFilter = folder
+                video.open = nil
+            }
+            .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.coral.opacity(targeted == folder ? 0.6 : 0)))
+            .dropDestination(for: String.self) { ids, _ in
+                ids.compactMap(UUID.init(uuidString:)).forEach { video.move($0, to: folder) }
+                return true
+            } isTargeted: { targeted = $0 ? folder : (targeted == folder ? nil : targeted) }
+            .contextMenu { Button("удалить папку") { video.removeFolder(folder) } }
+        }
+        if adding {
+            TextField("название папки", text: $name)
+                .textFieldStyle(.plain).font(Martian.body.font(13))
+                .focused($focused)
+                .padding(.horizontal, 8).frame(height: 28)
+                .background(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.coral.opacity(0.5)))
+                .onSubmit { video.createFolder(name); adding = false; name = "" }
+                .onExitCommand { adding = false; name = "" }
+                .onAppear { focused = true }
+        } else {
+            SidebarRow(glyph: .plus, title: "новая папка", selected: false) { adding = true }
+                .opacity(0.5)
+        }
+    }
+}
+
 // Боковая панель своего раздела: дерево заметок, фильтры задач, календари, видео, страницы настроек.
 struct SectionSidebar: View {
     let model: NotesModel
@@ -702,11 +741,14 @@ struct SectionSidebar: View {
             SidebarList(title: "видео") {
                 ForEach(VideoModel.Filter.allCases, id: \.self) { filter in
                     SidebarRow(glyph: filter == .done ? .taskDone : .video, title: filter.rawValue,
-                               count: model.video.count(filter), selected: model.video.filter == filter) {
+                               count: model.video.count(filter),
+                               selected: model.video.filter == filter && model.video.folderFilter == nil) {
                         model.video.filter = filter
+                        model.video.folderFilter = nil
                         model.video.open = nil
                     }
                 }
+                VideoFolders(video: model.video)
             }
         case .settings:
             SidebarList(title: "настройки") {

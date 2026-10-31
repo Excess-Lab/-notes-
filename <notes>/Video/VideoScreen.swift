@@ -142,6 +142,16 @@ private struct VideoRow: View {
         .padding(.horizontal, 4)
         .frame(height: 48)
         .overlay(alignment: .bottom) { Rectangle().fill(NotesLayout.line).frame(height: 1) }
+        .contentShape(Rectangle())
+        // В папку — правым кликом или перетащить строку на папку слева.
+        .contextMenu {
+            Menu("в папку") {
+                ForEach(video.folders, id: \.self) { name in Button(name) { video.move(item.id, to: name) } }
+                if item.folder != nil { Divider(); Button("без папки") { video.move(item.id, to: nil) } }
+            }
+            .disabled(video.folders.isEmpty)
+        }
+        .draggable(item.id.uuidString)
         .padding(.top, 6)
     }
 

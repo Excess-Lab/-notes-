@@ -20,11 +20,17 @@ import NotesSpeech
         var progress: Double
         let added: Date
         var words: Int
+        // Папка расшифровки (ТЗ 30.10.2026). Нет — лежит в «без папки»; в старом index.json поля нет.
+        var folder: String?
     }
 
     let library: NoteLibrary
     private(set) var items: [Item] = []
     var filter: Filter = .all
+    // Выбранная папка в боковой панели; nil — все.
+    var folderFilter: String?
+    // Свои папки — список имён в настройках приложения; в хранилище это подпапки «расшифровки/».
+    private(set) var folders: [String] = UserDefaults.standard.stringArray(forKey: "videoFolders") ?? []
     var open: UUID?
     private(set) var transcripts: [UUID: Transcript] = [:]
     // Файлы, которые человек выбрал или бросил в этом запуске: доступ к ним песочница даёт до выхода.
@@ -50,7 +56,30 @@ import NotesSpeech
     }
 
     func count(_ filter: Filter) -> Int { items.filter { matches($0, filter) }.count }
-    var visible: [Item] { items.filter { matches($0, filter) } }
+    var visible: [Item] { items.filter { matches($0, filter) && (folderFilter == nil || $0.folder == folderFilter) } }
+
+    func count(folder: String) -> Int { items.filter { $0.folder == folder }.count }
+
+    func createFolder(_ name: String) {
+        let clean = name.trimmingCharacters(in: .whitespaces).replacingOccurrences(of: "/", with: "-")
+        guard !clean.isEmpty, !folders.contains(clean) else { return }
+        folders.append(clean)
+        UserDefaults.standard.set(folders, forKey: "videoFolders")
+    }
+
+    // Убрать папку: расшифровки остаются, просто без папки.
+    func removeFolder(_ name: String) {
+        folders.removeAll { $0 == name }
+        UserDefaults.standard.set(folders, forKey: "videoFolders")
+        for index in items.indices where items[index].folder == name { items[index].folder = nil }
+        if folderFilter == name { folderFilter = nil }
+        save()
+    }
+
+    func move(_ id: UUID, to folder: String?) {
+        update(id) { $0.folder = folder }
+        save()
+    }
 
     private func matches(_ item: Item, _ filter: Filter) -> Bool {
         switch filter {
@@ -147,7 +176,8 @@ import NotesSpeech
 
     private func writeNote(_ id: UUID) -> URL? {
         guard let item = items.first(where: { $0.id == id }), let transcript = transcript(id) else { return nil }
-        let folder = library.root.appendingPathComponent("расшифровки", isDirectory: true)
+        var folder = library.root.appendingPathComponent("расшифровки", isDirectory: true)
+        if let name = item.folder { folder = folder.appendingPathComponent(name, isDirectory: true) }
         let url = folder.appendingPathComponent(item.title + ".md")
         if FileManager.default.fileExists(atPath: url.path) { return url }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
@@ -213,6 +243,18 @@ extension VideoModel {
         let note = library.root.appendingPathComponent("расшифровки/\(item.title).md")
         let saved = (try? String(contentsOf: note, encoding: .utf8)) ?? ""
         log("заметка в хранилище с метаданными", saved.hasPrefix("---\nисточник: ") && saved.contains("модель: "))
+        // Папки: создать, переложить, показать только её, заметка — в подпапку; удалить — расшифровка остаётся.
+        let folder = "проверка папки \(UUID().uuidString.prefix(4))"
+        createFolder(folder)
+        move(item.id, to: folder)
+        folderFilter = folder
+        log("папка: расшифровка переложена и видна в ней", visible.map(\.id) == [item.id] && count(folder: folder) == 1)
+        let inFolder = saveAsNote(item.id)
+        log("заметка из папки — в «расшифровки/\(folder)/»", inFolder?.deletingLastPathComponent().lastPathComponent == folder)
+        if let inFolder { try? FileManager.default.removeItem(at: inFolder.deletingLastPathComponent()) }
+        removeFolder(folder)
+        log("папка удалена, расшифровка осталась без папки",
+            !folders.contains(folder) && folderFilter == nil && items.first { $0.id == item.id }?.folder == nil)
         remove(item.id)
     }
 }
