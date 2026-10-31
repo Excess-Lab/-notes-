@@ -210,7 +210,14 @@ private struct TranscriptView: View {
                 .padding(.top, 16)
 
                 VStack(alignment: .leading, spacing: 16) {
-                    ForEach(Array((model.video.transcript(item.id)?.segments ?? []).enumerated()), id: \.offset) { _, segment in
+                    let transcript = model.video.transcript(item.id)
+                    ForEach(Array((transcript?.segments ?? []).enumerated()), id: \.offset) { index, segment in
+                        if let transcript, let speaker = segment.speaker,
+                           index == 0 || transcript.segments[index - 1].speaker != speaker {
+                            SpeakerName(transcript: transcript, speaker: speaker) { model.video.rename(item.id, speaker: speaker, to: $0) }
+                                .padding(.leading, 60)
+                                .padding(.top, index == 0 ? 0 : 8)
+                        }
                         HStack(alignment: .firstTextBaseline, spacing: 0) {
                             Text(Transcript.clock(segment.start))
                                 .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
@@ -222,6 +229,17 @@ private struct TranscriptView: View {
                                 .textSelection(.enabled)
                                 .frame(width: min(600, page - 60), alignment: .leading)
                         }
+                        .contextMenu {
+                            // Разметка ошиблась — переотметить реплику: другой спикер или новый.
+                            if let transcript, segment.speaker != nil {
+                                ForEach(transcript.speakers, id: \.self) { speaker in
+                                    Button(transcript.name(speaker)) { model.video.mark(item.id, segment: index, as: speaker) }
+                                        .disabled(speaker == segment.speaker)
+                                }
+                                Divider()
+                                Button("новый спикер") { model.video.mark(item.id, segment: index, as: transcript.nextSpeaker) }
+                            }
+                        }
                     }
                 }
                 .padding(.top, 24)
@@ -232,5 +250,37 @@ private struct TranscriptView: View {
             .padding(.bottom, 40)
         }
         .scrollIndicators(.never)
+    }
+}
+
+// Имя спикера над его репликами; щелчок — переименовать на месте, Return или уход фокуса сохраняет.
+private struct SpeakerName: View {
+    let transcript: Transcript
+    let speaker: Int
+    let rename: (String) -> Void
+    @State private var editing = false
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        Group {
+            if editing {
+                TextField("", text: $text)
+                    .textFieldStyle(.plain)
+                    .focused($focused)
+                    .onSubmit { editing = false }
+                    .onChange(of: focused) { if !focused { editing = false } }
+                    .onDisappear { rename(text) }
+                    .onAppear { focused = true }
+            } else {
+                Text(transcript.name(speaker))
+                    .onTapGesture { text = transcript.names[speaker] ?? ""; editing = true }
+                    .help("переименовать")
+            }
+        }
+        .font(Martian.body.font(11))
+        .kerning(Theme.tracking(-7, size: 11))
+        .foregroundStyle(Theme.coral)
+        .frame(width: 240, alignment: .leading)
     }
 }

@@ -1,6 +1,7 @@
 import AppKit
 import EventKit
 import NotesCore
+import NotesSpeech
 import SwiftUI
 
 // Состояние главного экрана: что выбрано, текст открытой заметки, поиск. Файлы читает и пишет
@@ -410,6 +411,9 @@ extension NotesModel {
             CalendarSync.shared.selfTest(check)
             CalendarSync.shared.removalSelfTest(check)
             tasks.editSelfTest(check)
+            // Модели голосов — как по кнопке «скачать» в настройках: настоящая загрузка с проверкой сумм.
+            try? await ModelDownloads.shared.downloadSpeakers()
+            check("модели спикеров скачаны", Diarization.isInstalled())
             await video.selfTest(check)
         }
         exit(0)

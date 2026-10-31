@@ -65,6 +65,12 @@ enum AppSettings {
         set { UserDefaults.standard.set(newValue, forKey: "speechLanguage") }
     }
 
+    // Определять спикеров в расшифровках видео и аудио — когда модели голосов скачаны.
+    static var speakers: Bool {
+        get { UserDefaults.standard.object(forKey: "speakers") as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: "speakers") }
+    }
+
     // Предел длины одной надиктовки, в минутах.
     static let lengthChoices = [1, 3, 5, 10]
     static var maxMinutes: Int {

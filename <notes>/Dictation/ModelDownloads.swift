@@ -42,6 +42,16 @@ import NotesSpeech
         try await task.value
     }
 
+    // Модели голосов для спикеров — отдельно от моделей речи: их не выбирают, а включают.
+    private(set) var speakers: Double?
+
+    func downloadSpeakers() async throws {
+        guard speakers == nil, !Diarization.isInstalled() else { return }
+        speakers = 0
+        defer { speakers = nil }
+        try await Diarization.download { value in Task { @MainActor in ModelDownloads.shared.speakers = value < 1 ? value : nil } }
+    }
+
     private var tasks: [SpeechModel: Task<Void, Error>] = [:]
     private var watchers: [SpeechModel: [(Double) -> Void]] = [:]
 }

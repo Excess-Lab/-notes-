@@ -7,15 +7,74 @@ public struct Transcript: Codable, Hashable, Sendable {
         public let start: Double
         public let end: Double
         public let text: String
-        public init(start: Double, end: Double, text: String) {
+        // Кто говорит — номер спикера с нуля; nil — спикеров не определяли. В старых расшифровках поля нет.
+        public var speaker: Int?
+        public init(start: Double, end: Double, text: String, speaker: Int? = nil) {
             self.start = start
             self.end = end
             self.text = text
+            self.speaker = speaker
         }
     }
 
     public var segments: [Segment]
+    // Имена спикеров, которые дал человек: «0» → «Макар». Нет имени — «спикер 1».
+    public var names: [Int: String] = [:]
     public init(segments: [Segment]) { self.segments = segments }
+
+    // В расшифровках до 31.10.2026 поля names нет — читаем без него, иначе старые бы не открылись.
+    enum CodingKeys: String, CodingKey { case segments, names }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        segments = try c.decode([Segment].self, forKey: .segments)
+        names = try c.decodeIfPresent([Int: String].self, forKey: .names) ?? [:]
+    }
+
+    // Отрезок речи одного голоса — то, что отдаёт разметка дикторов.
+    public struct Turn: Equatable, Sendable {
+        public let start: Double, end: Double, speaker: Int
+        public init(start: Double, end: Double, speaker: Int) { self.start = start; self.end = end; self.speaker = speaker }
+    }
+
+    // Каждой реплике — спикер, чей голос дольше всех звучит внутри неё. Номера перенумеровываем по порядку
+    // появления: первый заговоривший — «спикер 1».
+    public mutating func assign(_ turns: [Turn]) {
+        var order: [Int: Int] = [:]
+        for index in segments.indices {
+            let s = segments[index]
+            var best: (Int, Double)?
+            for turn in turns {
+                let overlap = min(s.end, turn.end) - max(s.start, turn.start)
+                if overlap > 0, overlap > (best?.1 ?? 0) { best = (turn.speaker, overlap) }
+            }
+            // Без пересечения (тишина по краям) — ближайший по времени отрезок.
+            let raw = best?.0 ?? turns.min { abs($0.start - s.start) < abs($1.start - s.start) }?.speaker
+            segments[index].speaker = raw.map { raw in
+                if let known = order[raw] { return known }
+                order[raw] = order.count
+                return order.count - 1
+            }
+        }
+        names = [:]
+    }
+
+    public var speakers: [Int] { Array(Set(segments.compactMap(\.speaker))).sorted() }
+
+    // Разметка ошиблась — человек сам говорит, чья реплика. Пустое имя возвращает «спикер N».
+    public mutating func rename(_ speaker: Int, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        names[speaker] = trimmed.isEmpty ? nil : trimmed
+    }
+
+    public mutating func mark(_ index: Int, as speaker: Int) {
+        guard segments.indices.contains(index) else { return }
+        segments[index].speaker = speaker
+    }
+
+    // Номер для «новый спикер»: следующий после самого большого.
+    public var nextSpeaker: Int { (speakers.max() ?? -1) + 1 }
+
+    public func name(_ speaker: Int) -> String { names[speaker] ?? "спикер \(speaker + 1)" }
 
     public var text: String { segments.map(\.text).joined(separator: " ") }
     public var wordCount: Int { NoteLibrary.wordCount(text) }
@@ -57,7 +116,15 @@ public struct Transcript: Codable, Hashable, Sendable {
     }
 
     // Заметка: заголовок — имя файла, дальше строки с меткой времени. Обычный Markdown.
+    // Со спикерами — имя перед репликой, когда голос сменился: «**00:12 Макар:** текст».
     public func markdown(title: String) -> String {
-        "# \(title)\n\n" + segments.map { "**\(Self.clock($0.start))** \($0.text)" }.joined(separator: "\n\n") + "\n"
+        var previous: Int?
+        let lines = segments.map { segment -> String in
+            var label = Self.clock(segment.start)
+            if let speaker = segment.speaker, speaker != previous { label += " \(name(speaker)):" }
+            previous = segment.speaker ?? previous
+            return "**\(label)** \(segment.text)"
+        }
+        return "# \(title)\n\n" + lines.joined(separator: "\n\n") + "\n"
     }
 }

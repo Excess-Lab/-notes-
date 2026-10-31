@@ -178,6 +178,8 @@ private struct DictationPage: View {
     @State private var downloads = ModelDownloads.shared
     @State private var language = AppSettings.language
     @State private var minutes = AppSettings.maxMinutes
+    @State private var speakers = AppSettings.speakers
+    @State private var speakersReady = Diarization.isInstalled()
 
     var body: some View {
         HotKeyRow(width: 640)
@@ -201,6 +203,18 @@ private struct DictationPage: View {
                 } else {
                     Button("скачать") { Task { try? await downloads.download(model) } }.buttonStyle(WhitePillStyle())
                 }
+            }
+        }
+        SettingRow(title: "спикеры в расшифровках", subtitle: "кто говорит в видео и аудио, \(Diarization.downloadMB) мб" + (speakersReady ? " · скачано" : "")) {
+            if let progress = downloads.speakers {
+                Text("\(Int(progress * 100))%").font(Martian.body.font(13)).foregroundStyle(Theme.fg.opacity(0.3))
+            } else if speakersReady {
+                Toggle("", isOn: Binding(get: { speakers }, set: { AppSettings.speakers = $0; speakers = $0 }))
+                    .toggleStyle(.switch).tint(Theme.coral).labelsHidden()
+            } else {
+                Button("скачать") {
+                    Task { try? await downloads.downloadSpeakers(); speakersReady = Diarization.isInstalled() }
+                }.buttonStyle(WhitePillStyle())
             }
         }
         Note(text: "всё распознаётся на этом mac, без интернета")

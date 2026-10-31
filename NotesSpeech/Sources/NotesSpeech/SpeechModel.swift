@@ -127,7 +127,7 @@ public struct ModelStore: Sendable {
 }
 
 // Прогресс скачивания одного файла: URLSession сообщает его через делегат конкретной задачи.
-private final class ProgressDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+final class ProgressDelegate: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     let report: @Sendable (Double) -> Void
     init(_ report: @escaping @Sendable (Double) -> Void) { self.report = report }
 

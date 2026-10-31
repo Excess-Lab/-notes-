@@ -135,6 +135,7 @@ private struct RootView: View {
             notes = model
             #if DEBUG
             if UserDefaults.standard.bool(forKey: "notesSelfTest") { Task { await model.selfTest() } }
+            if UserDefaults.standard.bool(forKey: "speakerPreview") { Task { await model.video.speakerPreview() } }
             #endif
         }
     }
