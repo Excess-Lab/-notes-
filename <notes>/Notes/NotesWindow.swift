@@ -579,7 +579,14 @@ private struct CalendarList: View {
     @State private var hovered: String?
     @State private var adding = false
     @State private var name = ""
+    // Календарь, который сейчас переименовывают прямо в строке.
+    @State private var renaming: String?
     @FocusState private var focused: Bool
+
+    // Цвета на выбор — как в Календаре Apple.
+    private static let colors: [(String, NSColor)] = [("красный", .systemRed), ("оранжевый", .systemOrange),
+        ("жёлтый", .systemYellow), ("зелёный", .systemGreen), ("голубой", .systemTeal), ("синий", .systemBlue),
+        ("фиолетовый", .systemPurple), ("коричневый", .systemBrown)]
 
     var body: some View {
         let _ = sync.revision
@@ -594,9 +601,18 @@ private struct CalendarList: View {
                     .background(RoundedRectangle(cornerRadius: 4).fill(shown ? color : .clear))
                     .overlay { if shown { Image(systemName: "checkmark").font(.system(size: 8, weight: .heavy)).foregroundStyle(.white) } }
                     .frame(width: 14, height: 14)
-                Text(calendar.title)
-                    .font(Martian.body.font(13)).kerning(Theme.tracking(-7, size: 13))
-                    .foregroundStyle(Theme.ink.opacity(shown ? 1 : 0.4)).lineLimit(1)
+                if renaming == id {
+                    TextField("название", text: $name)
+                        .textFieldStyle(.plain).font(Martian.body.font(13))
+                        .focused($focused)
+                        .onSubmit { rename(calendar) }
+                        .onExitCommand { renaming = nil }
+                        .onAppear { focused = true }
+                } else {
+                    Text(calendar.title)
+                        .font(Martian.body.font(13)).kerning(Theme.tracking(-7, size: 13))
+                        .foregroundStyle(Theme.ink.opacity(shown ? 1 : 0.4)).lineLimit(1)
+                }
                 Spacer(minLength: 0)
                 if id == sync.tasksCalendar?.calendarIdentifier {
                     Text("задачи").font(Martian.body.font(10)).foregroundStyle(NotesLayout.gray)
@@ -616,6 +632,22 @@ private struct CalendarList: View {
             .contentShape(RoundedRectangle(cornerRadius: 8))
             .onTapGesture { withAnimation(.smooth(duration: 0.2)) { sync.toggleShown(calendar) } }
             .onHover { hovered = $0 ? id : (hovered == id ? nil : hovered) }
+            // Настроить календарь — правым кликом: имя, цвет, куда идут задачи, удалить (ТЗ 30.10.2026).
+            .contextMenu {
+                Button("переименовать") { name = calendar.title; renaming = id }
+                Menu("цвет") {
+                    ForEach(Self.colors, id: \.0) { title, color in
+                        Button(title) { sync.recolor(calendar, color) }
+                    }
+                }
+                if id != sync.tasksCalendar?.calendarIdentifier {
+                    Button("задачи сюда") { sync.tasksCalendar = calendar }
+                }
+                if id != main {
+                    Divider()
+                    Button("удалить…") { CalendarRemoval.confirm(calendar, sync: sync) }
+                }
+            }
         }
         if adding {
             TextField("название", text: $name)
@@ -630,6 +662,13 @@ private struct CalendarList: View {
             SidebarRow(glyph: .plus, title: "новый календарь", selected: false) { adding = true }
                 .opacity(0.5)
         }
+    }
+
+    private func rename(_ calendar: EKCalendar) {
+        let title = name.trimmingCharacters(in: .whitespaces)
+        renaming = nil; name = ""
+        guard !title.isEmpty, title != calendar.title else { return }
+        do { try sync.rename(calendar, title) } catch { NSAlert(error: error).runModal() }
     }
 
     private func create() {

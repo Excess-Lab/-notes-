@@ -110,6 +110,17 @@ import NotesCore
         undo?.setActionName("Переименование")
     }
 
+    // Перенести событие в другой календарь. Событие задачи живёт в календаре для задач — его не двигаем.
+    func moveTo(_ event: EKEvent, _ target: EKCalendar, undo: UndoManager?) {
+        guard task(for: event) == nil, let old = event.calendar, old != target else { return }
+        event.calendar = target
+        do { try calendar.store.save(event, span: .thisEvent, commit: true) } catch { NSSound.beep(); return }
+        undo?.registerUndo(withTarget: self) { model in
+            if let fresh = model.calendar.store.event(withIdentifier: event.eventIdentifier) { model.moveTo(fresh, old, undo: undo) }
+        }
+        undo?.setActionName("Перенос в календарь")
+    }
+
     // Удалить обычное событие (задача удаляется в своей заметке). ⌘Z — создаём такое же заново.
     func remove(_ event: EKEvent, undo: UndoManager?) {
         guard task(for: event) == nil else { return }
@@ -292,6 +303,18 @@ import NotesCore
         revision += 1
     }
 
+    func rename(_ calendar: EKCalendar, _ title: String) throws {
+        calendar.title = title
+        try store.saveCalendar(calendar, commit: true)
+        revision += 1
+    }
+
+    func recolor(_ calendar: EKCalendar, _ color: NSColor) {
+        calendar.color = color
+        try? store.saveCalendar(calendar, commit: true)
+        revision += 1
+    }
+
     func removeCalendar(_ calendar: EKCalendar) throws -> Int {
         guard let target = store.defaultCalendarForNewEvents, target.calendarIdentifier != calendar.calendarIdentifier else {
             throw CocoaError(.featureUnsupported)
@@ -451,6 +474,26 @@ extension TasksModel {
         undo.undo()
         let back = store.events(matching: store.predicateForEvents(withStart: start.addingTimeInterval(-60), end: start.addingTimeInterval(7200), calendars: [temp]))
         log("⌘Z вернул удалённое", back.first?.title == "<notes> правка" && back.first?.endDate == start.addingTimeInterval(5400))
+        try? calendar.rename(temp, "<notes> проверка имени")
+        calendar.recolor(temp, .systemTeal)
+        let renamed = store.calendar(withIdentifier: temp.calendarIdentifier)
+        log("календарь переименован", renamed?.title == "<notes> проверка имени")
+        // Цвет сравниваем по компонентам в sRGB: календарь хранит его в своём цветовом пространстве.
+        func rgb(_ c: NSColor?) -> [Int] {
+            guard let c = c?.usingColorSpace(.sRGB) else { return [] }
+            return [c.redComponent, c.greenComponent, c.blueComponent].map { Int(($0 * 20).rounded()) }
+        }
+        log("календарь перекрашен", !rgb(renamed?.color).isEmpty && rgb(renamed?.color) == rgb(.systemTeal))
+        let other = EKCalendar(for: .event, eventStore: store)
+        other.title = "<notes> проверка переноса"
+        other.source = source
+        if (try? store.saveCalendar(other, commit: true)) != nil, let moved = back.first {
+            step { moveTo(moved, other, undo: undo) }
+            log("событие перенесено в другой календарь", store.event(withIdentifier: moved.eventIdentifier)?.calendar == other)
+            undo.undo()
+            log("⌘Z вернул календарь события", store.event(withIdentifier: moved.eventIdentifier)?.calendar == temp)
+            try? store.removeCalendar(other, commit: true)
+        }
     }
 }
 #endif

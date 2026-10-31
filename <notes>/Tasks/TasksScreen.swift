@@ -581,10 +581,19 @@ private struct EventCard: View {
                 Text(event.title ?? "").font(Martian.heading.font(17)).foregroundStyle(Theme.ink)
             }
             Text(when).font(Martian.body.font(13)).foregroundStyle(Theme.ink.opacity(0.7))
-            HStack(spacing: 6) {
-                Circle().fill(Color(nsColor: event.calendar.color)).frame(width: 8, height: 8)
-                Text(event.calendar.title).font(Martian.body.font(12)).foregroundStyle(NotesLayout.gray)
+            // Календарь события — меню: перенести в другой.
+            Menu {
+                ForEach(tasks.calendar.calendars, id: \.calendarIdentifier) { target in
+                    Button(target.title) { tasks.moveTo(event, target, undo: undo) }
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Circle().fill(Color(nsColor: event.calendar.color)).frame(width: 8, height: 8)
+                    Text(event.calendar.title).font(Martian.body.font(12)).foregroundStyle(NotesLayout.gray)
+                }
             }
+            .menuStyle(.button).buttonStyle(.plain).fixedSize()
+            .disabled(task != nil)
             if let task {
                 Text("задача из заметки «\(task.note.deletingPathExtension().lastPathComponent)» — время меняется перетаскиванием")
                     .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
