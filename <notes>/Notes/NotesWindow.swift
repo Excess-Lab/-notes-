@@ -154,7 +154,7 @@ private struct TopBar: View {
 
     // Разделы в шапке: все со словами → гибрид (значки, слово только у выбранного) → только значки.
     enum Fit { case full, hybrid, icons }
-    private static let titles = ["задачи", "календарь", "видео", "настройки"]
+    private static let titles = ["заметки", "задачи", "календарь", "видео", "настройки"]
 
     var body: some View {
         GeometryReader { geo in
@@ -301,8 +301,9 @@ private struct TopBar: View {
     }
 
     private func sectionButtons(_ fit: Fit) -> some View {
-        // Заметки — по логотипу; настройки вернулись в шапку: «настройки пропали» (31.10.2026), ⌘, тоже работает.
+        // Заметки — и вкладкой, и по логотипу: «верни вкладку заметки» (31.10.2026). Настройки — тоже в шапке, и по ⌘,.
         HStack(spacing: fit == .full ? 10 : 6) {
+            section("заметки", .notes, .notes, fit)
             section("задачи", .taskDone, .tasks, fit)
             section("календарь", .calendar, .calendar, fit)
             section("видео", .video, .video, fit)

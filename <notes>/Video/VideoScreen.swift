@@ -19,6 +19,7 @@ private struct VideoList: View {
     @Environment(\.pageWidth) private var page
     let video: VideoModel
     @State private var targeted = false
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ScrollView {
@@ -37,16 +38,16 @@ private struct VideoList: View {
                 // файл. Отдельной кнопки «выбрать файл» нет (ТЗ 30.10.2026).
                 Button { video.choose() } label: {
                     VStack(spacing: 8) {
-                        DotIcon(glyph: .plus, size: 24).environment(\.colorScheme, .dark)
+                        DotIcon(glyph: .plus, size: 24)
                         Text(targeted ? "отпусти — начнём расшифровку" : "перетащи видео или аудио")
                             .font(Martian.heading.font(15))
                             .kerning(Theme.tracking(-7, size: 15))
-                            .foregroundStyle(.white)
+                            .foregroundStyle(Theme.ink)
                             .contentTransition(.interpolate)
                         Text("или нажми, чтобы выбрать · mp4, mov, mp3, wav, flac и другие")
                             .font(Martian.body.font(11))
                             .kerning(Theme.tracking(-7, size: 11))
-                            .foregroundStyle(.white.opacity(0.55))
+                            .foregroundStyle(Theme.ink.opacity(0.55))
                     }
                     .frame(width: min(832, page), height: 148)
                     .background {
@@ -54,7 +55,7 @@ private struct VideoList: View {
                             Rectangle().fill(.white)
                                 .colorEffect(ShaderLibrary.dropzone(.boundingRect,
                                     .float(context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 3600)),
-                                    .float(targeted ? 1 : 0)))
+                                    .float(targeted ? 1 : 0), .float(scheme == .dark ? 1 : 0)))
                         }
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 30))
@@ -198,25 +199,36 @@ private struct TranscriptView: View {
                     .kerning(Theme.tracking(-7, size: 11))
                     .foregroundStyle(NotesLayout.gray)
                     .padding(.top, 10)
-                // Узкое окно — кнопки переносятся на строку ниже целиком, а не ломаются посреди слова.
-                Flow(spacing: 10) {
+                // Одна главная кнопка, остальное — в «ещё»: пять кнопок в ряд были «перегрузом» (31.10.2026).
+                HStack(spacing: 10) {
                     Button("сохранить как заметку") {
                         if let url = model.video.saveAsNote(item.id) { model.open(.note(url)) }
                     }
                     .buttonStyle(CoralCapsuleStyle())
-                    if Intelligence.isReady {
-                        Button(model.video.found[item.id].map { $0 == 0 ? "задач нет" : "задач: \($0)" } ?? "задачи в календарь") {
-                            Task { await model.video.extractTasks(item.id) }
+                    Menu {
+                        if Intelligence.isReady {
+                            Button(model.video.found[item.id].map { $0 == 0 ? "задач не нашлось" : "задачи в календарь · \($0)" } ?? "задачи в календарь") {
+                                Task { await model.video.extractTasks(item.id) }
+                            }
+                            .disabled(model.video.summarizing.contains(item.id))
                         }
-                        .buttonStyle(WhitePillStyle())
-                        .disabled(model.video.summarizing.contains(item.id))
-                        .help("найти задачи и дописать их в заметку расшифровки — оттуда они попадут в календарь")
+                        Button("копировать текст") { model.video.copy(item.id) }
+                        Button("экспорт .srt") { model.video.exportSRT(item.id) }
+                        Divider()
+                        Button("удалить", role: .destructive) { VideoModel.confirmRemove(item, video: model.video) }
+                    } label: {
+                        Text(model.video.summarizing.contains(item.id) ? "ищу задачи…" : "ещё")
                     }
-                    Button("копировать текст") { model.video.copy(item.id) }.buttonStyle(WhitePillStyle())
-                    Button("экспорт .srt") { model.video.exportSRT(item.id) }.buttonStyle(WhitePillStyle())
-                    Button("удалить") { VideoModel.confirmRemove(item, video: model.video) }.buttonStyle(QuietLinkStyle(size: 13, opacity: 0.3))
+                    .menuStyle(.button).menuIndicator(.hidden).buttonStyle(WhitePillStyle()).fixedSize()
                 }
                 .padding(.top, 16)
+
+                // Подпись, чтобы было ясно: ниже — сам текст, распознанный из записи.
+                Text("расшифровка")
+                    .font(Martian.body.font(15))
+                    .kerning(Theme.tracking(-7, size: 15))
+                    .foregroundStyle(Theme.ink)
+                    .padding(.top, 40)
 
                 VStack(alignment: .leading, spacing: 28) {
                     let transcript = model.video.transcript(item.id)
@@ -238,7 +250,7 @@ private struct TranscriptView: View {
                                 .kerning(Theme.tracking(-7, size: 15))
                                 .foregroundStyle(Theme.ink)
                                 .textSelection(.enabled)
-                                .frame(width: min(600, page - 60), alignment: .leading)
+                                .frame(width: min(600, page - 60 - 24), alignment: .leading)
                         }
                         .contextMenu {
                             // Разметка ошиблась — переотметить реплику: другой спикер или новый.
@@ -253,7 +265,7 @@ private struct TranscriptView: View {
                         }
                     }
                 }
-                .padding(.top, 36)
+                .padding(.top, 20)
             }
             .frame(width: min(660, page), alignment: .leading)
             .padding(.leading, 126)
@@ -293,43 +305,5 @@ private struct SpeakerName: View {
         .kerning(Theme.tracking(-7, size: 11))
         .foregroundStyle(Theme.coral)
         .frame(width: 240, alignment: .leading)
-    }
-}
-
-// Ряд, который переносится: элементы своего размера слева направо, не влезло — на новую строку.
-private struct Flow: SwiftUI.Layout {
-    var spacing: CGFloat
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = arrange(proposal.width ?? .infinity, subviews)
-        return CGSize(width: rows.map(\.width).max() ?? 0, height: rows.last.map { $0.y + $0.height } ?? 0)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        for row in arrange(bounds.width, subviews) {
-            var x = bounds.minX
-            for index in row.items {
-                let size = subviews[index].sizeThatFits(.unspecified)
-                subviews[index].place(at: CGPoint(x: x, y: bounds.minY + row.y + (row.height - size.height) / 2), proposal: .unspecified)
-                x += size.width + spacing
-            }
-        }
-    }
-
-    private struct Row { var items: [Int] = []; var width: CGFloat = 0; var height: CGFloat = 0; var y: CGFloat = 0 }
-
-    private func arrange(_ limit: CGFloat, _ subviews: Subviews) -> [Row] {
-        var rows = [Row()]
-        for index in subviews.indices {
-            let size = subviews[index].sizeThatFits(.unspecified)
-            if !rows[rows.count - 1].items.isEmpty, rows[rows.count - 1].width + spacing + size.width > limit {
-                rows.append(Row(y: rows[rows.count - 1].y + rows[rows.count - 1].height + spacing))
-            }
-            let gap = rows[rows.count - 1].items.isEmpty ? 0 : spacing
-            rows[rows.count - 1].items.append(index)
-            rows[rows.count - 1].width += gap + size.width
-            rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
-        }
-        return rows
     }
 }
