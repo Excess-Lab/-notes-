@@ -42,10 +42,14 @@ cd NotesSpeech && NOTES_GIGAAM_DIR=<папка распакованной GigaAM
 - Запускай в фоне — `open -g -n -F "build/…/<notes>.app" --args -testVault YES …` — снимок по номеру окна
   (`screencapture -o -l`) берётся и из-под других окон; после снимка сразу `kill <PID>`, самопроверку тоже.
 - Нажатия клавиш и клики скриптом macOS не пропускает без доступа, а доступ — системная настройка Макара.
-  Состояния экранов снимаем отладочными флагами (`-onboardingStep`, `-pinPreview`, `-dictationTestFile`),
+  Состояния экранов снимаем отладочными флагами (`-onboardingStep`, `-pinPreview`, `-dictationTestFile`,
+  `-speakerPreview YES -notesSection video` — разговор двух голосов со спикерами, сам убирается через 40 с),
   а живые нажатия (хоткей, ввод с клавиатуры, Touch ID) просим проверить Макара и так и пишем.
 - Тестовые данные, которые трогают его настоящие (пинкод, токен), после проверки возвращаем как было
   или прямо говорим, что поменялось.
+
+- Тест настоящей разметки спикеров: `DIARIZATION_MODELS=<папка с speakers/segmentation.onnx и embedding.onnx>
+  swift test --filter Diarization` в NotesSpeech; без переменной пропускается.
 
 ## Поиск по смыслу
 

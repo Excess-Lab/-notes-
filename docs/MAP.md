@@ -72,7 +72,8 @@
 
 - `NotesSpeech/Package.swift` — пакет: sherpa-onnx (готовая сборка) и WhisperKit.
 - `NotesSpeech/Sources/NotesSpeech/SpeechModel.swift` — каталог моделей, скачивание, проверка суммы.
-- `NotesSpeech/Sources/NotesSpeech/MediaTranscription.swift` — звук из видео и аудио → 16 кГц, куски по 20 с, распознавание.
+- `NotesSpeech/Sources/NotesSpeech/MediaTranscription.swift` — звук из видео и аудио → 16 кГц, куски по 20 с или по репликам спикеров, распознавание.
+- `NotesSpeech/Sources/NotesSpeech/Diarization.swift` — спикеры: скачивание моделей голосов и разметка «кто когда говорит».
 - `NotesSpeech/Sources/NotesSpeech/Transcriber.swift` — распознавание: GigaAM через sherpa-onnx, Whisper.
 - `NotesSpeech/Tests/NotesSpeechTests/*.swift` — тесты: с настоящими моделями (включаются переменными) и нарезка файла с заглушкой.
 - `NotesSpeech/Tests/NotesSpeechTests/SpeechTests.swift` — тесты с настоящими моделями (включаются переменными).
