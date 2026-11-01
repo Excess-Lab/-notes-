@@ -13,6 +13,14 @@ export interface TaskRow {
   date: string | null; time: string | null; minutes: number | null; urgent: boolean; raw: string;
 }
 
+/** Настройки интерфейса — вне хранилища (`prefs.json` в папке настроек приложения). */
+export interface Prefs {
+  theme?: "system" | "light" | "dark";
+  textSize?: number;
+  spellcheck?: boolean;
+  daily?: boolean;
+}
+
 export interface Hit { note: Note; snippet: string; score: number }
 
 export interface Api {
@@ -35,6 +43,9 @@ export interface Api {
   reveal(path: string): Promise<void>;
   pins(): Promise<string[]>;
   templates(): Promise<string[]>;
+  prefs(): Promise<Prefs>;
+  setPrefs(prefs: Prefs): Promise<void>;
+  vaultPath(): Promise<string | null>;
   /** Сохранить задачи в .ics. false — человек отменил окно сохранения. */
   exportIcs(): Promise<boolean>;
   setDue(task: TaskRow, date: string | null, time: string | null, minutes: number | null): Promise<void>;
@@ -76,6 +87,9 @@ async function tauriApi(): Promise<Api> {
     reveal: (path) => invoke<void>("reveal", { path }),
     pins: () => invoke<string[]>("pins"),
     templates: () => invoke<string[]>("templates"),
+    prefs: async () => JSON.parse(await invoke<string>("prefs")) as Prefs,
+    setPrefs: (prefs) => invoke<void>("set_prefs", { json: JSON.stringify(prefs) }),
+    vaultPath: () => invoke<string | null>("vault_path"),
     async exportIcs() {
       const { save } = await import("@tauri-apps/plugin-dialog");
       const path = await save({ defaultPath: "notes.ics", filters: [{ name: "iCalendar", extensions: ["ics"] }], title: "Задачи для календаря" });
@@ -268,6 +282,13 @@ const demoApi: Api = {
     a.click();
     return true;
   },
+  async prefs() {
+    try { return JSON.parse(localStorage.getItem("notes-prefs") ?? "{}") as Prefs; } catch { return {}; }
+  },
+  async setPrefs(prefs) {
+    try { localStorage.setItem("notes-prefs", JSON.stringify(prefs)); } catch { /* приватное окно */ }
+  },
+  vaultPath: async () => "C:\\Users\\makar\\Documents\\заметки (демо)",
   templates: async () => Object.keys(demo).filter((k) => k.startsWith("шаблоны/")).map((k) => k.slice(8, -3)).sort(),
   async createFromTemplate(template, folder, date, time) {
     const path = await demoApi.create(folder, template);

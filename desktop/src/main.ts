@@ -11,6 +11,8 @@ import { showMenu, type MenuItem } from "./menu";
 import { enableDrag, enableFileDrop, type DragHost } from "./drag";
 import { mountCalendar } from "./calendar";
 import { mountTasks } from "./tasks";
+import { mountSettings } from "./settings";
+import type { Prefs } from "./api";
 
 type Section = "notes" | "tasks" | "calendar" | "video" | "settings";
 type Selection = { kind: "folder"; path: string } | { kind: "note"; path: string };
@@ -244,7 +246,7 @@ function contentHTML(): string {
     case "tasks": return `<div class="tasks-root"></div>`;
     case "calendar": return `<div class="cal-root"></div>`;
     case "video": return soonHTML("видео");
-    case "settings": return soonHTML("настройки");
+    case "settings": return `<div class="settings-root"></div>`;
   }
 }
 
@@ -255,6 +257,10 @@ function mountSection() {
   const cal = page.querySelector<HTMLElement>(".cal-root");
   if (cal) mountCalendar(cal, { backend, openNote });
   const tasks = page.querySelector<HTMLElement>(".tasks-root");
+  const settings = page.querySelector<HTMLElement>(".settings-root");
+  if (settings) void mountSettings(settings, sidebar, { backend, onCrumb: (t) => (crumb.textContent = t), apply: applyPrefs,
+    pickVault: async () => { const tree = await backend.pickVault(); if (tree) { state.tree = tree; state.tabs = []; state.selection = { kind: "folder", path: "" }; await reload(); } render(); },
+    ensureFolder });
   tasksScreen = tasks ? mountTasks(tasks, sidebar, { backend, openNote, onFilter: (t) => (crumb.textContent = t) }) : null;
 }
 
@@ -292,6 +298,7 @@ function bindEditor() {
   const editor = page.querySelector<HTMLElement>(".note-text");
   const title = page.querySelector<HTMLInputElement>(".note-title");
   if (!editor || !title || state.selection.kind !== "note") return;
+  editor.spellcheck = prefs.spellcheck ?? true;
   bindMarkdown(editor, (text) => {
     state.text = text;
     const path = state.selection.path;
@@ -405,6 +412,25 @@ app.addEventListener("click", async (e) => {
   }
 });
 
+async function ensureFolder(name: string) {
+  if (!state.tree?.folders.some((f) => f.path === name)) await backend.createFolder("", name);
+}
+
+// ——— настройки интерфейса: тема, размер текста, орфография ———
+let prefs: Prefs = {};
+function applyPrefs(next: Prefs) {
+  prefs = next;
+  const root = document.documentElement;
+  if (!forced) {
+    if (next.theme === "light" || next.theme === "dark") root.dataset.theme = next.theme;
+    else delete root.dataset.theme;
+  }
+  root.style.setProperty("--note-size", `${next.textSize ?? 15}px`);
+  root.style.setProperty("--note-grow", `${(next.textSize ?? 15) - 15}px`);
+  document.querySelectorAll<HTMLElement>(".note-text").forEach((e) => (e.spellcheck = next.spellcheck ?? true));
+  paintSlats();
+}
+
 // ——— шаблоны: папка «шаблоны» хранилища, подстановки дата/время/название ———
 const now = () => {
   const d = new Date();
@@ -423,7 +449,7 @@ async function templateItems(folder: string): Promise<MenuItem[]> {
     await openNote(path);
   } }));
   if (!names.length) items.push({ label: "Шаблонов нет: добавьте .md в папку «шаблоны»", run: async () => {
-    await backend.createFolder("", "шаблоны").catch(() => "");
+    await ensureFolder("шаблоны");
     await reload(); state.expanded.add("шаблоны"); state.selection = { kind: "folder", path: "шаблоны" }; render();
   } });
   items.push("divider", { label: "Заметка дня", run: () => void openDaily() });
@@ -543,6 +569,7 @@ export const shell = { get backend() { return backend; }, get state() { return s
   backend = await api;
   const os = await backend.os();
   document.body.classList.add(backend.inTauri ? `tauri-${os}` : "browser");
+  applyPrefs(await backend.prefs());
   state.tree = await backend.lastVault();
   if (state.tree) state.pins = await backend.pins();
   if (backend.inTauri) void enableFileDrop(dragHost);
@@ -550,6 +577,8 @@ export const shell = { get backend() { return backend; }, get state() { return s
   render();
   paintSlats();
   requestAnimationFrame(() => app.classList.add("arrived"));
+  // Заметка на каждый день — открывается при запуске, если включена в настройках → шаблоны.
+  if (state.tree && prefs.daily && !demo) await openDaily();
   if (demo) {
     for (const part of demo.split("/").slice(0, -1).reduce<string[]>((acc, p) => [...acc, acc.length ? `${acc.at(-1)}/${p}` : p], [])) state.expanded.add(part);
     await openNote(demo);

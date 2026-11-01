@@ -162,6 +162,24 @@ fn ics(stamp: String, state: State<AppState>) -> Result<String, String> {
     with_vault(&state, |v| Ok(notes_core::ics::calendar(&v.tasks(), &stamp)))
 }
 
+#[tauri::command]
+fn prefs(app: tauri::AppHandle) -> String {
+    platform::settings::prefs(&app)
+}
+
+#[tauri::command]
+fn set_prefs(json: String, app: tauri::AppHandle) -> Result<(), String> {
+    serde_json::from_str::<serde_json::Value>(&json).map_err(|e| e.to_string())?;
+    platform::settings::save_prefs(&app, &json);
+    Ok(())
+}
+
+/// Путь открытого хранилища — для строки «папка хранилища» в настройках.
+#[tauri::command]
+fn vault_path(state: State<AppState>) -> Option<String> {
+    state.vault.lock().ok()?.as_ref().map(|v| v.root().display().to_string())
+}
+
 /// Какая ОС — интерфейс выбирает стекло окна (Mica на Windows, Liquid Glass на маке).
 #[tauri::command]
 fn os() -> &'static str {
@@ -183,7 +201,7 @@ pub fn run() {
             open_vault, last_vault, tree, read_note, write_note, create_note, rename_note, search, tasks, os,
             create_folder, duplicate, move_into, copy_in, trash, reveal, pins, set_pins,
             templates, create_from_template, daily,
-            set_due, set_done, append_task, export_ics, ics
+            set_due, set_done, append_task, export_ics, ics, prefs, set_prefs, vault_path
         ])
         .run(tauri::generate_context!())
         .expect("error while running <notes>");

@@ -39,3 +39,12 @@ pub fn pins(app: &AppHandle) -> Vec<String> {
 pub fn save_pins(app: &AppHandle, pins: &[String]) {
     save(app, "pins", &pins.join("\n"));
 }
+
+/// Настройки интерфейса (тема, размер текста, заметка дня…) — JSON целиком; разбирает интерфейс.
+pub fn prefs(app: &AppHandle) -> String {
+    load(app, "prefs.json").unwrap_or_else(|| "{}".to_string())
+}
+
+pub fn save_prefs(app: &AppHandle, json: &str) {
+    save(app, "prefs.json", json);
+}
