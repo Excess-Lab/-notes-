@@ -72,9 +72,10 @@ enum AppSettings {
     }
 
     // Предел длины одной надиктовки, в минутах.
-    static let lengthChoices = [1, 3, 5, 10]
+    // 0 — без предела: обрыв посреди длинной надиктовки выглядел как «сфера сама пропала» (01.11.2026).
+    static let lengthChoices = [0, 5, 10, 30]
     static var maxMinutes: Int {
-        get { UserDefaults.standard.object(forKey: "dictationMinutes") as? Int ?? 5 }
+        get { UserDefaults.standard.object(forKey: "dictationMinutes") as? Int ?? 0 }
         set { UserDefaults.standard.set(newValue, forKey: "dictationMinutes") }
     }
 

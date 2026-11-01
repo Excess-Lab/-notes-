@@ -194,7 +194,7 @@ private struct DictationPage: View {
             AutoPaste.enabled = $0; paste = $0
         }
         ChoiceRow(title: "длина записи", subtitle: "потом распознается сама",
-                  value: "до \(minutes) мин", choices: AppSettings.lengthChoices.map { ($0, "до \($0) мин") }) {
+                  value: Self.length(minutes), choices: AppSettings.lengthChoices.map { ($0, Self.length($0)) }) {
             AppSettings.maxMinutes = $0; minutes = $0
         }
         ForEach(SpeechModel.allCases, id: \.self) { model in
@@ -224,6 +224,8 @@ private struct DictationPage: View {
         }
         Note(text: "всё распознаётся на этом mac, без интернета")
     }
+
+    private static func length(_ minutes: Int) -> String { minutes == 0 ? "без предела" : "до \(minutes) мин" }
 
     private func subtitle(_ model: SpeechModel) -> String {
         let size = model.downloadMB >= 1000 ? String(format: "%.1f гб", Double(model.downloadMB) / 1000) : "\(model.downloadMB) мб"

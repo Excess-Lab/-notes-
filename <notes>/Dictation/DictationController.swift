@@ -97,10 +97,12 @@ final class DictationController {
             }
             state = .listening
             panel?.show()
-            limit = Task { [weak self] in
-                try? await Task.sleep(for: .seconds(Self.maximumSeconds))
-                guard !Task.isCancelled else { return }
-                await self?.finish()
+            if Self.maximumSeconds > 0 {
+                limit = Task { [weak self] in
+                    try? await Task.sleep(for: .seconds(Self.maximumSeconds))
+                    guard !Task.isCancelled else { return }
+                    await self?.finish()
+                }
             }
         } catch {
             log.error("микрофон не включился: \(String(describing: error), privacy: .public)")
