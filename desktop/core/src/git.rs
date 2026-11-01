@@ -5,7 +5,8 @@
 
 use std::path::Path;
 
-use git2::{IndexAddOption, Repository, RepositoryInitOptions, Signature, Status, StatusOptions};
+use git2::build::CheckoutBuilder;
+use git2::{Cred, FetchOptions, IndexAddOption, IndexEntry, PushOptions, RemoteCallbacks, Repository, RepositoryInitOptions, Signature, Status, StatusOptions};
 use serde::Serialize;
 
 pub const BRANCH: &str = "main";
@@ -134,6 +135,167 @@ impl History {
             return 0;
         }
         walk.count()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "kind", rename_all = "camelCase")]
+pub enum Pull {
+    UpToDate,
+    FastForward,
+    /// conflicts — заметки, которые правили на обоих компьютерах по-разному; рядом — копия
+    /// «имя (конфликт дата).md» с другого компьютера.
+    Merged { conflicts: Vec<String> },
+}
+
+/// Токен GitHub уходит паролем по HTTPS и живёт только на время вызова: в URL репозитория его не
+/// пишем, иначе он оказался бы в `.git/config` внутри хранилища.
+fn callbacks(token: Option<&str>) -> RemoteCallbacks<'_> {
+    let mut cb = RemoteCallbacks::new();
+    if let Some(token) = token {
+        cb.credentials(move |_, _, _| Cred::userpass_plaintext("x-access-token", token));
+    }
+    cb
+}
+
+impl History {
+    pub fn set_remote(&self, url: &str) -> Result<(), git2::Error> {
+        if self.repo.find_remote("origin").is_ok() {
+            self.repo.remote_set_url("origin", url)
+        } else {
+            self.repo.remote("origin", url).map(|_| ())
+        }
+    }
+
+    pub fn remote_url(&self) -> Option<String> {
+        self.repo.find_remote("origin").ok()?.url().map(str::to_string)
+    }
+
+    /// Есть ли коммиты, которых нет на сервере.
+    pub fn has_unpushed(&self) -> bool {
+        let Some(local) = self.repo.head().ok().and_then(|h| h.target()) else { return false };
+        match self.repo.refname_to_id(&format!("refs/remotes/origin/{BRANCH}")) {
+            Ok(remote) => remote != local,
+            Err(_) => true,
+        }
+    }
+
+    pub fn push(&self, token: Option<&str>) -> Result<(), git2::Error> {
+        let mut remote = self.repo.find_remote("origin")?;
+        let mut options = PushOptions::new();
+        options.remote_callbacks(callbacks(token));
+        let spec = format!("refs/heads/{BRANCH}:refs/heads/{BRANCH}");
+        remote.push(&[spec.as_str()], Some(&mut options))?;
+        // Копия ветки сервера — как после `git push`: по ней видно, что отправлено.
+        if let Some(id) = self.repo.head()?.target() {
+            self.repo.reference(&format!("refs/remotes/origin/{BRANCH}"), id, true, "push")?;
+        }
+        Ok(())
+    }
+
+    pub fn fetch(&self, token: Option<&str>) -> Result<(), git2::Error> {
+        let mut remote = self.repo.find_remote("origin")?;
+        let mut options = FetchOptions::new();
+        options.remote_callbacks(callbacks(token));
+        remote.fetch(&[format!("refs/heads/{BRANCH}:refs/remotes/origin/{BRANCH}")], Some(&mut options), None)
+    }
+
+    /// Забрать правки с сервера и влить в текущую ветку. Главное правило, как на маке: текст не
+    /// теряется никогда. Одну заметку поменяли в двух местах — в файле остаётся здешняя версия, а
+    /// версия с другого компьютера ложится рядом копией. Удаление против правки — побеждает правка.
+    /// `date` — `2026-11-01`, для имени копии. Перед вызовом всё здешнее коммитим сами.
+    pub fn pull(&self, token: Option<&str>, date: &str) -> Result<Pull, git2::Error> {
+        self.commit_now()?;
+        self.fetch(token)?;
+        let Ok(their_id) = self.repo.refname_to_id(&format!("refs/remotes/origin/{BRANCH}")) else { return Ok(Pull::UpToDate) };
+        let theirs = self.repo.find_annotated_commit(their_id)?;
+        let (analysis, _) = self.repo.merge_analysis(&[&theirs])?;
+        if analysis.is_up_to_date() {
+            return Ok(Pull::UpToDate);
+        }
+        if analysis.is_fast_forward() || analysis.is_unborn() {
+            let refname = format!("refs/heads/{BRANCH}");
+            match self.repo.find_reference(&refname) {
+                Ok(mut r) => { r.set_target(their_id, "pull: fast-forward")?; }
+                Err(_) => { self.repo.reference(&refname, their_id, true, "pull")?; }
+            }
+            self.repo.set_head(&refname)?;
+            self.repo.checkout_head(Some(CheckoutBuilder::new().safe()))?;
+            return Ok(Pull::FastForward);
+        }
+        let ours = self.repo.head()?.peel_to_commit()?;
+        let theirs_commit = self.repo.find_commit(their_id)?;
+        let mut index = self.repo.merge_commits(&ours, &theirs_commit, None)?;
+        let conflicts = resolve_conflicts(&mut index, date)?;
+        let tree_id = index.write_tree_to(&self.repo)?;
+        let tree = self.repo.find_tree(tree_id)?;
+        let me = Signature::now(AUTHOR, EMAIL)?;
+        let message = if conflicts.is_empty() {
+            "слияние с другого компьютера".to_string()
+        } else {
+            let names: Vec<&str> = conflicts.iter().map(|p| p.rsplit('/').next().unwrap_or(p)).collect();
+            format!("слияние с другого компьютера, конфликты: {}", names.join(", "))
+        };
+        self.repo.commit(Some("HEAD"), &me, &me, &message, &tree, &[&ours, &theirs_commit])?;
+        // Обновить файлы в папке под новый коммит; всё своё уже закоммичено выше.
+        self.repo.checkout_head(Some(CheckoutBuilder::new().force()))?;
+        Ok(Pull::Merged { conflicts })
+    }
+}
+
+fn resolve_conflicts(index: &mut git2::Index, date: &str) -> Result<Vec<String>, git2::Error> {
+    if !index.has_conflicts() {
+        return Ok(Vec::new());
+    }
+    let found: Vec<(Option<IndexEntry>, Option<IndexEntry>, String)> = index
+        .conflicts()?
+        .filter_map(Result::ok)
+        .filter_map(|c| {
+            let any = c.our.as_ref().or(c.their.as_ref()).or(c.ancestor.as_ref())?;
+            let path = String::from_utf8_lossy(&any.path).into_owned();
+            Some((c.our, c.their, path))
+        })
+        .collect();
+    let mut copies = Vec::new();
+    for (ours, theirs, path) in found {
+        index.conflict_remove(std::path::Path::new(&path))?;
+        let mut stage0 = |mut e: IndexEntry, at: &str, index: &mut git2::Index| -> Result<(), git2::Error> {
+            e.flags &= !0x3000; // из конфликтной стадии в обычную
+            e.path = at.as_bytes().to_vec();
+            index.add(&e)
+        };
+        match (ours, theirs) {
+            (Some(o), Some(t)) => {
+                stage0(o, &path, index)?;
+                let copy = conflict_copy_path(&path, date, index);
+                stage0(t, &copy, index)?;
+                copies.push(path);
+            }
+            (Some(o), None) => stage0(o, &path, index)?,
+            (None, Some(t)) => stage0(t, &path, index)?,
+            (None, None) => {}
+        }
+    }
+    Ok(copies)
+}
+
+/// «папка/план.md» → «папка/план (конфликт 2026-10-19).md», при повторе — «… 2», «… 3».
+pub fn conflict_copy_path(path: &str, date: &str, index: &git2::Index) -> String {
+    let (stem, ext) = match path.rsplit_once('.') {
+        Some((s, e)) if !s.ends_with('/') && !s.is_empty() => (s, Some(e)),
+        _ => (path, None),
+    };
+    let mut n = 1;
+    loop {
+        let suffix = if n == 1 { String::new() } else { format!(" {n}") };
+        let candidate = match ext {
+            Some(e) => format!("{stem} (конфликт {date}{suffix}).{e}"),
+            None => format!("{stem} (конфликт {date}{suffix})"),
+        };
+        if index.get_path(std::path::Path::new(&candidate), 0).is_none() {
+            return candidate;
+        }
+        n += 1;
     }
 }
 

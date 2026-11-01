@@ -49,3 +49,42 @@ fn message_like_mac() {
     assert_eq!(git::plural(21, "файл", "файла", "файлов"), "файл");
     assert_eq!(git::plural(12, "файл", "файла", "файлов"), "файлов");
 }
+
+/// Два компьютера и сервер (голый репозиторий в папке): правки уходят и приходят, конфликт не теряет текста.
+#[test]
+fn push_pull_and_conflict_copy() {
+    let server = tempfile::tempdir().unwrap();
+    git2::Repository::init_bare(server.path()).unwrap();
+    let url = server.path().to_str().unwrap().to_string();
+
+    let a = tempfile::tempdir().unwrap();
+    fs::write(a.path().join("план.md"), "первая строка\n").unwrap();
+    let (ha, _) = History::prepare(a.path()).unwrap();
+    ha.set_remote(&url).unwrap();
+    assert!(ha.has_unpushed());
+    ha.push(None).unwrap();
+    assert!(!ha.has_unpushed());
+
+    // Второй компьютер: пустая папка, история приходит с сервера.
+    let b = tempfile::tempdir().unwrap();
+    let (hb, _) = History::prepare(b.path()).unwrap();
+    hb.set_remote(&url).unwrap();
+    let first = hb.pull(None, "2026-11-01").unwrap();
+    assert!(matches!(first, git::Pull::Merged { .. } | git::Pull::FastForward), "{first:?}");
+    assert_eq!(fs::read_to_string(b.path().join("план.md")).unwrap(), "первая строка\n");
+    hb.push(None).unwrap();
+    assert_eq!(ha.pull(None, "2026-11-01").unwrap(), git::Pull::FastForward);
+
+    // Обе стороны правят одну заметку по-разному.
+    fs::write(a.path().join("план.md"), "версия A\n").unwrap();
+    ha.commit_now().unwrap();
+    ha.push(None).unwrap();
+    fs::write(b.path().join("план.md"), "версия B\n").unwrap();
+    fs::write(b.path().join("новая.md"), "только на B\n").unwrap();
+    let merged = hb.pull(None, "2026-11-02").unwrap();
+    assert_eq!(merged, git::Pull::Merged { conflicts: vec!["план.md".into()] });
+    assert_eq!(fs::read_to_string(b.path().join("план.md")).unwrap(), "версия B\n", "ours stays in place");
+    assert_eq!(fs::read_to_string(b.path().join("план (конфликт 2026-11-02).md")).unwrap(), "версия A\n", "theirs kept next to it");
+    assert!(b.path().join("новая.md").exists());
+    assert!(hb.changes().unwrap().is_empty(), "working tree matches the merge commit");
+}
