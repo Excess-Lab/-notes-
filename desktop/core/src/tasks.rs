@@ -22,6 +22,8 @@ pub struct Task {
     pub minutes: Option<u32>,
     /// «!!» в строке.
     pub urgent: bool,
+    /// Строка целиком — перед правкой проверяем, что её не поменяли.
+    pub raw: String,
 }
 
 const MARKER: &str = "📅";
@@ -63,12 +65,27 @@ pub fn parse_task(line: &str, index: usize) -> Option<Task> {
     if text.is_empty() {
         return None;
     }
-    Some(Task { line: index, title: text, done: mark != ' ', date, time, minutes, urgent })
+    Some(Task { line: index, title: text, done: mark != ' ', date, time, minutes, urgent, raw: line.trim_end_matches('\r').to_string() })
 }
 
 /// Все задачи заметки.
 pub fn tasks_in(text: &str) -> Vec<Task> {
     text.lines().enumerate().filter_map(|(i, l)| parse_task(l, i)).collect()
+}
+
+/// ` 📅 2026-10-31`, ` 📅 2026-10-31 15:00` или ` 📅 2026-10-31 15:00–16:30` — как `dateText` на маке.
+pub fn date_text(date: Option<&str>, time: Option<&str>, minutes: Option<u32>) -> String {
+    let Some(date) = date else { return String::new() };
+    let mut out = format!(" {MARKER} {date}");
+    if let Some(time) = time {
+        out.push(' ');
+        out.push_str(time);
+        if let (Some(start), Some(m)) = (hm(time), minutes) {
+            let end = (start + m).min(23 * 60 + 59);
+            out.push_str(&format!("–{:02}:{:02}", end / 60, end % 60));
+        }
+    }
+    out
 }
 
 fn hm(s: &str) -> Option<u32> {

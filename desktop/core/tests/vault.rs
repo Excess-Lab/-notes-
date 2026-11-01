@@ -148,3 +148,19 @@ fn templates_and_daily() {
     assert_eq!(fs::read_to_string(d.path().join(&b)).unwrap(), "# встреча 2\n2026-11-02 15:30\n");
     assert_eq!(fs::read_to_string(d.path().join(v.daily("2026-11-03", "08:00").unwrap())).unwrap(), "день 2026-11-03");
 }
+
+#[test]
+fn edit_task_lines() {
+    let (d, v) = vault();
+    let (_, bread) = v.tasks().into_iter().find(|(p, _)| p == "Входящие.md").unwrap();
+    v.set_due("Входящие.md", bread.line, &bread.raw, Some("2026-11-05"), Some("15:00"), Some(90)).unwrap();
+    assert_eq!(fs::read_to_string(d.path().join("Входящие.md")).unwrap(), "- [ ] купить хлеб 📅 2026-11-05 15:00–16:30\n");
+    assert!(matches!(v.set_due("Входящие.md", 0, &bread.raw, None, None, None), Err(VaultError::ChangedOnDisk)), "stale raw");
+    let (_, now) = v.tasks().into_iter().find(|(p, _)| p == "Входящие.md").unwrap();
+    v.set_done("Входящие.md", now.line, &now.raw, true).unwrap();
+    v.append_task("Входящие.md", " позвонить ", Some("2026-11-06"), None, None).unwrap();
+    v.append_task("новое.md", "первая", None, None, None).unwrap();
+    assert_eq!(fs::read_to_string(d.path().join("Входящие.md")).unwrap(),
+        "- [x] купить хлеб 📅 2026-11-05 15:00–16:30\n- [ ] позвонить 📅 2026-11-06\n");
+    assert_eq!(fs::read_to_string(d.path().join("новое.md")).unwrap(), "- [ ] первая\n");
+}

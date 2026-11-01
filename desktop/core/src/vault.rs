@@ -26,6 +26,8 @@ pub enum VaultError {
     /// Имя не создать на этой ОС — показать человеку, файл не трогать.
     BadName(&'static str),
     NotFound,
+    /// Строку задачи поменяли снаружи с тех пор, как её прочитали.
+    ChangedOnDisk,
 }
 
 impl std::fmt::Display for VaultError {
@@ -35,6 +37,7 @@ impl std::fmt::Display for VaultError {
             VaultError::OutsideVault => write!(f, "path is outside the vault"),
             VaultError::BadName(why) => write!(f, "bad file name: {why}"),
             VaultError::NotFound => write!(f, "not found"),
+            VaultError::ChangedOnDisk => write!(f, "the note changed on disk"),
         }
     }
 }
@@ -296,6 +299,49 @@ impl Vault {
         let name = if dir.join(&file).exists() { free_name(&dir, &format!("{base} копия"), ext, |n| format!(" {n}"), 1) } else { file };
         copy_any(outside, &dir.join(&name))?;
         Ok(join(folder, &name))
+    }
+
+    /// Строка задачи `line` в заметке — только если она всё ещё `raw`: файл могли поменять
+    /// снаружи, и тогда чужую правку не трогаем (как `changedOnDisk` на маке).
+    fn edit_task_line(&self, rel: &str, line: usize, raw: &str, edit: impl FnOnce(&str) -> String) -> Result<(), VaultError> {
+        let text = self.read(rel)?;
+        let mut lines: Vec<String> = text.split('\n').map(str::to_string).collect();
+        let current = lines.get(line).map(|l| l.trim_end_matches('\r')).ok_or(VaultError::ChangedOnDisk)?;
+        if current != raw.trim_end_matches('\r') {
+            return Err(VaultError::ChangedOnDisk);
+        }
+        lines[line] = edit(current);
+        self.write(rel, &lines.join("\n"))
+    }
+
+    /// Новая дата задачи: старую `📅 …` срезаем, пишем новую. `date: None` — убрать дату.
+    pub fn set_due(&self, rel: &str, line: usize, raw: &str, date: Option<&str>, time: Option<&str>, minutes: Option<u32>) -> Result<(), VaultError> {
+        self.edit_task_line(rel, line, raw, |l| {
+            let head = l.split("📅").next().unwrap_or(l).trim_end();
+            format!("{head}{}", crate::tasks::date_text(date, time, minutes))
+        })
+    }
+
+    /// Отметить задачу (не)сделанной — правим только квадратик.
+    pub fn set_done(&self, rel: &str, line: usize, raw: &str, done: bool) -> Result<(), VaultError> {
+        self.edit_task_line(rel, line, raw, |l| match l.find('[') {
+            Some(i) => format!("{}[{}]{}", &l[..i], if done { 'x' } else { ' ' }, &l[i + 3..]),
+            None => l.to_string(),
+        })
+    }
+
+    /// Дописать задачу в конец заметки (по умолчанию — «Входящие.md», как на маке). Нет файла — создаём.
+    pub fn append_task(&self, rel: &str, title: &str, date: Option<&str>, time: Option<&str>, minutes: Option<u32>) -> Result<(), VaultError> {
+        let title = title.trim();
+        if title.is_empty() {
+            return Ok(());
+        }
+        let mut text = self.read(rel).unwrap_or_default();
+        if !text.is_empty() && !text.ends_with('\n') {
+            text.push('\n');
+        }
+        text.push_str(&format!("- [ ] {title}{}\n", crate::tasks::date_text(date, time, minutes)));
+        self.write(rel, &text)
     }
 
     /// Задачи из всех заметок: (путь заметки, задача).
