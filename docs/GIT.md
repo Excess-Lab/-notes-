@@ -27,7 +27,33 @@
 1. `CHANGELOG.md` в корне — новый раздел сверху, **по-английски**, по разделам приложения.
 2. `MARKETING_VERSION` в проекте — тот же номер.
 3. `Scripts/make-dmg.sh`, Dev — fast-forward в `main`, тег `vX.Y.Z` на `main`, пуш `main`, `Dev` и тега.
-4. `gh release create vX.Y.Z build/notes.dmg --notes-file …` — текст из раздела CHANGELOG.
+4. `gh release create vX.Y.Z build/notes.dmg --title "<notes> X.Y.Z" --notes-file …` — текст из раздела
+   CHANGELOG.
+
+Название релиза — **только имя и версия**: `<notes> 1.0.0`, без описания в названии. Описание —
+по-английски: раздел CHANGELOG и в конце блок «Install» про Gatekeeper (01.11.2026, [DECISIONS.md](DECISIONS.md)).
+
+Релиз можно создать и без DMG (облачная сессия на Linux его не соберёт), тогда файл докладывается потом:
+
+```
+gh release upload v1.0.0 build/notes.dmg --clobber
+```
+
+### DMG руками, по кликам
+
+Красивый установщик (фон, приложение слева, ярлык «Программы» справа) собирает только скрипт: в Xcode
+этого нет. Xcode нужен, только чтобы проверить подпись.
+
+1. Xcode → открыть `<notes>.xcodeproj` → в левой колонке синяя иконка `<notes>` → таргет `<notes>` →
+   вкладка **Signing & Capabilities** → **Team**: Personal Team (U8T962NCZ2). Закрыть Xcode не обязательно.
+2. Терминал → `cd` в папку репозитория → `git checkout main` (релиз собирается с `main`, не с `Dev`).
+3. `Scripts/make-dmg.sh` — в конце строка `13M build/notes.dmg`. Во время сборки на секунду откроется
+   окно Finder с установщиком: это скрипт расставляет иконки, его не трогать.
+4. Проверить: `hdiutil verify build/notes.dmg`, двойной клик по файлу — окно с фоном и стрелкой.
+5. `gh release upload v1.0.0 build/notes.dmg --clobber` — DMG прикрепляется к релизу.
+6. `git checkout Dev` — вернуться в рабочую ветку.
+
+`build/notes.dmg` в git не идёт (`build/` в `.gitignore`).
 
 Сборка подписана сертификатом Apple Development и не нотаризована: на чужом Mac Gatekeeper её не
 пускает, пока не нажать «Всё равно открыть» в настройках «Конфиденциальность и безопасность».
