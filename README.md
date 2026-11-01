@@ -12,14 +12,14 @@ automatic version history, on-device dictation and tasks that live in your calen
 </p>
 
 <p>
-<a href="https://github.com/Excess-Lab/-notes-/releases/latest"><img src="https://img.shields.io/github/v/release/Excess-Lab/-notes-?style=for-the-badge&labelColor=000000&color=1a1a1a&label=release" alt="Latest release"></a>
+<a href="https://github.com/EdinstvoAI/-notes-/releases/latest"><img src="https://img.shields.io/github/v/release/EdinstvoAI/-notes-?style=for-the-badge&labelColor=000000&color=1a1a1a&label=release" alt="Latest release"></a>
 <img src="https://img.shields.io/badge/macOS-27%2B-1a1a1a?style=for-the-badge&labelColor=000000&logo=apple&logoColor=white" alt="macOS 27+">
 <img src="https://img.shields.io/badge/Windows-in%20progress-1a1a1a?style=for-the-badge&labelColor=000000&logo=windows11&logoColor=white" alt="Windows in progress">
 <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-1a1a1a?style=for-the-badge&labelColor=000000" alt="MIT license"></a>
 </p>
 
 <p>
-<a href="https://github.com/Excess-Lab/-notes-/releases/latest"><b>Download for macOS</b></a>
+<a href="https://github.com/EdinstvoAI/-notes-/releases/latest"><b>Download for macOS</b></a>
 &nbsp;·&nbsp;
 <a href="#features">Features</a>
 &nbsp;·&nbsp;
@@ -82,12 +82,12 @@ PIN code and Touch ID. Tokens and the PIN live in the Keychain, never in files.
 
 | Platform | Status |
 |---|---|
-| macOS 27+ | ✅ Available, [download](https://github.com/Excess-Lab/-notes-/releases/latest) |
+| macOS 27+ | ✅ Available, [download](https://github.com/EdinstvoAI/-notes-/releases/latest) |
 | Windows | 🚧 In progress. Same vault format: one folder works on both |
 
 ## Install
 
-1. Download **`notes.dmg`** from the [latest release](https://github.com/Excess-Lab/-notes-/releases/latest).
+1. Download **`notes.dmg`** from the [latest release](https://github.com/EdinstvoAI/-notes-/releases/latest).
 2. Open it and drag **`<notes>`** into **Applications**.
 3. This build is not notarized yet, so macOS asks once. Open
    **System Settings → Privacy & Security**, scroll down and click **Open Anyway**.
@@ -96,13 +96,15 @@ PIN code and Touch ID. Tokens and the PIN live in the Keychain, never in files.
 
 ```text
 my-notes/                    any folder, also a git repo
-├── Входящие.md              inbox for quick tasks
+├── inbox.md                 quick tasks land here
 ├── projects/
 │   └── launch.md            - [ ] ship 1.0 📅 2026-11-01 15:00
-├── шаблоны/                 templates: {{дата}} {{время}} {{название}}
-│   └── день.md
-└── расшифровки/             transcripts saved as notes
+├── templates/               {{date}}, {{time}} and {{title}} are filled in
+│   └── daily.md
+└── transcripts/             transcripts saved as notes
 ```
+
+<sub>Folder and file names above are examples. The app currently creates its own folders with Russian names.</sub>
 
 Nothing else goes into this folder. The search index, caches and models live in
 `~/Library/Application Support` and are rebuilt from your files at any time.
@@ -112,7 +114,7 @@ Nothing else goes into this folder. The search index, caches and models live in
 **Requirements:** macOS 27+ and the latest Xcode.
 
 ```bash
-git clone https://github.com/Excess-Lab/-notes-.git notes && cd notes
+git clone https://github.com/EdinstvoAI/-notes-.git notes && cd notes
 ./Scripts/fetch-sherpa-onnx.sh   # speech runtime, ~100 MB, checksums verified
 open "<notes>.xcodeproj"         # scheme <notes> → My Mac → ⌘R
 ```
@@ -153,5 +155,5 @@ Released under the [MIT License](LICENSE). Martian Grotesk is used under the SIL
 <br>
 
 <div align="center">
-<sub>Designed and built by <a href="https://github.com/sharyzadizain">Makar K</a> · <a href="https://github.com/Excess-Lab">Excess Lab</a></sub>
+<sub>Designed and built by <a href="https://github.com/sharyzadizain">Makar K</a> at <a href="https://github.com/EdinstvoAI">Edinstvo AI</a></sub>
 </div>
