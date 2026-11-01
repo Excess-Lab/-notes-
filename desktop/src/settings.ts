@@ -23,9 +23,15 @@ export interface SettingsHost {
   pickVault(): Promise<void>;
   /** Создать папку в корне, только если её ещё нет (иначе вышла бы «шаблоны 2»). */
   ensureFolder(name: string): Promise<void>;
+  /** Перечитать статус истории в шапке. */
+  refreshSync(): Promise<void>;
 }
 
 let page: Page = "general";
+const plural = (n: number, one: string, few: string, many: string) => {
+  const d = n % 10, h = n % 100;
+  return d === 1 && h !== 11 ? one : d >= 2 && d <= 4 && (h < 12 || h > 14) ? few : many;
+};
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 
 const row = (title: string, subtitle: string, trailing: string) => `
@@ -41,6 +47,12 @@ const note = (text: string) => `<p class="setting-note">${text}</p>`;
 export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, host: SettingsHost) {
   let prefs = await host.backend.prefs();
   const vault = await host.backend.vaultPath();
+  let git = await host.backend.gitStatus();
+  const ago = (s: number | null) => {
+    if (s === null) return "ещё не сохраняли";
+    const m = Math.floor((Date.now() / 1000 - s) / 60);
+    return m < 1 ? "только что" : m < 60 ? `${m} мин назад` : m < 1440 ? `${Math.floor(m / 60)} ч назад` : new Date(s * 1000).toLocaleDateString("ru", { day: "numeric", month: "short" });
+  };
   const isMac = document.body.classList.contains("tauri-macos");
 
   function body(): string {
@@ -52,7 +64,10 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
           + row("открывать при входе в " + (isMac ? "mac" : "windows"), "сразу после включения компьютера", later());
       case "sync":
         return row("папка хранилища", esc(vault ?? "не выбрана"), pill("vault", "изменить"))
-          + row("история в git", "версии сохраняются по расписанию", later())
+          + row("история в git", git.repo ? `${git.commits} ${plural(git.commits, "версия", "версии", "версий")} · любую правку можно откатить` : "версии сохраняются по расписанию",
+            git.repo ? granted("включено") : pill("git", "включить"))
+          + (git.repo ? row("сохранять версию", "", choice("commitMinutes", prefs.commitMinutes ?? 60, [[15, "15 мин"], [30, "30 мин"], [60, "час"], [180, "3 ч"]]))
+            + row("последняя версия", ago(git.last_commit) + (git.pending ? ` · несохранённых файлов: ${git.pending}` : ""), pill("commit", "сохранить сейчас")) : "")
           + row("github", "приватный репозиторий notes, вход по коду", later())
           + note("папка та же, что на маке: заметки — обычные файлы .md, окончания строк не меняются");
       case "templates":
@@ -94,8 +109,21 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
       const current = prefs[key] ?? (key === "spellcheck");
       await save({ ...prefs, [key]: !current });
     } else if (b.dataset.choice) {
-      const key = b.dataset.choice as "theme" | "textSize";
-      await save({ ...prefs, [key]: key === "textSize" ? Number(b.dataset.value) : b.dataset.value });
+      const key = b.dataset.choice as "theme" | "textSize" | "commitMinutes";
+      await save({ ...prefs, [key]: key === "theme" ? b.dataset.value : Number(b.dataset.value) });
+    } else if (b.dataset.set === "git") {
+      b.textContent = "включаем…";
+      await host.backend.gitEnable();
+      git = await host.backend.gitStatus();
+      await host.refreshSync();
+      render();
+    } else if (b.dataset.set === "commit") {
+      const message = await host.backend.gitCommit();
+      git = await host.backend.gitStatus();
+      await host.refreshSync();
+      render();
+      const note = root.querySelector(".settings-rows");
+      note?.insertAdjacentHTML("beforeend", `<p class="setting-note">${message ? esc(message) : "менять было нечего"}</p>`);
     } else if (b.dataset.set === "vault") {
       await host.pickVault();
     } else if (b.dataset.set === "templates") {

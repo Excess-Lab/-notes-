@@ -58,7 +58,7 @@ app.innerHTML = `
       <button class="search">${icon("search")}<span>поиск</span><kbd class="keycap">Ctrl K</kbd></button>
     </div>
     <nav class="group sections"></nav>
-    <div class="group sync">${icon("git")}<span>синхронизировано</span></div>
+    <div class="group sync" title="история в git">${icon("git")}<span class="sync-text">без git</span></div>
   </header>
   <div class="sheet arrive" style="transition-delay:.15s"></div>
   <button class="crumb arrive" style="transition-delay:.2s"></button>
@@ -260,7 +260,7 @@ function mountSection() {
   const settings = page.querySelector<HTMLElement>(".settings-root");
   if (settings) void mountSettings(settings, sidebar, { backend, onCrumb: (t) => (crumb.textContent = t), apply: applyPrefs,
     pickVault: async () => { const tree = await backend.pickVault(); if (tree) { state.tree = tree; state.tabs = []; state.selection = { kind: "folder", path: "" }; await reload(); } render(); },
-    ensureFolder });
+    ensureFolder, refreshSync });
   tasksScreen = tasks ? mountTasks(tasks, sidebar, { backend, openNote, onFilter: (t) => (crumb.textContent = t) }) : null;
 }
 
@@ -431,6 +431,26 @@ function applyPrefs(next: Prefs) {
   paintSlats();
 }
 
+// ——— история в git: версия по расписанию, статус — в капсуле шапки ———
+// На маке капсула говорит «синхронизировано», потому что версии уходят на GitHub. Здесь пока только
+// локальная история, поэтому честно: «сохранено N мин назад».
+async function refreshSync() {
+  const text = $(".sync-text");
+  if (!state.tree) { text.textContent = "без git"; return; }
+  try {
+    const s = await backend.gitStatus();
+    if (!s.repo || s.last_commit === null) { text.textContent = "без git"; fitHeader(); return; }
+    const minutes = Math.floor((Date.now() / 1000 - s.last_commit) / 60);
+    text.textContent = minutes < 1 ? "сохранено только что" : minutes < 60 ? `сохранено ${minutes} мин назад` : `сохранено ${Math.floor(minutes / 60)} ч назад`;
+    // Пора сохранить версию — раз в N минут из настроек (по умолчанию час, как на маке).
+    if (minutes >= (prefs.commitMinutes ?? 60) && (await backend.gitCommit())) await refreshSync();
+  } catch {
+    text.textContent = "не сохранилось";
+  }
+  fitHeader();
+}
+setInterval(() => void refreshSync(), 30_000);
+
 // ——— шаблоны: папка «шаблоны» хранилища, подстановки дата/время/название ———
 const now = () => {
   const d = new Date();
@@ -573,10 +593,15 @@ export const shell = { get backend() { return backend; }, get state() { return s
   state.tree = await backend.lastVault();
   if (state.tree) state.pins = await backend.pins();
   if (backend.inTauri) void enableFileDrop(dragHost);
+  void refreshSync();
   const demo = new URLSearchParams(location.search).get("open");
   render();
   paintSlats();
   requestAnimationFrame(() => app.classList.add("arrived"));
+  if (backend.inTauri && (await (await import("@tauri-apps/api/core")).invoke<boolean>("selftest"))) {
+    const { runSelftest } = await import("./selftest");
+    void runSelftest(backend, { openNote, app });
+  }
   // Заметка на каждый день — открывается при запуске, если включена в настройках → шаблоны.
   if (state.tree && prefs.daily && !demo) await openDaily();
   if (demo) {

@@ -19,7 +19,11 @@ export interface Prefs {
   textSize?: number;
   spellcheck?: boolean;
   daily?: boolean;
+  /** Как часто сохранять версию в git, минуты. */
+  commitMinutes?: number;
 }
+
+export interface GitStatus { repo: boolean; last_commit: number | null; commits: number; pending: number }
 
 export interface Hit { note: Note; snippet: string; score: number }
 
@@ -46,6 +50,9 @@ export interface Api {
   prefs(): Promise<Prefs>;
   setPrefs(prefs: Prefs): Promise<void>;
   vaultPath(): Promise<string | null>;
+  gitStatus(): Promise<GitStatus>;
+  gitEnable(): Promise<void>;
+  gitCommit(): Promise<string | null>;
   /** Сохранить задачи в .ics. false — человек отменил окно сохранения. */
   exportIcs(): Promise<boolean>;
   setDue(task: TaskRow, date: string | null, time: string | null, minutes: number | null): Promise<void>;
@@ -90,6 +97,9 @@ async function tauriApi(): Promise<Api> {
     prefs: async () => JSON.parse(await invoke<string>("prefs")) as Prefs,
     setPrefs: (prefs) => invoke<void>("set_prefs", { json: JSON.stringify(prefs) }),
     vaultPath: () => invoke<string | null>("vault_path"),
+    gitStatus: () => invoke<GitStatus>("git_status"),
+    gitEnable: () => invoke<void>("git_enable"),
+    gitCommit: () => invoke<string | null>("git_commit"),
     async exportIcs() {
       const { save } = await import("@tauri-apps/plugin-dialog");
       const path = await save({ defaultPath: "notes.ics", filters: [{ name: "iCalendar", extensions: ["ics"] }], title: "Задачи для календаря" });
@@ -138,6 +148,7 @@ const demoDate = (date: string | null, time: string | null, minutes: number | nu
   return ` 📅 ${date} ${time}–${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
 };
 let demoPins: string[] = [];
+const demoGit = { repo: true, last_commit: Math.floor(Date.now() / 1000) - 12 * 60 as number | null, commits: 42, pending: 0 };
 const demoFree = (want: (n: number) => string, taken: (p: string) => boolean) => {
   let n = 1;
   while (taken(want(n))) n++;
@@ -287,6 +298,13 @@ const demoApi: Api = {
   },
   async setPrefs(prefs) {
     try { localStorage.setItem("notes-prefs", JSON.stringify(prefs)); } catch { /* приватное окно */ }
+  },
+  gitStatus: async () => ({ ...demoGit }),
+  async gitEnable() { demoGit.repo = true; demoGit.commits = 1; demoGit.last_commit = Math.floor(Date.now() / 1000); },
+  async gitCommit() {
+    if (!demoGit.repo) return null;
+    demoGit.commits++; demoGit.last_commit = Math.floor(Date.now() / 1000);
+    return "правки: план приложения.md";
   },
   vaultPath: async () => "C:\\Users\\makar\\Documents\\заметки (демо)",
   templates: async () => Object.keys(demo).filter((k) => k.startsWith("шаблоны/")).map((k) => k.slice(8, -3)).sort(),
