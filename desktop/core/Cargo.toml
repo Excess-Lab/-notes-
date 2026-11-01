@@ -9,6 +9,9 @@ license.workspace = true
 serde = { version = "1", features = ["derive"] }
 unicode-normalization = "0.1"
 git2 = { version = "0.20", default-features = false, features = ["https"] }
+pbkdf2 = { version = "0.12", default-features = false, features = ["hmac"] }
+sha2 = "0.10"
+getrandom = "0.2"
 
 [dev-dependencies]
 tempfile = "3"
