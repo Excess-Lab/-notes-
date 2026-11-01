@@ -21,7 +21,13 @@ export interface Prefs {
   daily?: boolean;
   /** Как часто сохранять версию в git, минуты. */
   commitMinutes?: number;
+  /** Последняя синхронизация с GitHub, мс. */
+  lastSync?: number;
 }
+
+export interface GithubStatus { signed_in: boolean; remote: string | null; unpushed: boolean }
+export interface DeviceCode { device_code: string; user_code: string; verification_uri: string; expires_in: number; interval: number }
+export type PullResult = { kind: "upToDate" } | { kind: "fastForward" } | { kind: "merged"; conflicts: string[] };
 
 export interface GitStatus { repo: boolean; last_commit: number | null; commits: number; pending: number }
 
@@ -53,6 +59,14 @@ export interface Api {
   gitStatus(): Promise<GitStatus>;
   gitEnable(): Promise<void>;
   gitCommit(): Promise<string | null>;
+  githubStatus(): Promise<GithubStatus>;
+  githubCode(): Promise<DeviceCode>;
+  /** Ждёт подтверждения кода, подключает приватный notes, отправляет историю. Возвращает «логин/notes». */
+  githubFinish(code: DeviceCode): Promise<string>;
+  githubCancel(): Promise<void>;
+  githubSignOut(): Promise<void>;
+  githubSync(date: string): Promise<PullResult>;
+  openGithub(url: string): Promise<void>;
   /** Сохранить задачи в .ics. false — человек отменил окно сохранения. */
   exportIcs(): Promise<boolean>;
   setDue(task: TaskRow, date: string | null, time: string | null, minutes: number | null): Promise<void>;
@@ -100,6 +114,13 @@ async function tauriApi(): Promise<Api> {
     gitStatus: () => invoke<GitStatus>("git_status"),
     gitEnable: () => invoke<void>("git_enable"),
     gitCommit: () => invoke<string | null>("git_commit"),
+    githubStatus: () => invoke<GithubStatus>("github_status"),
+    githubCode: () => invoke<DeviceCode>("github_code"),
+    githubFinish: (code) => invoke<string>("github_finish", { code }),
+    githubCancel: () => invoke<void>("github_cancel"),
+    githubSignOut: () => invoke<void>("github_sign_out"),
+    githubSync: (date) => invoke<PullResult>("github_sync", { date }),
+    openGithub: (url) => invoke<void>("open_github", { url }),
     async exportIcs() {
       const { save } = await import("@tauri-apps/plugin-dialog");
       const path = await save({ defaultPath: "notes.ics", filters: [{ name: "iCalendar", extensions: ["ics"] }], title: "Задачи для календаря" });
@@ -148,6 +169,7 @@ const demoDate = (date: string | null, time: string | null, minutes: number | nu
   return ` 📅 ${date} ${time}–${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
 };
 let demoPins: string[] = [];
+const demoGithub = { signed: false, synced: 0 };
 const demoGit = { repo: true, last_commit: Math.floor(Date.now() / 1000) - 12 * 60 as number | null, commits: 42, pending: 0 };
 const demoFree = (want: (n: number) => string, taken: (p: string) => boolean) => {
   let n = 1;
@@ -306,6 +328,13 @@ const demoApi: Api = {
     demoGit.commits++; demoGit.last_commit = Math.floor(Date.now() / 1000);
     return "правки: план приложения.md";
   },
+  githubStatus: async () => ({ signed_in: demoGithub.signed, remote: demoGithub.signed ? "https://github.com/makar/notes.git" : null, unpushed: false }),
+  githubCode: async () => ({ device_code: "demo", user_code: "WDJB-MJHT", verification_uri: "https://github.com/login/device", expires_in: 900, interval: 5 }),
+  async githubFinish() { await new Promise((r) => setTimeout(r, 2500)); demoGithub.signed = true; return "makar/notes"; },
+  githubCancel: async () => {},
+  async githubSignOut() { demoGithub.signed = false; },
+  async githubSync() { demoGit.last_commit = Math.floor(Date.now() / 1000); demoGithub.synced = Date.now(); return { kind: "upToDate" }; },
+  openGithub: async () => {},
   vaultPath: async () => "C:\\Users\\makar\\Documents\\заметки (демо)",
   templates: async () => Object.keys(demo).filter((k) => k.startsWith("шаблоны/")).map((k) => k.slice(8, -3)).sort(),
   async createFromTemplate(template, folder, date, time) {

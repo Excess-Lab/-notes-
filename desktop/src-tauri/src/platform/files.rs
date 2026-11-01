@@ -25,3 +25,17 @@ pub fn reveal(path: &Path) -> std::io::Result<()> {
 pub fn trash(path: &Path) -> Result<(), String> {
     trash::delete(path).map_err(|e| e.to_string())
 }
+
+/// Открыть страницу в браузере по умолчанию. Только https://github.com/ — больше приложению некуда.
+pub fn open_github(url: &str) -> Result<(), String> {
+    if !url.starts_with("https://github.com/") {
+        return Err("only github.com".into());
+    }
+    #[cfg(target_os = "windows")]
+    let status = Command::new("rundll32").args(["url.dll,FileProtocolHandler", url]).spawn();
+    #[cfg(target_os = "macos")]
+    let status = Command::new("open").arg(url).spawn();
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let status = Command::new("xdg-open").arg(url).spawn();
+    status.map(|_| ()).map_err(|e| e.to_string())
+}

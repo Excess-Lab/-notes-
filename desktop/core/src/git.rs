@@ -259,7 +259,7 @@ fn resolve_conflicts(index: &mut git2::Index, date: &str) -> Result<Vec<String>,
     let mut copies = Vec::new();
     for (ours, theirs, path) in found {
         index.conflict_remove(std::path::Path::new(&path))?;
-        let mut stage0 = |mut e: IndexEntry, at: &str, index: &mut git2::Index| -> Result<(), git2::Error> {
+        let stage0 = |mut e: IndexEntry, at: &str, index: &mut git2::Index| -> Result<(), git2::Error> {
             e.flags &= !0x3000; // из конфликтной стадии в обычную
             e.path = at.as_bytes().to_vec();
             index.add(&e)

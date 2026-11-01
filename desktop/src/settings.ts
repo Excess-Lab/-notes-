@@ -25,6 +25,8 @@ export interface SettingsHost {
   ensureFolder(name: string): Promise<void>;
   /** Перечитать статус истории в шапке. */
   refreshSync(): Promise<void>;
+  /** Забрать и отправить историю на GitHub сейчас. */
+  sync(): Promise<void>;
 }
 
 let page: Page = "general";
@@ -48,6 +50,9 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
   let prefs = await host.backend.prefs();
   const vault = await host.backend.vaultPath();
   let git = await host.backend.gitStatus();
+  let gh = await host.backend.githubStatus();
+  // Вход по коду: код на экране, пока ждём подтверждения на github.com.
+  let login: { code: string; url: string; error?: string } | null = null;
   const ago = (s: number | null) => {
     if (s === null) return "ещё не сохраняли";
     const m = Math.floor((Date.now() / 1000 - s) / 60);
@@ -68,7 +73,7 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
             git.repo ? granted("включено") : pill("git", "включить"))
           + (git.repo ? row("сохранять версию", "", choice("commitMinutes", prefs.commitMinutes ?? 60, [[15, "15 мин"], [30, "30 мин"], [60, "час"], [180, "3 ч"]]))
             + row("последняя версия", ago(git.last_commit) + (git.pending ? ` · несохранённых файлов: ${git.pending}` : ""), pill("commit", "сохранить сейчас")) : "")
-          + row("github", "приватный репозиторий notes, вход по коду", later())
+          + githubRows()
           + note("папка та же, что на маке: заметки — обычные файлы .md, окончания строк не меняются");
       case "templates":
         return row("папка шаблонов", "обычные .md в папке «шаблоны»: {{дата}}, {{время}}, {{название}}", pill("templates", "открыть"))
@@ -84,6 +89,18 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
         return row("пинкод", "при запуске и после сна", later())
           + row(isMac ? "touch id" : "windows hello", isMac ? "палец вместо пинкода" : "лицо или палец вместо пинкода", later());
     }
+  }
+
+  function githubRows(): string {
+    if (login) {
+      return row("код для github", login.error ? esc(login.error) : "введите его на github.com/login/device — жду подтверждения…",
+        `<span class="device-code">${esc(login.code)}</span>${pill("gh-open", "скопировать и открыть")}${pill("gh-cancel", "отмена")}`);
+    }
+    if (!gh.signed_in) return row("github", "приватный репозиторий notes, вход по коду без пароля", pill("gh-login", "войти"));
+    const repo = gh.remote?.replace(/^https:\/\/github\.com\//, "").replace(/\.git$/, "") ?? "notes";
+    return row("github", `${esc(repo)} · ${prefs.lastSync ? "отправлено " + ago(Math.floor(prefs.lastSync / 1000)) : "ещё не отправляли"}`, granted("подключено"))
+      + row("синхронизировать сейчас", "забрать правки с другого компьютера и отправить свои", pill("gh-sync", "синхронизировать"))
+      + row("выйти из github", "токен удалится из хранилища паролей", pill("gh-out", "выйти"));
   }
 
   function render() {
@@ -124,6 +141,39 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
       render();
       const note = root.querySelector(".settings-rows");
       note?.insertAdjacentHTML("beforeend", `<p class="setting-note">${message ? esc(message) : "менять было нечего"}</p>`);
+    } else if (b.dataset.set === "gh-login") {
+      if (!git.repo) { await host.backend.gitEnable(); git = await host.backend.gitStatus(); }
+      try {
+        const code = await host.backend.githubCode();
+        login = { code: code.user_code, url: code.verification_uri };
+        render();
+        const repo = await host.backend.githubFinish(code);
+        login = null;
+        gh = await host.backend.githubStatus();
+        await save({ ...prefs, lastSync: Date.now() });
+        root.querySelector(".settings-rows")?.insertAdjacentHTML("beforeend", note(`подключено: ${esc(repo)}`));
+      } catch (error) {
+        if (login && String(error) !== "cancelled") { login.error = String(error); render(); } else { login = null; render(); }
+      }
+      await host.refreshSync();
+    } else if (b.dataset.set === "gh-open" && login) {
+      await navigator.clipboard?.writeText(login.code).catch(() => {});
+      await host.backend.openGithub(login.url);
+    } else if (b.dataset.set === "gh-cancel") {
+      login = null;
+      await host.backend.githubCancel();
+      render();
+    } else if (b.dataset.set === "gh-out") {
+      await host.backend.githubSignOut();
+      gh = await host.backend.githubStatus();
+      render();
+      await host.refreshSync();
+    } else if (b.dataset.set === "gh-sync") {
+      b.textContent = "синхронизируем…";
+      await host.sync();
+      prefs = await host.backend.prefs();
+      git = await host.backend.gitStatus();
+      render();
     } else if (b.dataset.set === "vault") {
       await host.pickVault();
     } else if (b.dataset.set === "templates") {

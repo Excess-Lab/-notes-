@@ -6,5 +6,6 @@
 //! (Windows Hello / Touch ID), глобальный хоткей, вставка текста в чужое поле, календарь.
 
 pub mod files;
+pub mod secrets;
 pub mod settings;
 pub mod window;

@@ -1,6 +1,7 @@
 //! Оболочка Tauri: команды для интерфейса поверх `notes-core`. Здесь нет логики заметок —
 //! она в ядре, — и нет кода под ОС: он в `platform`.
 
+mod github;
 mod platform;
 
 use notes_core::{Folder, Vault};
@@ -12,6 +13,8 @@ use tauri::{Manager, State};
 #[derive(Default)]
 struct AppState {
     vault: Mutex<Option<Vault>>,
+    /// Ушли с экрана входа — опрос GitHub прекращается.
+    login_cancelled: std::sync::atomic::AtomicBool,
 }
 
 #[derive(Serialize)]
@@ -239,6 +242,98 @@ fn selftest_log(line: String, done: bool, app: tauri::AppHandle) {
     }
 }
 
+#[derive(Serialize)]
+struct GithubStatus {
+    signed_in: bool,
+    remote: Option<String>,
+    unpushed: bool,
+}
+
+#[tauri::command]
+fn github_status(state: State<AppState>) -> Result<GithubStatus, String> {
+    let signed_in = platform::secrets::token().is_some();
+    with_vault(&state, |v| {
+        let history = notes_core::git::History::open(v.root()).ok();
+        Ok(GithubStatus {
+            signed_in,
+            remote: history.as_ref().and_then(|h| h.remote_url()),
+            unpushed: history.as_ref().is_some_and(|h| h.has_unpushed()),
+        })
+    })
+}
+
+#[tauri::command]
+async fn github_code() -> Result<github::Code, String> {
+    tauri::async_runtime::spawn_blocking(github::request_code).await.map_err(|e| e.to_string())?
+}
+
+/// Ждём подтверждения кода, кладём токен в хранилище паролей ОС, создаём или находим приватный
+/// `notes`, подключаем его к истории и отправляем её. Возвращает «логин/notes».
+#[tauri::command]
+async fn github_finish(code: github::Code, app: tauri::AppHandle) -> Result<String, String> {
+    use std::sync::atomic::Ordering;
+    let state = app.state::<AppState>();
+    state.login_cancelled.store(false, Ordering::SeqCst);
+    let root = state.vault.lock().map_err(|e| e.to_string())?.as_ref().ok_or("no vault open")?.root().to_path_buf();
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let token = github::wait_for_token(&code, || handle.state::<AppState>().login_cancelled.load(Ordering::SeqCst))?;
+        platform::secrets::save_token(&token)?;
+        let repo = github::ensure_notes(&token)?;
+        let (history, _) = notes_core::git::History::prepare(&root).map_err(|e| e.to_string())?;
+        history.set_remote(&repo.clone_url).map_err(|e| e.to_string())?;
+        history.pull(Some(&token), &today()).map_err(|e| e.to_string())?;
+        history.push(Some(&token)).map_err(|e| e.to_string())?;
+        Ok(repo.full_name)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn open_github(url: String) -> Result<(), String> {
+    platform::files::open_github(&url)
+}
+
+#[tauri::command]
+fn github_cancel(state: State<AppState>) {
+    state.login_cancelled.store(true, std::sync::atomic::Ordering::SeqCst);
+}
+
+#[tauri::command]
+fn github_sign_out() {
+    platform::secrets::forget_token();
+}
+
+/// Забрать правки с другого компьютера и отправить свои. Возвращает итог слияния.
+#[tauri::command]
+async fn github_sync(date: String, app: tauri::AppHandle) -> Result<notes_core::git::Pull, String> {
+    let root = app.state::<AppState>().vault.lock().map_err(|e| e.to_string())?.as_ref().ok_or("no vault open")?.root().to_path_buf();
+    tauri::async_runtime::spawn_blocking(move || {
+        let token = platform::secrets::token().ok_or("не вошли в github")?;
+        let history = notes_core::git::History::open(&root).map_err(|e| e.to_string())?;
+        let pulled = history.pull(Some(&token), &date).map_err(|e| e.to_string())?;
+        history.push(Some(&token)).map_err(|e| e.to_string())?;
+        Ok(pulled)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+fn today() -> String {
+    // Только для имени копии при конфликте во время входа; дату в общем случае передаёт интерфейс.
+    let days = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() / 86_400).unwrap_or(0) as i64;
+    let (z, era) = (days + 719_468, (days + 719_468).div_euclid(146_097));
+    let doe = z - era * 146_097;
+    let yoe = (doe - doe / 1460 + doe / 36_524 - doe / 146_096) / 365;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = yoe + era * 400 + i64::from(m <= 2);
+    format!("{y:04}-{m:02}-{d:02}")
+}
+
 /// Какая ОС — интерфейс выбирает стекло окна (Mica на Windows, Liquid Glass на маке).
 #[tauri::command]
 fn os() -> &'static str {
@@ -260,7 +355,8 @@ pub fn run() {
             open_vault, last_vault, tree, read_note, write_note, create_note, rename_note, search, tasks, os,
             create_folder, duplicate, move_into, copy_in, trash, reveal, pins, set_pins,
             templates, create_from_template, daily,
-            set_due, set_done, append_task, export_ics, ics, prefs, set_prefs, vault_path, git_status, git_enable, git_commit, selftest, selftest_slow, selftest_log
+            set_due, set_done, append_task, export_ics, ics, prefs, set_prefs, vault_path, git_status, git_enable, git_commit, selftest, selftest_slow, selftest_log,
+            github_status, github_code, github_finish, github_cancel, github_sign_out, github_sync, open_github
         ])
         .run(tauri::generate_context!())
         .expect("error while running <notes>");

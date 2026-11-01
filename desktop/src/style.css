@@ -359,3 +359,5 @@ button { font: inherit; color: inherit; letter-spacing: inherit; background: non
 .granted .dot { color: rgb(52, 199, 89); }
 .later { color: rgba(var(--fg), 0.3); font-size: 11px; white-space: nowrap; }
 .setting-note { margin-top: 14px; font-size: 11px; color: rgba(var(--fg), 0.3); max-width: 640px; }
+.device-code { font: 17px "Martian Heading"; letter-spacing: 0.04em; padding: 4px 12px; border-radius: 10px; background: rgba(var(--bg), 0.7); white-space: nowrap; }
+.setting .pill + .pill { margin-left: -6px; }

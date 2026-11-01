@@ -260,7 +260,7 @@ function mountSection() {
   const settings = page.querySelector<HTMLElement>(".settings-root");
   if (settings) void mountSettings(settings, sidebar, { backend, onCrumb: (t) => (crumb.textContent = t), apply: applyPrefs,
     pickVault: async () => { const tree = await backend.pickVault(); if (tree) { state.tree = tree; state.tabs = []; state.selection = { kind: "folder", path: "" }; await reload(); } render(); },
-    ensureFolder, refreshSync });
+    ensureFolder, refreshSync, sync: async () => { await syncWithGithub(); await refreshSync(); } });
   tasksScreen = tasks ? mountTasks(tasks, sidebar, { backend, openNote, onFilter: (t) => (crumb.textContent = t) }) : null;
 }
 
@@ -434,16 +434,48 @@ function applyPrefs(next: Prefs) {
 // ——— история в git: версия по расписанию, статус — в капсуле шапки ———
 // На маке капсула говорит «синхронизировано», потому что версии уходят на GitHub. Здесь пока только
 // локальная история, поэтому честно: «сохранено N мин назад».
+const agoText = (seconds: number) => {
+  const minutes = Math.floor((Date.now() / 1000 - seconds) / 60);
+  return minutes < 1 ? "только что" : minutes < 60 ? `${minutes} мин назад` : `${Math.floor(minutes / 60)} ч назад`;
+};
+
+let syncError = false;
+async function syncWithGithub() {
+  try {
+    const result = await backend.githubSync(now().date);
+    syncError = false;
+    applyPrefs({ ...prefs, lastSync: Date.now() });
+    await backend.setPrefs(prefs);
+    // Пришли правки с другого компьютера — перечитать дерево и открытую заметку.
+    if (result.kind !== "upToDate") {
+      await reload();
+      if (state.selection.kind === "note") state.text = await backend.read(state.selection.path).catch(() => state.text);
+      lastKey = "";
+      render();
+    }
+  } catch {
+    syncError = true;
+  }
+}
+
 async function refreshSync() {
   const text = $(".sync-text");
   if (!state.tree) { text.textContent = "без git"; return; }
   try {
     const s = await backend.gitStatus();
     if (!s.repo || s.last_commit === null) { text.textContent = "без git"; fitHeader(); return; }
+    const gh = await backend.githubStatus();
     const minutes = Math.floor((Date.now() / 1000 - s.last_commit) / 60);
-    text.textContent = minutes < 1 ? "сохранено только что" : minutes < 60 ? `сохранено ${minutes} мин назад` : `сохранено ${Math.floor(minutes / 60)} ч назад`;
     // Пора сохранить версию — раз в N минут из настроек (по умолчанию час, как на маке).
-    if (minutes >= (prefs.commitMinutes ?? 60) && (await backend.gitCommit())) await refreshSync();
+    if (minutes >= (prefs.commitMinutes ?? 60) && (await backend.gitCommit())) return refreshSync();
+    if (gh.signed_in && gh.remote) {
+      // С GitHub — как на маке: «синхронизировано N мин назад»; раз в час забираем и отправляем.
+      if (!prefs.lastSync || Date.now() - prefs.lastSync > 60 * 60 * 1000) await syncWithGithub();
+      text.textContent = syncError ? "не отправилось" : prefs.lastSync ? `синхронизировано ${agoText(prefs.lastSync / 1000)}` : "синхронизируем…";
+    } else {
+      // Только локальная история — честно «сохранено».
+      text.textContent = `сохранено ${agoText(s.last_commit)}`;
+    }
   } catch {
     text.textContent = "не сохранилось";
   }
