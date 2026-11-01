@@ -26,7 +26,7 @@ final class SyncController {
     private(set) var lastError: String?
     // libgit2 на отозванный токен отвечает «too many redirects or authentication replays».
     var needsLogin: Bool { lastError.map { $0.contains("authentication") || $0.contains("401") } ?? false }
-    var errorText: String? { needsLogin ? "вход в github устарел — нажми «войти заново»" : lastError }
+    var errorText: String? { needsLogin ? String(localized: "вход в github устарел") : lastError }
     func clearError() { lastError = nil }
     private var vault: URL?
     private var loop: Task<Void, Never>?
@@ -57,7 +57,7 @@ final class SyncController {
             }
         } catch {
             log.error("не закоммитили: \(String(describing: error), privacy: .public)")
-            lastError = "коммит: \(error.localizedDescription)"
+            lastError = String(localized: "коммит: \(error.localizedDescription)")
         }
         await pull()
         await pushIfDue()
@@ -84,7 +84,7 @@ final class SyncController {
             Self.markPushed()
             log.info("папка привязана к \(repo.fullName, privacy: .public)")
         } catch {
-            lastError = "привязать к github: \(error.localizedDescription)"
+            lastError = String(localized: "привязать к github: \(error.localizedDescription)")
         }
     }
     static var lastPush: Date? { UserDefaults.standard.object(forKey: lastPushKey) as? Date }
@@ -99,7 +99,7 @@ final class SyncController {
             sent = try await engine.pushIfDue(token: token, lastPush: .distantPast)
             if sent { Self.markPushed() }
         } catch {
-            lastError = "отправить на github: \(error.localizedDescription)"
+            lastError = String(localized: "отправить на github: \(error.localizedDescription)")
         }
         lastSync = Date()
         return sent
@@ -107,14 +107,14 @@ final class SyncController {
 
     // Подпись в шапке главного экрана.
     func status(now: Date) -> String {
-        guard engine != nil else { return "без git — история не ведётся" }
-        if lastError != nil { return "не отправилось — см. настройки" }
-        guard let lastSync else { return "синхронизируем…" }
+        guard engine != nil else { return String(localized: "без git") }
+        if lastError != nil { return String(localized: "не отправилось") }
+        guard let lastSync else { return String(localized: "синхронизируем…") }
         let minutes = Int(now.timeIntervalSince(lastSync) / 60)
         switch minutes {
-        case ..<1: return "синхронизировано только что"
-        case ..<60: return "синхронизировано \(minutes) мин назад"
-        default: return "синхронизировано \(minutes / 60) ч назад"
+        case ..<1: return String(localized: "синхронизировано только что")
+        case ..<60: return String(localized: "синхронизировано \(minutes) мин назад")
+        default: return String(localized: "синхронизировано \(minutes / 60) ч назад")
         }
     }
 
@@ -135,13 +135,13 @@ final class SyncController {
         do {
             switch try await engine.pull(token: token) {
             case .merged(let conflicts) where !conflicts.isEmpty:
-                log.info("слили с другого мака, конфликтов: \(conflicts.count) — обе версии сохранены")
+                log.info("слили с другого мака, конфликтов: \(conflicts.count), обе версии сохранены")
             default:
                 break
             }
         } catch {
             log.error("не забрали с github: \(String(describing: error), privacy: .public)")
-            lastError = "забрать с github: \(error.localizedDescription)"
+            lastError = String(localized: "забрать с github: \(error.localizedDescription)")
         }
     }
 
@@ -156,7 +156,7 @@ final class SyncController {
             }
         } catch {
             log.error("не отправили на github: \(String(describing: error), privacy: .public)")
-            lastError = "отправить на github: \(error.localizedDescription)"
+            lastError = String(localized: "отправить на github: \(error.localizedDescription)")
         }
     }
 }

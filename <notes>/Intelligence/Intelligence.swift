@@ -14,10 +14,10 @@ enum Intelligence {
     static var unavailableReason: String? {
         switch SystemLanguageModel.default.availability {
         case .available: nil
-        case .unavailable(.deviceNotEligible): "этот mac не поддерживает apple intelligence"
-        case .unavailable(.appleIntelligenceNotEnabled): "включи apple intelligence в системных настройках"
-        case .unavailable(.modelNotReady): "модель ещё загружается системой"
-        case .unavailable: "сейчас недоступна"
+        case .unavailable(.deviceNotEligible): String(localized: "этот mac не поддерживает apple intelligence")
+        case .unavailable(.appleIntelligenceNotEnabled): String(localized: "включи apple intelligence в системных настройках")
+        case .unavailable(.modelNotReady): String(localized: "модель ещё загружается системой")
+        case .unavailable: String(localized: "сейчас недоступна")
         }
     }
 

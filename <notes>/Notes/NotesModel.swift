@@ -135,7 +135,7 @@ import SwiftUI
     // «проекты / план приложения»; на корне — «все заметки».
     var breadcrumb: String {
         switch selection {
-        case .folder(let url) where url.standardizedFileURL == library.root: "все заметки"
+        case .folder(let url) where url.standardizedFileURL == library.root: String(localized: "все заметки")
         case .folder(let url), .note(let url): library.breadcrumb(for: url).joined(separator: " / ")
         case .file(let url): (library.breadcrumb(for: url).dropLast() + [url.lastPathComponent]).joined(separator: " / ")
         }
@@ -285,7 +285,7 @@ import SwiftUI
                                snippet: hit.snippet, target: .note(hit.note.url)))
         }
         for task in tasks.tasks.filter({ query.matches($0.title) }).prefix(5) {
-            let when = task.done ? "готово" : task.due.map { NoteEditor.short($0) } ?? "без даты"
+            let when = task.done ? String(localized: "готово") : task.due.map { NoteEditor.short($0) } ?? String(localized: "без даты")
             found.append(Found(id: "t" + task.id, kind: .task, title: task.title,
                                detail: when + " · " + task.note.deletingPathExtension().lastPathComponent,
                                snippet: nil, target: .note(task.note)))

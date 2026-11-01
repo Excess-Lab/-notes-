@@ -82,10 +82,10 @@ enum AppSettings {
     // «90 минут» → «1,5 ч», «1440» → «раз в сутки».
     static func every(_ minutes: Int) -> String {
         switch minutes {
-        case 1440: "раз в сутки"
-        case 10080: "раз в неделю"
-        case let m where m % 60 == 0: m == 60 ? "раз в час" : "раз в \(m / 60) ч"
-        default: "раз в \(minutes) мин"
+        case 1440: String(localized: "раз в сутки")
+        case 10080: String(localized: "раз в неделю")
+        case let m where m % 60 == 0: m == 60 ? String(localized: "раз в час") : String(localized: "раз в \(m / 60) ч")
+        default: String(localized: "раз в \(minutes) мин")
         }
     }
 }

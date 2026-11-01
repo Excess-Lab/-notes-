@@ -299,7 +299,7 @@ private struct TopBar: View {
     }
 
     private static func label(_ title: String) -> some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(Martian.body.font(13))
             .kerning(Theme.tracking(-7, size: 13))
             .foregroundStyle(Theme.ink)
@@ -443,7 +443,7 @@ struct SidebarRow: View {
             HStack(spacing: 8) {
                 DotIcon(glyph: glyph)
                 // Имя файла — то, что ввёл человек: регистр не трогаем.
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(Martian.body.font(13))
                     .kerning(Theme.tracking(-7, size: 13))
                     .foregroundStyle(Theme.ink)
@@ -514,7 +514,7 @@ struct SectionContent: View {
                 switch model.section {
                 case .notes:
                     if Intelligence.isReady, case .note = model.selection {
-                        IconButton(glyph: .spark, help: model.summarizing ? "сжимаю…" : "кратко — apple intelligence") {
+                        IconButton(glyph: .spark, help: model.summarizing ? String(localized: "сжимаю…") : String(localized: "кратко")) {
                             Task { await model.summarizeNote() }
                         }
                         .disabled(model.summarizing)
@@ -524,7 +524,7 @@ struct SectionContent: View {
                     Menu { TemplateItems(model: model, folder: nil) } label: { IconButtonLabel(glyph: .file) }
                         .menuStyle(.button).menuIndicator(.hidden).buttonStyle(.plain).fixedSize()
                         .help("новая заметка из шаблона")
-                    IconButton(glyph: .newNote, help: "новая заметка · правый клик — из шаблона") { model.newNote() }
+                    IconButton(glyph: .newNote, help: "новая заметка") { model.newNote() }
                         .keyboardShortcut("n", modifiers: .command)
                         .contextMenu { TemplateItems(model: model, folder: nil) }
                 case .tasks:
@@ -558,10 +558,10 @@ struct SectionContent: View {
     static func crumb(_ model: NotesModel) -> String {
         switch model.section {
         case .notes: model.breadcrumb
-        case .tasks: "задачи / " + model.tasks.filter.rawValue
-        case .calendar: "календарь"
+        case .tasks: String(localized: "задачи / ") + model.tasks.filter.rawValue.localized
+        case .calendar: String(localized: "календарь")
         case .video: model.video.crumb
-        case .settings: "настройки / " + model.settingsPage.rawValue
+        case .settings: String(localized: "настройки / ") + model.settingsPage.rawValue.localized
         }
     }
 }
@@ -820,7 +820,7 @@ struct IconButton: View {
                 .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .help(help)
+        .help(LocalizedStringKey(help))
     }
 }
 
@@ -836,7 +836,7 @@ extension View {
     func hoverHint(_ text: String, when shown: Bool) -> some View {
         overlay(alignment: .bottom) {
             if shown {
-                Text(text)
+                Text(LocalizedStringKey(text))
                     .font(Martian.body.font(11))
                     .kerning(Theme.tracking(-7, size: 11))
                     .foregroundStyle(Theme.fg)

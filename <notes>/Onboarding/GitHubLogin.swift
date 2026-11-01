@@ -19,7 +19,7 @@ final class GitHubLogin {
     // тогда опрос GitHub прекращается, а device_code пропадает вместе с ней (CONTEXT.md).
     func run(vault: URL?, onConnected: @escaping (String) -> Void) async {
         guard let clientID = GitHubApp.clientID else {
-            state = .failed("вход в github ещё не настроен")
+            state = .failed(String(localized: "вход в github ещё не настроен"))
             return
         }
         state = .requesting
@@ -51,7 +51,7 @@ final class GitHubLogin {
         } catch GitHubError.expired {
             state = .expired
         } catch GitHubError.denied {
-            state = .failed("вход отменён на github")
+            state = .failed(String(localized: "вход отменён на github"))
         } catch {
             state = .failed(String(describing: error))
         }

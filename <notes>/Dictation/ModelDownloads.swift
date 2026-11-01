@@ -67,24 +67,24 @@ enum ModelDownloadOffer {
 
         let alert = NSAlert()
         if let value = ModelDownloads.shared.progress[model] {
-            alert.messageText = "Модель ещё скачивается"
-            alert.informativeText = "\(model.displayName): скачано \(Int(value * 100)) %. Как закончится, надиктовка заработает сама."
+            alert.messageText = String(localized: "Модель ещё скачивается")
+            alert.informativeText = String(localized: "\(model.displayName): скачано \(Int(value * 100)) %. Как закончится, надиктовка заработает сама.")
             alert.runModal()
             return
         }
         // Выбрана нескачанная модель, но другая уже лежит на диске — говорим об этом и даём взять её,
         // чтобы не качать сотни мегабайт ради того, что уже есть.
         let installed = SpeechModel.allCases.filter { $0 != model && ModelStore.standard.isInstalled($0) }
-        alert.messageText = "Модель \(model.displayName) не скачана"
-        var text = "Речь распознаётся прямо на этом Mac, для этого модель нужно один раз скачать — \(model.downloadMB) МБ. Потом интернет не понадобится."
+        alert.messageText = String(localized: "Модель \(model.displayName) не скачана")
+        var text = String(localized: "Речь распознаётся прямо на этом Mac, модель скачивается один раз, \(model.downloadMB) МБ.")
         if !installed.isEmpty {
             let names = installed.map(\.displayName).joined(separator: ", ")
-            text += "\n\nУже скачано: \(names). Можно надиктовывать ей прямо сейчас."
+            text += String(localized: "\n\nУже скачано: \(names). Можно надиктовывать ей прямо сейчас.")
         }
         alert.informativeText = text
-        alert.addButton(withTitle: "Скачать")
-        if let ready = installed.first { alert.addButton(withTitle: "Взять \(ready.displayName)") }
-        alert.addButton(withTitle: "Не сейчас")
+        alert.addButton(withTitle: String(localized: "Скачать"))
+        if let ready = installed.first { alert.addButton(withTitle: String(localized: "Взять \(ready.displayName)")) }
+        alert.addButton(withTitle: String(localized: "Не сейчас"))
         switch alert.runModal() {
         case .alertFirstButtonReturn:
             break
@@ -105,8 +105,8 @@ enum ModelDownloadOffer {
                 let origin = NSWorkspace.shared.frontmostApplication
                 NSApp.activate()
                 let failed = NSAlert()
-                failed.messageText = "Не получилось скачать модель"
-                failed.informativeText = "Проверь интернет и нажми \(hotKey) ещё раз — предложим скачать заново."
+                failed.messageText = String(localized: "Не получилось скачать модель")
+                failed.informativeText = String(localized: "Проверь интернет и нажми \(hotKey) ещё раз.")
                 failed.runModal()
                 goBack(to: origin)
             }

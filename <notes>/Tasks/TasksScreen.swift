@@ -15,7 +15,7 @@ struct TasksScreen: View {
                     .font(Martian.heading.font(26))
                     .kerning(Theme.tracking(-7, size: 26))
                     .foregroundStyle(Theme.ink)
-                Text("\(model.count(.all) - model.count(.done)) открыто | \(model.count(.inCalendar)) в календаре")
+                Text(String(localized: "\(model.count(.all) - model.count(.done)) открыто | \(model.count(.inCalendar)) в календаре"))
                     .font(Martian.body.font(13))
                     .kerning(Theme.tracking(-7, size: 13))
                     .foregroundStyle(NotesLayout.gray)
@@ -25,7 +25,7 @@ struct TasksScreen: View {
 
                 if model.visible.isEmpty {
                     Text(model.tasks.isEmpty
-                         ? "задач нет — впиши первую выше или в любой заметке строкой «- [ ] дело»"
+                         ? "задач нет. добавь выше или строкой «- [ ] дело» в заметке"
                          : "здесь пусто")
                         .font(Martian.body.font(13))
                         .kerning(Theme.tracking(-7, size: 13))
@@ -35,7 +35,7 @@ struct TasksScreen: View {
                 ForEach(NoteTasks.Group.allCases, id: \.self) { group in
                     let items = model.visible.filter { NoteTasks.group($0) == group }
                     if !items.isEmpty {
-                        Text(group.rawValue)
+                        Text(LocalizedStringKey(group.rawValue))
                             .font(Martian.body.font(15))
                             .kerning(Theme.tracking(-7, size: 15))
                             .foregroundStyle(Theme.ink)
@@ -47,7 +47,7 @@ struct TasksScreen: View {
                     }
                 }
                 if !model.calendar.hasAccess && model.tasks.contains(where: { $0.due != nil }) {
-                    Button("дать доступ к календарю, чтобы задачи с датой попали туда") {
+                    Button("чтобы задачи с датой попадали в календарь") {
                         Task { if await model.calendar.requestAccess() { model.reload() } }
                     }
                     .buttonStyle(QuietLinkStyle(size: 11, opacity: 0.3))
@@ -137,7 +137,7 @@ struct CalendarScreen: View {
 
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.locale = Locale(identifier: "ru_RU")
+        calendar.locale = .app
         calendar.firstWeekday = 2
         return calendar
     }
@@ -208,7 +208,7 @@ struct CalendarScreen: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(Martian.heading.font(26))
                 .kerning(Theme.tracking(-7, size: 26))
                 .foregroundStyle(Theme.ink)
@@ -255,7 +255,7 @@ struct CalendarScreen: View {
     }
 
     private var title: String {
-        let ru = Locale(identifier: "ru_RU")
+        let ru = Locale.app
         switch mode {
         case .day: return anchor.formatted(.dateTime.day().month(.wide).locale(ru))
         case .week:
@@ -276,7 +276,7 @@ private struct ModeChip: View {
     let on: Bool
 
     var body: some View {
-        Text(title)
+        Text(LocalizedStringKey(title))
             .font(Martian.body.font(13))
             .kerning(Theme.tracking(-7, size: 13))
             .foregroundStyle(on ? Theme.ink : NotesLayout.gray)
@@ -405,11 +405,11 @@ private struct DayGrid: View {
                     VStack(alignment: .leading, spacing: 2) {
                         // Значок видео — у дня недели: рядом с числом он прилипал к числу соседнего дня.
                         HStack(spacing: 4) {
-                            Text(day.formatted(.dateTime.weekday(.abbreviated).locale(Locale(identifier: "ru_RU"))).lowercased())
+                            Text(day.formatted(.dateTime.weekday(.abbreviated).locale(.app)).lowercased())
                                 .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
                             let count = uploads.filter { Calendar.current.isDate($0.added, inSameDayAs: day) }.count
                             if count > 0 {
-                                DotIcon(glyph: .video, size: 11, color: NotesLayout.gray).help("видео на расшифровку: \(count)")
+                                DotIcon(glyph: .video, size: 11, color: NotesLayout.gray).help(String(localized: "видео: \(count)"))
                             }
                         }
                         Text("\(Calendar.current.component(.day, from: day))")
@@ -647,7 +647,7 @@ private struct EventCard: View {
             .menuStyle(.button).buttonStyle(.plain).fixedSize()
             .disabled(task != nil)
             if let task {
-                Text("задача из заметки «\(task.note.deletingPathExtension().lastPathComponent)» — время меняется перетаскиванием")
+                Text(String(localized: "задача из заметки «\(task.note.deletingPathExtension().lastPathComponent)», время меняй перетаскиванием"))
                     .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
                     .fixedSize(horizontal: false, vertical: true)
             } else {
@@ -667,9 +667,9 @@ private struct EventCard: View {
     }
 
     private var when: String {
-        let ru = Locale(identifier: "ru_RU")
+        let ru = Locale.app
         let day = event.startDate.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(ru))
-        return event.isAllDay ? "\(day), весь день" : "\(day), \(DayGrid.span(event.startDate, event.endDate))"
+        return event.isAllDay ? String(localized: "\(day), весь день") : "\(day), \(DayGrid.span(event.startDate, event.endDate))"
     }
 }
 
@@ -752,7 +752,7 @@ private struct MonthGrid: View {
                             .lineLimit(1)
                     }
                     if list.count > 3 {
-                        Text("ещё \(list.count - 2)").font(Martian.body.font(10)).foregroundStyle(Theme.ink.opacity(0.5))
+                        Text(String(localized: "ещё \(list.count - 2)")).font(Martian.body.font(10)).foregroundStyle(Theme.ink.opacity(0.5))
                     }
                     Spacer(minLength: 0)
                 }
@@ -805,7 +805,7 @@ private struct NewTaskPopover: View {
                 }
                 .font(Martian.body.font(13))
             }
-            Text("enter — добавить")
+            Text("enter, чтобы добавить")
                 .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
         }
         .padding(14)
@@ -844,7 +844,7 @@ private struct NewTaskBar: View {
             }
             Button { withDate.toggle() } label: {
                 DotIcon(glyph: .calendar, color: withDate ? Theme.coral : NotesLayout.gray)
-            }.buttonStyle(.plain).help(withDate ? "без срока" : "со сроком — уйдёт в календарь")
+            }.buttonStyle(.plain).help(withDate ? "без срока" : "со сроком попадёт в календарь")
             Button { urgent.toggle() } label: {
                 Text("!!").font(Martian.heading.font(13)).foregroundStyle(urgent ? Theme.coral : NotesLayout.gray)
             }.buttonStyle(.plain).help("срочно")

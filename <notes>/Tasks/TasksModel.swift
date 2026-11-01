@@ -80,7 +80,7 @@ import NotesCore
         undo.registerUndo(withTarget: self) { model in
             if let fresh = model.tasks.first(where: { $0.note == task.note && $0.line == task.line }) { model.toggle(fresh, undo: undo) }
         }
-        undo.setActionName(task.done ? "Снять отметку" : "Отметку")
+        undo.setActionName(task.done ? String(localized: "Снять отметку") : String(localized: "Отметку"))
     }
 
     // MARK: - Правка событий прямо в календаре (удобство «как у Apple», 31.10.2026)
@@ -153,9 +153,9 @@ import NotesCore
         guard let due = task.due else { return task.done ? nil : nil }
         let time = task.hasTime ? ", " + due.formatted(.dateTime.hour().minute()) : ""
         let day = Calendar.current.isDateInToday(due) ? "сегодня"
-            : due.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(Locale(identifier: "ru_RU")))
+            : due.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(.app))
                 .replacingOccurrences(of: ".", with: "").replacingOccurrences(of: ",", with: "")
-        return calendar.isLinked(task) ? "\(day) в календаре\(time)" : day + time
+        return calendar.isLinked(task) ? String(localized: "\(day) в календаре\(time)") : day + time
     }
 }
 
@@ -403,10 +403,10 @@ extension CalendarSync {
 // Подтверждение перед удалением календаря — системным окном, обычным языком (UI.md).
 enum CalendarRemoval {
     static func confirm(_ calendar: EKCalendar, sync: CalendarSync) {
-        let target = sync.store.defaultCalendarForNewEvents?.title ?? "календарь по умолчанию"
+        let target = sync.store.defaultCalendarForNewEvents?.title ?? String(localized: "календарь по умолчанию")
         let alert = NSAlert()
-        alert.messageText = "Удалить календарь «\(calendar.title)»?"
-        alert.informativeText = "Его события не пропадут — они переедут в «\(target)». Сам календарь исчезнет из Календаря Apple на всех устройствах."
+        alert.messageText = String(localized: "Удалить календарь «\(calendar.title)»?")
+        alert.informativeText = String(localized: "События переедут в «\(target)», календарь исчезнет на всех устройствах.")
         alert.addButton(withTitle: "Удалить")
         alert.addButton(withTitle: "Отмена")
         alert.buttons.first?.hasDestructiveAction = true
@@ -414,8 +414,8 @@ enum CalendarRemoval {
         do {
             let moved = try sync.removeCalendar(calendar)
             let done = NSAlert()
-            done.messageText = "Календарь удалён"
-            done.informativeText = "Событий перенесено в «\(target)»: \(moved)."
+            done.messageText = String(localized: "Календарь удалён")
+            done.informativeText = String(localized: "Событий перенесено в «\(target)»: \(moved).")
             done.runModal()
         } catch {
             NSAlert(error: error).runModal()

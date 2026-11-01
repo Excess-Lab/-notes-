@@ -18,7 +18,7 @@ struct HotKeyRow: View {
                     .font(Martian.body.font(13))
                     .kerning(Theme.tracking(-7, size: 13))
                     .foregroundStyle(Theme.ink)
-                Text(hint ?? (recording ? "нажми сочетание, esc — отмена" : "надиктовка из любого приложения"))
+                Text(hint ?? (recording ? String(localized: "нажми сочетание или esc") : String(localized: "надиктовка из любого приложения")))
                     .font(Martian.body.font(11))
                     .kerning(Theme.tracking(-7, size: 11))
                     .foregroundStyle(hint == nil ? Theme.fg.opacity(0.3) : Theme.coral)
@@ -64,8 +64,8 @@ struct HotKeyRow: View {
                                     key: HotKeyCombo.label(forKeyCode: Int(event.keyCode),
                                                            characters: event.charactersIgnoringModifiers))
         switch candidate.problem {
-        case .needsModifier: hint = "нужен ⌘, ⌥ или ⌃"; return
-        case .reserved: hint = "это сочетание занято системой"; return
+        case .needsModifier: hint = String(localized: "нужен ⌘, ⌥ или ⌃"); return
+        case .reserved: hint = String(localized: "это сочетание занято системой"); return
         case nil: break
         }
         stop()
@@ -73,7 +73,7 @@ struct HotKeyRow: View {
             combo = candidate
             hint = nil
         } else {
-            hint = "занято другим приложением"
+            hint = String(localized: "занято другим приложением")
         }
     }
 }

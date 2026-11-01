@@ -40,7 +40,7 @@ private struct RowTexts: View {
             title
                 .font(Martian.body.font(13))
                 .kerning(Theme.tracking(-7, size: 13))
-            Text(subtitle)
+            Text(LocalizedStringKey(subtitle))
                 .font(Martian.body.font(11))
                 .kerning(Theme.tracking(-7, size: 11))
                 .foregroundStyle(Theme.fg.opacity(subtitleOpacity))
@@ -86,9 +86,9 @@ struct ModelPicker: View {
         switch option {
         // В макете под GigaAM подпись от Whisper («whisper small · 466 мб · 2 мин») — похоже на
         // остаток от копирования. Пишем про саму GigaAM; если подпись задумана, поменять здесь.
-        case .gigaAM: "только русский, сразу с пунктуацией"
-        case .whisperSmall: "99 языков, быстрее"
-        case .whisperLargeTurbo: "99 языков, точнее, но тяжелее"
+        case .gigaAM: String(localized: "только русский, сразу с пунктуацией")
+        case .whisperSmall: String(localized: "99 языков, быстрее")
+        case .whisperLargeTurbo: String(localized: "99 языков, точнее, но тяжелее")
         }
     }
 }
@@ -126,13 +126,13 @@ struct DownloadRow: View {
     }
 
     private var remaining: String {
-        if model.downloadFailed { return "не скачалось — проверь интернет" }
-        if model.downloadProgress >= 1 { return "скачано" }
+        if model.downloadFailed { return String(localized: "не скачалось — проверь интернет") }
+        if model.downloadProgress >= 1 { return String(localized: "скачано") }
         // Оценка по уже скачанному: сколько ушло на долю p, столько же уйдёт на остаток.
-        guard let started = model.downloadStarted, model.downloadProgress > 0.02 else { return "считаем время" }
+        guard let started = model.downloadStarted, model.downloadProgress > 0.02 else { return String(localized: "считаем время") }
         let elapsed = Date().timeIntervalSince(started)
         let left = elapsed * (1 - model.downloadProgress) / model.downloadProgress
-        return left < 60 ? "меньше минуты" : "осталось \(Int((left / 60).rounded(.up))) мин"
+        return left < 60 ? String(localized: "меньше минуты") : String(localized: "осталось \(Int((left / 60).rounded(.up))) мин")
     }
 }
 
@@ -227,7 +227,7 @@ struct GrantedLabel: View {
     var body: some View {
         HStack(spacing: 4) {
             DotIcon(glyph: .check, color: Color(red: 0x34 / 255, green: 0xC7 / 255, blue: 0x59 / 255))
-            Text(text)
+            Text(LocalizedStringKey(text))
                 .font(Martian.body.font(13))
                 .kerning(Theme.tracking(-7, size: 13))
                 .foregroundStyle(Color(red: 134 / 255, green: 134 / 255, blue: 139 / 255))
@@ -266,7 +266,7 @@ struct Keycap: View {
     let text: String
 
     var body: some View {
-        Text(text)
+        Text(LocalizedStringKey(text))
             .font(Martian.body.font(11))
             .kerning(Theme.tracking(-7, size: 11))
             .foregroundStyle(Theme.fg.opacity(0.55))

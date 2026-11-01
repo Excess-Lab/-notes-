@@ -28,7 +28,7 @@ private struct VideoList: View {
                     .font(Martian.heading.font(26))
                     .kerning(Theme.tracking(-7, size: 26))
                     .foregroundStyle(Theme.ink)
-                Text("\(video.items.count) \(NoteEditor.plural(video.items.count, "расшифровка", "расшифровки", "расшифровок")) | распознаёт \(SpeechSettings.model.displayName)")
+                Text(String(localized: "\(video.items.count) \(NoteEditor.plural(video.items.count, "расшифровка", "расшифровки", "расшифровок")) | распознаёт \(SpeechSettings.model.displayName)"))
                     .font(Martian.body.font(13))
                     .kerning(Theme.tracking(-7, size: 13))
                     .foregroundStyle(NotesLayout.gray)
@@ -39,7 +39,7 @@ private struct VideoList: View {
                 Button { video.choose() } label: {
                     VStack(spacing: 8) {
                         DotIcon(glyph: .plus, size: 24)
-                        Text(targeted ? "отпусти — начнём расшифровку" : "перетащи видео или аудио")
+                        Text(targeted ? "отпусти, чтобы расшифровать" : "перетащи видео или аудио")
                             .font(Martian.heading.font(15))
                             .kerning(Theme.tracking(-7, size: 15))
                             .foregroundStyle(Theme.ink)
@@ -96,9 +96,9 @@ private struct VideoList: View {
                         .overlay(alignment: .bottom) { Rectangle().fill(NotesLayout.line).frame(height: 1) }
                     }
                 }
-                group("в работе", video.visible.filter { $0.status == .working || $0.status == .queued })
+                group(String(localized: "в работе"), video.visible.filter { $0.status == .working || $0.status == .queued })
                 group("готово", video.visible.filter { $0.status == .done })
-                group("не получилось", video.visible.filter { $0.status == .failed })
+                group(String(localized: "не получилось"), video.visible.filter { $0.status == .failed })
             }
             .frame(width: min(832, page), alignment: .leading)
             .padding(.leading, 58)
@@ -111,7 +111,7 @@ private struct VideoList: View {
     @ViewBuilder
     private func group(_ title: String, _ items: [VideoModel.Item]) -> some View {
         if !items.isEmpty {
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(Martian.body.font(15))
                 .kerning(Theme.tracking(-7, size: 15))
                 .foregroundStyle(Theme.ink)
@@ -180,8 +180,8 @@ private struct VideoRow: View {
         let size = ByteCountFormatter.string(fromByteCount: item.bytes, countStyle: .file)
         let length = item.duration > 0 ? " · " + Transcript.clock(item.duration) : ""
         switch item.status {
-        case .done: return "\(NoteEditor.short(item.added))\(length) · \(item.words) \(NoteEditor.plural(item.words, "слово", "слова", "слов"))"
-        case .failed: return "файл больше недоступен — добавь его заново"
+        case .done: return String(localized: "\(NoteEditor.short(item.added))\(length) · \(item.words) \(NoteEditor.plural(item.words, "слово", "слова", "слов"))")
+        case .failed: return String(localized: "файл недоступен, добавь заново")
         default: return size + length
         }
     }
@@ -191,8 +191,8 @@ extension VideoModel {
     // Удалить расшифровку — с подтверждением: текст пропадёт, сам видеофайл не трогаем.
     static func confirmRemove(_ item: Item, video: VideoModel) {
         let alert = NSAlert()
-        alert.messageText = "Удалить расшифровку «\(item.name)»?"
-        alert.informativeText = "Текст пропадёт. Сам файл и заметки, уже сохранённые из него, останутся."
+        alert.messageText = String(localized: "Удалить расшифровку «\(item.name)»?")
+        alert.informativeText = String(localized: "Текст пропадёт. Сам файл и заметки, уже сохранённые из него, останутся.")
         alert.addButton(withTitle: "Удалить")
         alert.addButton(withTitle: "Отмена")
         alert.buttons.first?.hasDestructiveAction = true
@@ -214,7 +214,7 @@ private struct TranscriptView: View {
                     .font(Martian.heading.font(28))
                     .kerning(Theme.tracking(-7, size: 28))
                     .foregroundStyle(Theme.ink)
-                Text("\(Transcript.clock(item.duration)) · \(SpeechSettings.model.displayName) · расшифровано \(NoteEditor.date(item.added))")
+                Text(String(localized: "\(Transcript.clock(item.duration)) · \(SpeechSettings.model.displayName) · расшифровано \(NoteEditor.date(item.added))"))
                     .font(Martian.body.font(11))
                     .kerning(Theme.tracking(-7, size: 11))
                     .foregroundStyle(NotesLayout.gray)
@@ -227,7 +227,7 @@ private struct TranscriptView: View {
                     .buttonStyle(CoralCapsuleStyle())
                     Menu {
                         if Intelligence.isReady {
-                            Button(model.video.found[item.id].map { $0 == 0 ? "задач не нашлось" : "задачи в календарь · \($0)" } ?? "задачи в календарь") {
+                            Button(model.video.found[item.id].map { $0 == 0 ? String(localized: "задач не нашлось") : String(localized: "задачи в календарь · \($0)") } ?? String(localized: "задачи в календарь")) {
                                 Task { await model.video.extractTasks(item.id) }
                             }
                             .disabled(model.video.summarizing.contains(item.id))

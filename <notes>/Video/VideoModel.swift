@@ -51,8 +51,8 @@ import NotesSpeech
     }
 
     var crumb: String {
-        if let open, let item = items.first(where: { $0.id == open }) { return "видео / " + item.title }
-        return "видео"
+        if let open, let item = items.first(where: { $0.id == open }) { return String(localized: "видео / ") + item.title }
+        return String(localized: "видео")
     }
 
     func count(_ filter: Filter) -> Int { items.filter { matches($0, filter) }.count }
@@ -105,7 +105,7 @@ import NotesSpeech
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.allowedContentTypes = Self.types.compactMap { .init(filenameExtension: $0) }
-        panel.message = "Выбери видео или аудио — расшифровка пройдёт прямо на этом Mac."
+        panel.message = String(localized: "Выбери видео или аудио. Расшифровка идёт на этом Mac.")
         guard panel.runModal() == .OK else { return }
         add(panel.urls)
     }
@@ -234,7 +234,7 @@ import NotesSpeech
         guard let item = items.first(where: { $0.id == id }), let transcript = transcript(id) else { return }
         let panel = NSSavePanel()
         panel.nameFieldStringValue = item.title + ".srt"
-        panel.message = "Куда сохранить субтитры?"
+        panel.message = String(localized: "Куда сохранить субтитры?")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         try? transcript.srt.write(to: url, atomically: true, encoding: .utf8)
     }

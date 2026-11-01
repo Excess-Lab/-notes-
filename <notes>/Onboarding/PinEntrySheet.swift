@@ -27,18 +27,18 @@ struct PinEntrySheet: View {
 
     private var title: String {
         switch entry.stage {
-        case .create: "придумай пинкод"
+        case .create: String(localized: "придумай пинкод")
         // Пока карточка закрывается после верного повтора, заголовок не прыгает назад.
-        case .confirm, .done: "повтори пинкод"
-        case .mismatch: "не совпало"
+        case .confirm, .done: String(localized: "повтори пинкод")
+        case .mismatch: String(localized: "не совпало")
         }
     }
 
     private var subtitle: String {
         switch entry.stage {
-        case .create: "4 цифры — спросим при входе"
-        case .confirm, .done: "ещё раз, чтобы не ошибиться"
-        case .mismatch: "придумай заново"
+        case .create: String(localized: "4 цифры при входе")
+        case .confirm, .done: String(localized: "ещё раз, чтобы не ошибиться")
+        case .mismatch: String(localized: "придумай заново")
         }
     }
 
@@ -121,13 +121,13 @@ struct PinCard: View {
                     .buttonStyle(QuietLinkStyle(size: 11, opacity: 0.3))
                     .frame(height: 13)
                     .padding(.top, 18)
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(Martian.heading.font(20))
                     .kerning(Theme.tracking(-7, size: 20))
                     .foregroundStyle(.black)
                     .frame(height: 24)
                     .padding(.top, 9)
-                Text(subtitle)
+                Text(LocalizedStringKey(subtitle))
                     .font(Martian.body.font(11))
                     .kerning(Theme.tracking(-7, size: 11))
                     .foregroundStyle(isError ? Theme.coral : .black.opacity(0.3))

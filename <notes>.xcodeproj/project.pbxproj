@@ -91,10 +91,12 @@
 				};
 			};
 			buildConfigurationList = 000000000000000010000000 /* Build configuration list for PBXProject "<notes>" */;
-			developmentRegion = en;
+			developmentRegion = ru;
 			hasScannedForEncodings = 0;
 			knownRegions = (
+				ru,
 				en,
+				"sr-Latn",
 				Base,
 			);
 			mainGroup = 000000000000000000000001;

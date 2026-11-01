@@ -18,7 +18,7 @@ nonisolated final class AudioRecorder: @unchecked Sendable {
         let input = engine.inputNode
         let source = input.outputFormat(forBus: 0)
         guard let converter = AVAudioConverter(from: source, to: target) else {
-            throw NSError(domain: "notes.audio", code: 1, userInfo: [NSLocalizedDescriptionKey: "микрофон в неподдерживаемом формате"])
+            throw NSError(domain: "notes.audio", code: 1, userInfo: [NSLocalizedDescriptionKey: String(localized: "микрофон в неподдерживаемом формате")])
         }
         // С macOS 27 подключение к микрофону сообщает об ошибке, а не падает молча. Метод помечен
         // NS_REFINED_FOR_SWIFT, но Swift-обёртки в SDK пока нет: импортёр делает его бросающим

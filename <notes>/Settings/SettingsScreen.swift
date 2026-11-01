@@ -14,7 +14,7 @@ struct SettingsScreen: View {
         let page = model.settingsPage
         ScrollView {
             VStack(alignment: .leading, spacing: 5) {
-                Text(page.rawValue)
+                Text(LocalizedStringKey(page.rawValue))
                     .font(Martian.heading.font(26))
                     .kerning(Theme.tracking(-7, size: 26))
                     .foregroundStyle(Theme.ink)
@@ -46,13 +46,13 @@ struct SettingsScreen: View {
 
     private func subtitle(_ page: NotesModel.SettingsPage) -> String {
         switch page {
-        case .general: "вид, запуск и текст заметок"
-        case .sync: "где лежат заметки и куда уходят"
-        case .dictation: "говоришь — текст в буфере"
+        case .general: String(localized: "вид, запуск и текст заметок")
+        case .sync: String(localized: "где лежат заметки и куда уходят")
+        case .dictation: String(localized: "текст сразу в буфере")
         case .search: "заметки, задачи, события, видео"
-        case .lock: "пинкод и touch id"
-        case .calendar: "задачи со сроком попадают в календарь"
-        case .templates: "шаблоны заметок и автоматизация"
+        case .lock: String(localized: "пинкод и touch id")
+        case .calendar: String(localized: "задачи со сроком попадают в календарь")
+        case .templates: String(localized: "шаблоны заметок и автоматизация")
         }
     }
 }
@@ -66,12 +66,12 @@ struct SettingRow<Trailing: View>: View {
     var body: some View {
         GlassRow(width: 640) {
             VStack(alignment: .leading, spacing: 2) {
-                Text(title)
+                Text(LocalizedStringKey(title))
                     .font(Martian.body.font(13))
                     .kerning(Theme.tracking(-7, size: 13))
                     .foregroundStyle(Theme.ink)
                 if let subtitle {
-                    Text(subtitle)
+                    Text(LocalizedStringKey(subtitle))
                         .font(Martian.body.font(11))
                         .kerning(Theme.tracking(-7, size: 11))
                         .foregroundStyle(Theme.fg.opacity(0.3))
@@ -87,7 +87,7 @@ struct SettingRow<Trailing: View>: View {
 private struct Note: View {
     let text: String
     var body: some View {
-        Text(text)
+        Text(LocalizedStringKey(text))
             .font(Martian.body.font(11))
             .kerning(Theme.tracking(-7, size: 11))
             .foregroundStyle(Theme.fg.opacity(0.3))
@@ -115,7 +115,7 @@ private struct SyncPage: View {
             }
             .buttonStyle(WhitePillStyle())
         }
-        SettingRow(title: "история в git", subtitle: "версии правок — по расписанию ниже") {
+        SettingRow(title: "история в git", subtitle: "версии сохраняются по расписанию") {
             if isRepo {
                 GrantedLabel(text: "включено")
             } else {
@@ -129,7 +129,7 @@ private struct SyncPage: View {
                 .buttonStyle(WhitePillStyle())
             }
         }
-        SettingRow(title: "github", subtitle: TokenStore().exists ? "приватный репозиторий notes" : "вход по коду — на первом входе") {
+        SettingRow(title: "github", subtitle: TokenStore().exists ? String(localized: "приватный репозиторий notes") : String(localized: "вход по коду при первом входе")) {
             if TokenStore().exists && !sync.needsLogin {
                 GrantedLabel(text: "подключено")
             } else {
@@ -142,11 +142,11 @@ private struct SyncPage: View {
         ChoiceRow(title: "отправлять на github", value: AppSettings.every(push), choices: AppSettings.pushChoices.map { ($0, AppSettings.every($0)) }) {
             AppSettings.pushMinutes = $0; push = $0
         }
-        SettingRow(title: "последний коммит", subtitle: sync.lastCommit.map { NoteEditor.date($0) } ?? "с запуска правок не было") {
+        SettingRow(title: String(localized: "последний коммит"), subtitle: sync.lastCommit.map { NoteEditor.date($0) } ?? String(localized: "с запуска правок не было")) {
             EmptyView()
         }
         SettingRow(title: "последняя отправка",
-                   subtitle: SyncController.lastPush.map { NoteEditor.date($0) } ?? "ещё не отправляли") {
+                   subtitle: SyncController.lastPush.map { NoteEditor.date($0) } ?? String(localized: "ещё не отправляли")) {
             Button(sending ? "отправляем…" : "отправить сейчас") {
                 sending = true
                 Task { _ = await sync.pushNow(); sending = false }
@@ -161,7 +161,7 @@ private struct SyncPage: View {
                 .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: 640, alignment: .leading).padding(.top, 8)
         }
-        Note(text: "правили на двух mac — сохраним обе версии")
+        Note(text: "правки с двух mac сохранятся обе")
             .onAppear { isRepo = GitVault.isRepository(vault) }
             .sheet(isPresented: $relogin) {
                 ReloginSheet(vault: vault) {
@@ -190,7 +190,7 @@ private struct DictationPage: View {
             AppSettings.language = $0; language = $0
         }
         SwitchRow(title: "вставлять в поле", subtitle: AutoPaste.enabled && !AutoPaste.trusted
-                    ? "включи <notes> в «универсальном доступе»" : "сразу туда, где курсор; нет поля — только буфер", isOn: $paste) {
+                    ? String(localized: "включи <notes> в «универсальном доступе»") : String(localized: "в поле, где курсор"), isOn: $paste) {
             AutoPaste.enabled = $0; paste = $0
         }
         ChoiceRow(title: "длина записи", subtitle: "потом распознается сама",
@@ -210,7 +210,7 @@ private struct DictationPage: View {
                 }
             }
         }
-        SettingRow(title: "спикеры в расшифровках", subtitle: "кто говорит в видео и аудио, \(Diarization.downloadMB) мб" + (speakersReady ? " · скачано" : "")) {
+        SettingRow(title: String(localized: "спикеры в расшифровках"), subtitle: String(localized: "кто говорит в видео и аудио, \(Diarization.downloadMB) мб") + (speakersReady ? String(localized: " · скачано") : "")) {
             if let progress = downloads.speakers {
                 Text("\(Int(progress * 100))%").font(Martian.body.font(13)).foregroundStyle(Theme.fg.opacity(0.3))
             } else if speakersReady {
@@ -225,12 +225,12 @@ private struct DictationPage: View {
         Note(text: "всё распознаётся на этом mac, без интернета")
     }
 
-    private static func length(_ minutes: Int) -> String { minutes == 0 ? "без предела" : "до \(minutes) мин" }
+    private static func length(_ minutes: Int) -> String { minutes == 0 ? String(localized: "без предела") : String(localized: "до \(minutes) мин") }
 
     private func subtitle(_ model: SpeechModel) -> String {
-        let size = model.downloadMB >= 1000 ? String(format: "%.1f гб", Double(model.downloadMB) / 1000) : "\(model.downloadMB) мб"
-        let kind = model == .gigaAM ? "только русский, сразу с пунктуацией" : "99 языков"
-        return "\(kind), \(size)" + (ModelStore.standard.isInstalled(model) ? " · скачано" : "")
+        let size = model.downloadMB >= 1000 ? String(format: String(localized: "%.1f гб"), Double(model.downloadMB) / 1000) : String(localized: "\(model.downloadMB) мб")
+        let kind = model == .gigaAM ? String(localized: "только русский, сразу с пунктуацией") : String(localized: "99 языков")
+        return "\(kind), \(size)" + (ModelStore.standard.isInstalled(model) ? String(localized: " · скачано") : "")
     }
 }
 
@@ -258,7 +258,7 @@ private struct GeneralPage: View {
         if let reason = Intelligence.unavailableReason {
             SettingRow(title: "apple intelligence", subtitle: reason) { EmptyView() }
         } else {
-            SwitchRow(title: "apple intelligence", subtitle: "кнопка «кратко» у расшифровок, работает на этом mac", isOn: $intelligence) {
+            SwitchRow(title: "apple intelligence", subtitle: "кратко для заметок, на этом mac", isOn: $intelligence) {
                 Intelligence.enabled = $0; intelligence = $0
             }
         }
@@ -275,9 +275,9 @@ private struct ChoiceRow<Value: Hashable>: View {
     let pick: (Value) -> Void
 
     var body: some View {
-        SettingRow(title: title, subtitle: subtitle.map { "\(value) · \($0)" } ?? value) {
+        SettingRow(title: title, subtitle: subtitle.map { "\(value.localized) · \($0)" } ?? value.localized) {
             Menu("изменить") {
-                ForEach(choices, id: \.0) { choice in Button(choice.1) { pick(choice.0) } }
+                ForEach(choices, id: \.0) { choice in Button(choice.1.localized) { pick(choice.0) } }
             }
             .menuStyle(.button).buttonStyle(WhitePillStyle()).fixedSize()
         }
@@ -314,7 +314,7 @@ private struct LockPage: View {
     @State private var touchID = BiometricLock.isEnabled
 
     var body: some View {
-        SettingRow(title: "пинкод", subtitle: pinSet ? "4 цифры" : "не задан") {
+        SettingRow(title: String(localized: "пинкод"), subtitle: pinSet ? String(localized: "4 цифры") : String(localized: "не задан")) {
             Button(pinSet ? "сменить" : "задать") { model.pinEntryShown = true }.buttonStyle(WhitePillStyle())
         }
         SettingRow(title: "touch id", subtitle: "вход по пальцу") {
@@ -327,7 +327,7 @@ private struct LockPage: View {
             }
         }
         SettingRow(title: "когда спрашивать", subtitle: "после блокировки mac или 15 минут без дела") { EmptyView() }
-        Note(text: "пинкод закрывает приложение, сами заметки остаются обычными файлами")
+        Note(text: "пинкод закрывает приложение, файлы заметок не шифруются")
             .onChange(of: model.pinEntryShown) { _, shown in if !shown { pinSet = PinStore().isSet } }
     }
 }
@@ -339,7 +339,7 @@ private struct TemplatesPage: View {
 
     var body: some View {
         let count = Templates.list(in: model.library).count
-        SettingRow(title: "папка шаблонов", subtitle: count == 0 ? "пока пусто — положи туда .md" : "\(count) \(NoteEditor.plural(count, "шаблон", "шаблона", "шаблонов"))") {
+        SettingRow(title: String(localized: "папка шаблонов"), subtitle: count == 0 ? String(localized: "пока пусто, положи сюда .md") : String(localized: "\(count) \(NoteEditor.plural(count, "шаблон", "шаблона", "шаблонов"))")) {
             Button("открыть") {
                 let dir = model.library.root.appendingPathComponent(Templates.folder, isDirectory: true)
                 try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -348,11 +348,11 @@ private struct TemplatesPage: View {
             }
             .buttonStyle(WhitePillStyle())
         }
-        Note(text: "в шаблоне можно писать {{дата}}, {{время}} и {{название}} — подставятся сами. новая заметка из шаблона — правый клик по плюсу или по папке")
+        Note(text: "в шаблоне работают {{дата}}, {{время}} и {{название}}")
         GlassRow(width: 640) {
             VStack(alignment: .leading, spacing: 2) {
                 Text("заметка на каждый день").font(Martian.body.font(13)).foregroundStyle(Theme.ink)
-                Text("в папке «\(Templates.dailyFolder)», имя — дата, текст — из шаблона «\(Templates.dailyTemplate)»")
+                Text("в папке «\(Templates.dailyFolder)» по шаблону «\(Templates.dailyTemplate)»")
                     .font(Martian.body.font(11)).foregroundStyle(Theme.fg.opacity(0.3))
             }
             Spacer(minLength: 0)
@@ -387,15 +387,15 @@ private struct CalendarPage: View {
             .menuStyle(.button).buttonStyle(WhitePillStyle()).fixedSize()
             .disabled(!access)
         }
-        SettingRow(title: "длительность", subtitle: "\(minutes) минут на задачу") {
+        SettingRow(title: String(localized: "длительность"), subtitle: String(localized: "\(minutes) минут на задачу")) {
             Menu("изменить") {
                 ForEach([15, 30, 60, 90], id: \.self) { value in
-                    Button("\(value) минут") { sync.minutes = value; minutes = value }
+                    Button(String(localized: "\(value) минут")) { sync.minutes = value; minutes = value }
                 }
             }
             .menuStyle(.button).buttonStyle(WhitePillStyle()).fixedSize()
         }
-        Note(text: "поменял задачу — событие в календаре поменяется само")
+        Note(text: "событие в календаре обновится само")
             .onAppear { access = sync.hasAccess; minutes = sync.minutes }
     }
 }
@@ -441,7 +441,7 @@ private struct ReloginSheet: View {
         VStack(spacing: 18) {
             Text("войти в github")
                 .font(Martian.heading.font(22)).foregroundStyle(Theme.ink)
-            Text("вход устарел. введи код на github — и всё снова уйдёт в облако")
+            Text("вход устарел, введи код на github заново")
                 .font(Martian.body.font(13)).foregroundStyle(NotesLayout.gray)
             DeviceCodeCapsule(state: login.state, renew: { attempt += 1 })
                 .offset(y: -(207 - Layout.sheetTop))

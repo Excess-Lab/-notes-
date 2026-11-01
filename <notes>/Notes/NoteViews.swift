@@ -43,29 +43,35 @@ struct NoteEditor: View {
 
     private var meta: String {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
-        return "изменено \(Self.date(modified)) · \(Self.words(NoteLibrary.wordCount(model.text)))"
+        return String(localized: "изменено \(Self.date(modified)) · \(Self.words(NoteLibrary.wordCount(model.text)))")
     }
 
     // «сегодня в 14:20», «вчера в 9:05», «12 окт в 18:00».
     static func date(_ date: Date) -> String {
         let calendar = Calendar.current
         let time = date.formatted(.dateTime.hour().minute())
-        if calendar.isDateInToday(date) { return "сегодня в \(time)" }
-        if calendar.isDateInYesterday(date) { return "вчера в \(time)" }
-        return "\(short(date)) в \(time)"
+        if calendar.isDateInToday(date) { return String(localized: "сегодня в \(time)") }
+        if calendar.isDateInYesterday(date) { return String(localized: "вчера в \(time)") }
+        return String(localized: "\(short(date)) в \(time)")
     }
 
     static func short(_ date: Date) -> String {
         let calendar = Calendar.current
         if calendar.isDateInToday(date) { return "сегодня" }
-        if calendar.isDateInYesterday(date) { return "вчера" }
-        return date.formatted(.dateTime.day().month(.abbreviated).locale(Locale(identifier: "ru_RU")))
+        if calendar.isDateInYesterday(date) { return String(localized: "вчера") }
+        return date.formatted(.dateTime.day().month(.abbreviated).locale(.app))
             .replacingOccurrences(of: ".", with: "")
     }
 
     static func words(_ count: Int) -> String { "\(count) \(plural(count, "слово", "слова", "слов"))" }
 
+    // Формы берутся по-русски и переводятся каталогом; в английском — только «один» и «много».
     static func plural(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
+        if Bundle.main.preferredLocalizations.first == "en" { return (n == 1 ? one : many).localized }
+        return pluralRu(n, one, few, many).localized
+    }
+
+    private static func pluralRu(_ n: Int, _ one: String, _ few: String, _ many: String) -> String {
         let tail = n % 100
         if (11...14).contains(tail) { return many }
         switch n % 10 {
@@ -90,7 +96,7 @@ struct FolderOverview: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                Text(folder.url == model.library.root ? "все заметки" : folder.name)
+                Text(folder.url == model.library.root ? String(localized: "все заметки") : folder.name)
                     .font(Martian.heading.font(26))
                     .kerning(Theme.tracking(-7, size: 26))
                     .foregroundStyle(Theme.ink)
@@ -330,7 +336,7 @@ struct SearchOverlay: View {
 private struct Caption: View {
     let text: String
     var body: some View {
-        Text(text).font(Martian.body.font(11)).foregroundStyle(Theme.fg.opacity(0.3))
+        Text(LocalizedStringKey(text)).font(Martian.body.font(11)).foregroundStyle(Theme.fg.opacity(0.3))
             .padding(.horizontal, 12).padding(.vertical, 6)
     }
 }
@@ -341,7 +347,7 @@ private struct Hint: View {
     var body: some View {
         HStack(spacing: 6) {
             Keycap(text: key)
-            Text(text).font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+            Text(LocalizedStringKey(text)).font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
         }
     }
 }
@@ -359,7 +365,7 @@ private struct ResultRow: View {
             DotIcon(glyph: glyph).padding(.top, 2)
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 8) {
-                    Text(title).font(Martian.body.font(14)).foregroundStyle(Theme.ink).lineLimit(1)
+                    Text(LocalizedStringKey(title)).font(Martian.body.font(14)).foregroundStyle(Theme.ink).lineLimit(1)
                     Text(path).font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray).lineLimit(1)
                 }
                 if let snippet {
@@ -378,7 +384,7 @@ private struct ResultRow: View {
     // Найденное слово в отрывке — тёмным, остальное серым.
     private func highlighted(_ text: String) -> Text {
         guard let word, !word.isEmpty,
-              let range = text.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) else { return Text(text) }
+              let range = text.range(of: word, options: [.caseInsensitive, .diacriticInsensitive]) else { return Text(LocalizedStringKey(text)) }
         let head = String(text[..<range.lowerBound]), match = String(text[range]), tail = String(text[range.upperBound...])
         return Text("\(head)\(Text(match).foregroundStyle(Theme.ink))\(tail)")
     }
@@ -393,4 +399,15 @@ private extension NotesModel.Found.Kind {
         case .video: .video
         }
     }
+}
+
+
+extension String {
+    // Перевод строки, собранной в коде (rawValue, выбор из списка), по каталогу Localizable.
+    var localized: String { Bundle.main.localizedString(forKey: self, value: nil, table: nil) }
+}
+
+extension Locale {
+    // Язык интерфейса для дат: русский, английский или сербский, как выбрал каталог строк.
+    static let app = Locale(identifier: Bundle.main.preferredLocalizations.first ?? "ru")
 }

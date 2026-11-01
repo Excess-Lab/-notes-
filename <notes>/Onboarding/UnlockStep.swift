@@ -68,15 +68,15 @@ struct UnlockStep: View {
     }
 
     private func subtitle(wait: TimeInterval?) -> String {
-        if let wait { return "слишком много попыток, подожди \(Self.format(wait))" }
-        if unlock.stage == .wrong { return "неверный пинкод" }
-        if BiometricLock.isEnabled { return hasPin ? "или приложи палец к touch id" : "к touch id, чтобы открыть заметки" }
-        return "чтобы открыть заметки"
+        if let wait { return String(localized: "слишком много попыток, подожди \(Self.format(wait))") }
+        if unlock.stage == .wrong { return String(localized: "неверный пинкод") }
+        if BiometricLock.isEnabled { return hasPin ? String(localized: "или приложи палец к touch id") : String(localized: "к touch id, чтобы открыть заметки") }
+        return String(localized: "чтобы открыть заметки")
     }
 
     private static func format(_ seconds: TimeInterval) -> String {
         let value = Int(seconds.rounded(.up))
-        return value < 60 ? "\(value) с" : "\(Int((Double(value) / 60).rounded(.up))) мин"
+        return value < 60 ? String(localized: "\(value) с") : String(localized: "\(Int((Double(value) / 60).rounded(.up))) мин")
     }
 
     private func listen() {

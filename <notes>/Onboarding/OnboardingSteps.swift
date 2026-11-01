@@ -11,50 +11,50 @@ struct OnboardingStepContent: View {
         case .welcome:
             StepLayout(title: "привет!",
                        text: "выбери папку куда сохранять заметки",
-                       primary: ("создать папку", { VaultPicker.create { model.vaultChosen($0) } }),
-                       secondary: ("выбрать папку", { VaultPicker.choose { model.vaultChosen($0) } }))
+                       primary: (String(localized: "создать папку"), { VaultPicker.create { model.vaultChosen($0) } }),
+                       secondary: (String(localized: "выбрать папку"), { VaultPicker.choose { model.vaultChosen($0) } }))
         case .git:
             StepLayout(title: "git в папке",
-                       text: "сделаем из папки git-репозиторий — каждая правка сохранится в истории, и любую заметку можно откатить",
-                       primary: ("инициализировать", { model.initializeGit() }),
+                       text: "папка станет git-репозиторием: любую правку можно откатить",
+                       primary: (String(localized: "инициализировать"), { model.initializeGit() }),
                        // Без git нечего отправлять на GitHub — сразу к моделям.
-                       secondary: ("пропустить, настрою потом", { model.go(to: .models) }))
+                       secondary: (String(localized: "пропустить, настрою потом"), { model.go(to: .models) }))
         case .github:
             StepLayout(title: "отправлять на github?",
-                       text: "история будет храниться ещё и в приватном репозитории на github для синхронизации и восстановлений данных",
-                       primary: ("войти через github", { model.startGitHubLogin() }),
-                       secondary: ("нет, только на этом маке", { model.go(to: .models) }))
+                       text: "история хранится в приватном репозитории на github",
+                       primary: (String(localized: "войти через github"), { model.startGitHubLogin() }),
+                       secondary: (String(localized: "нет, только на этом маке"), { model.go(to: .models) }))
         case .githubCode:
             GitHubCodeStep(model: model)
         case .githubDone:
             StepLayout(title: "готово!",
-                       text: "создали приватный репозиторий \(model.githubRepository ?? "notes"). история отправляется туда сама раз в день",
-                       primary: ("дальше", { model.go(to: .models) }))
+                       text: String(localized: "создали приватный репозиторий \(model.githubRepository ?? "notes"). история отправляется туда сама раз в день"),
+                       primary: (String(localized: "дальше"), { model.go(to: .models) }))
         case .models:
             StepLayout(title: "модели",
                        text: "выбери одну, всегда можно сменить в настройках",
-                       primary: ("дальше", { model.startDownload(); model.go(to: .download) }),
+                       primary: (String(localized: "дальше"), { model.startDownload(); model.go(to: .download) }),
                        primaryY: 374) {
                 ModelPicker(model: model)
             }
         case .download:
             StepLayout(title: "модели",
-                       text: "работают на твоём маке без интернета,  скачиваются один раз",
+                       text: "работают без интернета, скачиваются один раз",
                        // Скачивание идёт в фоне — ждать его конца не нужно.
-                       primary: ("дальше", { model.go(to: .permissions) })) {
+                       primary: (String(localized: "дальше"), { model.go(to: .permissions) })) {
                 DownloadRow(model: model)
             }
         case .permissions:
             StepLayout(title: "пару моментиков",
-                       text: "нужны  для того, что бы все работало стабильно",
-                       primary: ("дальше", { model.go(to: .password) }),
+                       text: "нужны для стабильной работы",
+                       primary: (String(localized: "дальше"), { model.go(to: .password) }),
                        primaryY: 374) {
                 PermissionRows()
             }
         case .password:
             StepLayout(title: "установим пароль?",
                        text: nil,
-                       primary: ("дальше", { model.finish() }),
+                       primary: (String(localized: "дальше"), { model.finish() }),
                        primaryY: 359) {
                 PasswordRows(model: model)
             }
@@ -99,8 +99,8 @@ private extension OnboardingModel {
     func startGitHubLogin() {
         guard GitHubApp.clientID != nil else {
             let alert = NSAlert()
-            alert.messageText = "Вход в GitHub не настроен"
-            alert.informativeText = "Чтобы отправлять историю на GitHub, приложению нужен client id: его вписывают в GitHubApp.swift. Пока история остаётся только на этом Mac."
+            alert.messageText = String(localized: "Вход в GitHub не настроен")
+            alert.informativeText = String(localized: "Чтобы отправлять историю на GitHub, приложению нужен client id: его вписывают в GitHubApp.swift. Пока история остаётся только на этом Mac.")
             alert.runModal()
             return
         }
@@ -116,7 +116,7 @@ private struct GitHubCodeStep: View {
 
     var body: some View {
         StepLayout(title: "введи код на github",
-                   text: "открой github.com/login/device и введи этот код, пароль от github приложению не нужен",
+                   text: "открой github.com/login/device и введи код. пароль не нужен",
                    primary: primary,
                    back: { model.go(to: .github) }) {
             DeviceCodeCapsule(state: login.state, renew: { attempt += 1 })
@@ -156,14 +156,14 @@ struct StepLayout<Middle: View>: View {
                     .offset(y: 86 - Layout.sheetTop)
             }
 
-            Text(title)
+            Text(LocalizedStringKey(title))
                 .font(Martian.heading.font(26))
                 .kerning(Theme.tracking(-7, size: 26))
                 .foregroundStyle(Theme.ink)
                 .offset(y: 96 - Layout.sheetTop)
 
             if let text {
-                Text(text)
+                Text(LocalizedStringKey(text))
                     .font(Martian.body.font(13))
                     .kerning(Theme.tracking(-7, size: 13))
                     .foregroundStyle(Theme.fg.opacity(0.3))
@@ -239,9 +239,9 @@ struct DeviceCodeCapsule: View {
         // GitHub отдаёт код через дефис, в макете — через тире.
         case .waiting(let code, _): code.replacingOccurrences(of: "-", with: "–")
         case .requesting: "····–····"
-        case .connecting: "подключаем"
-        case .expired: "код истёк"
-        case .failed: "не вышло"
+        case .connecting: String(localized: "подключаем")
+        case .expired: String(localized: "код истёк")
+        case .failed: String(localized: "не вышло")
         }
     }
 
@@ -263,8 +263,8 @@ struct DeviceCodeCapsule: View {
     }
 
     private var failureText: String {
-        if case .failed(let reason) = state { return "\(reason) — попробовать снова" }
-        return "получить новый код"
+        if case .failed(let reason) = state { return String(localized: "\(reason) — попробовать снова") }
+        return String(localized: "получить новый код")
     }
 }
 
@@ -285,10 +285,10 @@ enum VaultPicker {
     // Предупреждение про iCloud Drive (CONTEXT.md): true — пользователь всё равно хочет эту папку.
     static func confirmICloud() -> Bool {
         let alert = NSAlert()
-        alert.messageText = "Папка лежит в iCloud Drive"
-        alert.informativeText = "iCloud синхронизирует историю git по частям и может её повредить. Лучше выбрать папку вне iCloud Drive."
-        alert.addButton(withTitle: "Выбрать другую")
-        alert.addButton(withTitle: "Всё равно использовать")
+        alert.messageText = String(localized: "Папка лежит в iCloud Drive")
+        alert.informativeText = String(localized: "iCloud синхронизирует историю git по частям и может её повредить. Лучше выбрать папку вне iCloud Drive.")
+        alert.addButton(withTitle: String(localized: "Выбрать другую"))
+        alert.addButton(withTitle: String(localized: "Всё равно использовать"))
         return alert.runModal() == .alertSecondButtonReturn
     }
 
@@ -297,8 +297,8 @@ enum VaultPicker {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.canCreateDirectories = true
-        panel.prompt = "Выбрать"
-        panel.message = "Выбери папку, где будут лежать заметки."
+        panel.prompt = String(localized: "Выбрать")
+        panel.message = String(localized: "Выбери папку, где будут лежать заметки.")
         panel.begin { if $0 == .OK, let url = panel.url { done(url) } }
     }
 
@@ -307,7 +307,7 @@ enum VaultPicker {
         panel.nameFieldStringValue = "notes"
         panel.canCreateDirectories = true
         panel.prompt = "Создать"
-        panel.message = "Новая папка для заметок. Это обычные файлы — их можно открыть и в любом другом редакторе."
+        panel.message = String(localized: "Новая папка для заметок. Обычные файлы, открываются любым редактором.")
         panel.begin { response in
             guard response == .OK, let url = panel.url else { return }
             do {

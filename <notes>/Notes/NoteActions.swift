@@ -40,10 +40,10 @@ extension NotesModel {
         }
         // ⌘Z — достаём из Корзины на старое место.
         if let inTrash = inTrash as URL? {
-            undoable("Удаление") { model in
+            undoable(String(localized: "Удаление")) { model in
                 try? FileManager.default.moveItem(at: inTrash, to: url)
                 model.reloadTree()
-                model.redoable("Удаление") { $0.trash(url) }
+                model.redoable(String(localized: "Удаление")) { $0.trash(url) }
             }
         }
         let gone = url.standardizedFileURL.path
@@ -73,13 +73,13 @@ extension NotesModel {
     // Вставить в папку файлы из буфера; при совпадении имени — «копия».
     func paste(into folder: URL) {
         let urls = NSPasteboard.general.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        undoCreation("Вставка", urls.compactMap { copyFile($0, into: folder) })
+        undoCreation(String(localized: "Вставка"), urls.compactMap { copyFile($0, into: folder) })
         reloadTree()
     }
 
     func duplicate(_ url: URL) {
         flush()
-        undoCreation("Дублирование", [copyFile(url, into: url.deletingLastPathComponent())].compactMap { $0 })
+        undoCreation(String(localized: "Дублирование"), [copyFile(url, into: url.deletingLastPathComponent())].compactMap { $0 })
         reloadTree()
     }
 
@@ -155,10 +155,10 @@ extension NotesModel {
             }
         }
         if moved { reloadTree(); tasks.reload() }
-        undoCreation("Копирование", copies)
+        undoCreation(String(localized: "Копирование"), copies)
         if !moves.isEmpty {
             // ⌘Z — всё обратно по своим папкам.
-            undoable("Перенос") { model in
+            undoable(String(localized: "Перенос")) { model in
                 model.flush()
                 for (source, destination) in moves.reversed() { try? FileManager.default.moveItem(at: destination, to: source) }
                 if let open = model.openNote?.standardizedFileURL,
@@ -202,7 +202,7 @@ struct TemplateItems: View {
     var body: some View {
         let templates = Templates.list(in: model.library)
         if templates.isEmpty {
-            Button("Шаблонов нет — настройки → шаблоны") { model.flush(); model.settingsPage = .templates; model.section = .settings }
+            Button("Шаблонов нет. Добавь в настройках") { model.flush(); model.settingsPage = .templates; model.section = .settings }
         }
         ForEach(templates, id: \.self) { url in
             Button(url.deletingPathExtension().lastPathComponent) { model.newNote(from: url, in: folder) }

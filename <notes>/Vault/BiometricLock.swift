@@ -18,7 +18,7 @@ enum BiometricLock {
     static func enable() async -> Bool {
         let context = LAContext()
         let ok = (try? await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
-                                                     localizedReason: "включить вход в <notes> по отпечатку пальца")) ?? false
+                                                     localizedReason: String(localized: "включить вход в <notes> по отпечатку пальца"))) ?? false
         if ok { UserDefaults.standard.set(true, forKey: enabledKey) }
         return ok
     }
@@ -29,7 +29,7 @@ enum BiometricLock {
     // Окно macOS: «<notes> пытается сбросить пинкод».
     static func verifyOwner() async -> Bool {
         (try? await LAContext().evaluatePolicy(.deviceOwnerAuthentication,
-                                                localizedReason: "сбросить пинкод")) ?? false
+                                                localizedReason: String(localized: "сбросить пинкод"))) ?? false
     }
 
     // Вход при запуске. Окно macOS: «<notes> пытается открыть заметки».
@@ -38,6 +38,6 @@ enum BiometricLock {
         // Без этого в системном окне появилась бы кнопка «Ввести пароль» от учётки Mac — у нас свой пинкод.
         context.localizedFallbackTitle = ""
         return (try? await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
-                                                  localizedReason: "открыть заметки")) ?? false
+                                                  localizedReason: String(localized: "открыть заметки"))) ?? false
     }
 }
