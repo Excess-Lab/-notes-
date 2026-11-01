@@ -233,3 +233,10 @@ button { font: inherit; color: inherit; letter-spacing: inherit; background: non
 .row.naming input { flex: 1; min-width: 0; height: 22px; border: 0; outline: 0; background: none; color: var(--ink);
   font: inherit; letter-spacing: inherit; user-select: text; }
 .row.naming { box-shadow: inset 0 0 0 1px rgba(229, 77, 51, 0.5); }
+
+/* ——— перетаскивание ——— */
+.drag-ghost { position: fixed; left: 0; top: 0; z-index: 30; pointer-events: none; background: rgba(var(--bg), 0.85);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.15); padding-left: 8px !important; opacity: .95; }
+.row.dragging { opacity: .4; }
+.row.drop-target { background: rgba(229, 77, 51, 0.18); }
+.sidebar.drop-target { box-shadow: inset 0 0 0 1px rgba(229, 77, 51, 0.35); border-radius: 12px; }

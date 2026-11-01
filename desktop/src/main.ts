@@ -8,6 +8,7 @@ import { drawSlats } from "./slats";
 import { bindMarkdown, editorHTML } from "./editor";
 import { closeSearch, openSearch, searchShown } from "./search";
 import { showMenu, type MenuItem } from "./menu";
+import { enableDrag, enableFileDrop, type DragHost } from "./drag";
 
 type Section = "notes" | "tasks" | "calendar" | "video" | "settings";
 type Selection = { kind: "folder"; path: string } | { kind: "note"; path: string };
@@ -461,6 +462,32 @@ app.addEventListener("contextmenu", (e) => {
   else if (target.closest(".sidebar, .overview")) showMenu(e.clientX, e.clientY, itemsFor(state.selection.kind === "folder" ? state.selection.path : "", true));
 });
 
+// ——— перетаскивание ———
+const rebase = (p: string, from: string, to: string) => (under(p, from) ? to + p.slice(from.length) : p);
+const dragHost: DragHost = {
+  async move(path, folder) {
+    const to = await backend.moveInto(path, folder);
+    if (to === null) return;
+    // Открытая заметка, вкладки и закреплённые едут вместе с файлом.
+    state.tabs = state.tabs.map((p) => rebase(p, path, to));
+    state.pins = state.pins.map((p) => rebase(p, path, to));
+    await backend.setPins(state.pins);
+    state.selection = { ...state.selection, path: rebase(state.selection.path, path, to) };
+    state.expanded = new Set([...state.expanded].map((p) => rebase(p, path, to)));
+    if (folder) state.expanded.add(folder);
+    await reload();
+    lastKey = `${state.section}:${state.selection.kind}:${state.selection.path}:true`;
+    render();
+  },
+  async copyIn(paths, folder) {
+    for (const p of paths) await backend.copyIn(p, folder);
+    if (folder) state.expanded.add(folder);
+    await reload();
+    render();
+  },
+};
+enableDrag(sidebar, dragHost);
+
 // Ctrl+K — поиск (на маке ⌘K), Ctrl+N — новая заметка.
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && searchShown()) { closeSearch(); return; }
@@ -478,6 +505,7 @@ export const shell = { get backend() { return backend; }, get state() { return s
   document.body.classList.add(backend.inTauri ? `tauri-${os}` : "browser");
   state.tree = await backend.lastVault();
   if (state.tree) state.pins = await backend.pins();
+  if (backend.inTauri) void enableFileDrop(dragHost);
   const demo = new URLSearchParams(location.search).get("open");
   render();
   paintSlats();
