@@ -6,7 +6,7 @@
 <Feature|Fix> <Модуль> / <Описание с заглавной буквы>
 ```
 
-Модули: Onboarding, Notes, Editor, Sync, Search, Dictation, Tasks, Calendar, Settings, Dev, Docs.
+Модули: Onboarding, Notes, Editor, Sync, Search, Dictation, Tasks, Calendar, Settings, Dev, Docs, Windows.
 Описание — по-английски, в повелительном наклонении, без точки в конце.
 
 Тело — по-русски и по делу: что было сломано, почему сломалось и почему решено именно так.
