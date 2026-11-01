@@ -25,7 +25,7 @@ TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 NAME="sherpa-onnx-v$VERSION-osx-arm64-static-no-tts-lib"
 
-echo "качаю sherpa-onnx $VERSION…"
+echo "качаю sherpa-onnx ${VERSION}…"
 curl -fsSL -o "$TMP/lib.tar.bz2" "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$VERSION/$NAME.tar.bz2"
 echo "$LIB_SHA256  $TMP/lib.tar.bz2" | shasum -a 256 -c -
 curl -fsSL -o "$TMP/c-api.h" "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v$VERSION/sherpa-onnx/c-api/c-api.h"
