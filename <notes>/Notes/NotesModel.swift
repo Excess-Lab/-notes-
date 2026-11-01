@@ -216,8 +216,10 @@ import SwiftUI
         // Своё автосохранение открытой заметки: на диске ровно то, что мы записали. Раньше каждая пауза
         // в наборе перечитывала всё хранилище, задачи и календарь — набор подлагивал (31.10.2026).
         // Тогда пересобираем задачи только из этой заметки.
-        if let url = openNote, !paths.isEmpty,
-           paths.allSatisfy({ URL(fileURLWithPath: $0).standardizedFileURL == url.standardizedFileURL }),
+        // Временный файл атомарной записи («Входящие.md.sb-…») — тоже своё: без песочницы он виден в событиях (01.11.2026).
+        let real = paths.filter { !URL(fileURLWithPath: $0).lastPathComponent.contains(".sb-") }
+        if let url = openNote, !real.isEmpty,
+           real.allSatisfy({ URL(fileURLWithPath: $0).standardizedFileURL == url.standardizedFileURL }),
            (try? library.read(url)) == savedText {
             tasks.reload(note: url, text: savedText)
             return

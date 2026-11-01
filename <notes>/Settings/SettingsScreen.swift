@@ -179,6 +179,7 @@ private struct DictationPage: View {
     @State private var language = AppSettings.language
     @State private var minutes = AppSettings.maxMinutes
     @State private var speakers = AppSettings.speakers
+    @State private var paste = AutoPaste.enabled
     @State private var speakersReady = Diarization.isInstalled()
 
     var body: some View {
@@ -187,6 +188,10 @@ private struct DictationPage: View {
                   value: AppSettings.languages.first { $0.code == language }?.title ?? language,
                   choices: AppSettings.languages.map { ($0.code, $0.title) }) {
             AppSettings.language = $0; language = $0
+        }
+        SwitchRow(title: "вставлять в поле", subtitle: AutoPaste.enabled && !AutoPaste.trusted
+                    ? "включи <notes> в «универсальном доступе»" : "сразу туда, где курсор; нет поля — только буфер", isOn: $paste) {
+            AutoPaste.enabled = $0; paste = $0
         }
         ChoiceRow(title: "длина записи", subtitle: "потом распознается сама",
                   value: "до \(minutes) мин", choices: AppSettings.lengthChoices.map { ($0, "до \($0) мин") }) {

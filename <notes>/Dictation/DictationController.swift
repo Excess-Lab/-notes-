@@ -135,6 +135,8 @@ final class DictationController {
             guard !text.isEmpty else { hide(); return }
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text, forType: .string)
+            // Опция «вставлять в поле»: курсор в поле — вставляем сразу; нет поля — только буфер.
+            AutoPaste.intoFocusedField()
             state = .copied
             try? await Task.sleep(for: .seconds(1.2))
             hide()
@@ -148,7 +150,7 @@ final class DictationController {
     // Запись лежит на диске, пока не распознана: если приложение упадёт посреди распознавания,
     // при следующем запуске она распознается и текст окажется в буфере — сказанное не пропадает.
     private static var pending: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        AppSupport.folder
             .appendingPathComponent("<notes>/недораспознанная запись.f32")
     }
 

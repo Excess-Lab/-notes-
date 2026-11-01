@@ -37,7 +37,7 @@ import NotesSpeech
     private var sources: [UUID: URL] = [:]
     private var running = false
 
-    private static let folder = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    private static let folder = AppSupport.folder
         .appendingPathComponent("transcripts", isDirectory: true)
     private static var indexURL: URL { folder.appendingPathComponent("index.json") }
 

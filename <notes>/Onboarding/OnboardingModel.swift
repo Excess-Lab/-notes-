@@ -80,7 +80,7 @@ final class OnboardingModel {
     }
 
     static func makeTestVault() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let base = AppSupport.folder
             .appendingPathComponent("test-vault", isDirectory: true)
         try? FileManager.default.removeItem(at: base)
         let notes: [String: String] = [

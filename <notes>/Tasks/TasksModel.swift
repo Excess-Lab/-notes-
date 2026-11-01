@@ -173,7 +173,7 @@ import NotesCore
     private var storeObserver: NSObjectProtocol?
     // Связи «задача → событие» — вне хранилища: в заметки служебное не пишем.
     private(set) var links: [String: String] = [:]
-    private static let linksURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    private static let linksURL = AppSupport.folder
         .appendingPathComponent("calendar-links.json")
 
     private static let calendarKey = "tasksCalendar"

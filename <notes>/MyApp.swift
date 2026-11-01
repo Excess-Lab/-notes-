@@ -6,6 +6,7 @@ import SwiftUI
     @State private var onboarding = OnboardingModel()
 
     init() {
+        AppSupport.migrate()
         FontRegistrar.registerBundledFonts()
         // Смена темы вслед за системой — плавно (ThemeCrossfade).
         DispatchQueue.main.async { AppSettings.applyTheme(); ThemeCrossfade.shared.start(); DockIcon.shared.start() }

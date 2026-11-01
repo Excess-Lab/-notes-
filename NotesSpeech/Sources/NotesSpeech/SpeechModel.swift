@@ -54,7 +54,9 @@ public struct ModelStore: Sendable {
 
     // В песочнице это папка внутри контейнера приложения, а не общая ~/Library.
     public static var standard: ModelStore {
+        // Подпапка приложения: без песочницы Application Support общий для всех программ.
         let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent(Bundle.main.bundleIdentifier ?? "notes", isDirectory: true)
         return ModelStore(root: base.appendingPathComponent("models", isDirectory: true))
     }
 
