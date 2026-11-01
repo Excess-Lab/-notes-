@@ -79,6 +79,7 @@ export function mountCalendar(root: HTMLElement, host: CalendarHost) {
       <button class="cal-today" data-cal="today">сегодня</button>
       <button class="icon-button" data-cal="next" title="вперёд">${icon("chevronRight")}</button>
       <button class="icon-button" data-cal="new" title="новая задача">${icon("plus")}</button>
+      <button class="cal-today" data-cal="ics" title="задачи в Календарь Windows или Outlook: откройте файл .ics">.ics</button>
       <div class="cal-modes">${MODES.map(([m, t]) => `<button class="cal-mode${m === view.mode ? " on" : ""}" data-mode="${m}">${t}</button>`).join("")}</div>
     </div>`;
 
@@ -176,6 +177,11 @@ export function mountCalendar(root: HTMLElement, host: CalendarHost) {
     if (b?.dataset.cal === "today") { view.anchor = new Date(); return render(); }
     if (b?.dataset.mode) { view.mode = b.dataset.mode as Mode; return render(); }
     if (b?.dataset.openDay) { view.anchor = new Date(b.dataset.openDay + "T12:00"); view.mode = "day"; return render(); }
+    if (b?.dataset.cal === "ics") {
+      const saved = await host.backend.exportIcs();
+      if (saved) { b.textContent = "сохранено"; setTimeout(() => (b.textContent = ".ics"), 1600); }
+      return;
+    }
     if (b?.dataset.cal === "new") {
       const day = view.mode === "day" ? iso(view.anchor) : iso(new Date());
       const hour = Math.min(Math.max(new Date().getHours() + 1, 9), 16);

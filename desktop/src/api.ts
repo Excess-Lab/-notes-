@@ -35,6 +35,8 @@ export interface Api {
   reveal(path: string): Promise<void>;
   pins(): Promise<string[]>;
   templates(): Promise<string[]>;
+  /** Сохранить задачи в .ics. false — человек отменил окно сохранения. */
+  exportIcs(): Promise<boolean>;
   setDue(task: TaskRow, date: string | null, time: string | null, minutes: number | null): Promise<void>;
   setDone(task: TaskRow, done: boolean): Promise<void>;
   appendTask(path: string, title: string, date: string | null, time: string | null, minutes: number | null): Promise<void>;
@@ -43,6 +45,9 @@ export interface Api {
   setPins(pins: string[]): Promise<void>;
   os(): Promise<string>;
 }
+
+/** Момент сборки .ics в UTC: 20261101T120000Z. */
+export const utcStamp = () => new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
 const inTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -71,6 +76,13 @@ async function tauriApi(): Promise<Api> {
     reveal: (path) => invoke<void>("reveal", { path }),
     pins: () => invoke<string[]>("pins"),
     templates: () => invoke<string[]>("templates"),
+    async exportIcs() {
+      const { save } = await import("@tauri-apps/plugin-dialog");
+      const path = await save({ defaultPath: "notes.ics", filters: [{ name: "iCalendar", extensions: ["ics"] }], title: "Задачи для календаря" });
+      if (!path) return false;
+      await invoke("export_ics", { path, stamp: utcStamp() });
+      return true;
+    },
     setDue: (t, date, time, minutes) => invoke<void>("set_due", { path: t.note, line: t.line, raw: t.raw, date, time, minutes }),
     setDone: (t, done) => invoke<void>("set_done", { path: t.note, line: t.line, raw: t.raw, done }),
     appendTask: (path, title, date, time, minutes) => invoke<void>("append_task", { path, title, date, time, minutes }),
@@ -241,6 +253,20 @@ const demoApi: Api = {
     let text = demo[path] ?? "";
     if (text && !text.endsWith("\n")) text += "\n";
     demo[path] = text + `- [ ] ${title.trim()}${demoDate(date, time, minutes)}\n`;
+  },
+  // В браузере файла нет — отдаём как загрузку; формат тот же, что собирает `core/src/ics.rs`.
+  async exportIcs() {
+    const rows = await demoApi.tasks();
+    const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//notes//tasks//RU"];
+    for (const t of rows.filter((r) => r.date)) {
+      const d = t.date!.replaceAll("-", "");
+      lines.push("BEGIN:VEVENT", `UID:${t.note}#${t.line}@notes`, `DTSTAMP:${utcStamp()}`,
+        t.time ? `DTSTART:${d}T${t.time.replace(":", "")}00` : `DTSTART;VALUE=DATE:${d}`, `SUMMARY:${t.title}`, "END:VEVENT");
+    }
+    lines.push("END:VCALENDAR");
+    const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([lines.join("\r\n")], { type: "text/calendar" })), download: "notes.ics" });
+    a.click();
+    return true;
   },
   templates: async () => Object.keys(demo).filter((k) => k.startsWith("шаблоны/")).map((k) => k.slice(8, -3)).sort(),
   async createFromTemplate(template, folder, date, time) {
