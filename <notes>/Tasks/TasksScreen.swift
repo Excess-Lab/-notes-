@@ -180,7 +180,7 @@ struct CalendarScreen: View {
                     .padding(.top, 40)
             }
         }
-        .padding(.leading, 58)
+        .padding(.leading, 24)
         .padding(.top, 36)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .clipped()
@@ -443,7 +443,7 @@ private struct DayGrid: View {
             }
 
             }
-            .background(alignment: .top) { HeaderFade().frame(width: page + 116, height: above + 28).offset(x: -58) }
+            .background(alignment: .top) { HeaderFade().frame(width: page + 116, height: above + 28).offset(x: -24) }
         }
     }
 
@@ -458,7 +458,7 @@ private struct DayGrid: View {
             let region = colW - 6 - base
             // Узкая колонка недели: рядом не влезут — следующее ложится на правую половину сверху,
             // у нижнего название видно слева.
-            let fits = region / CGFloat(lane.count) >= 44
+            let fits = region / CGFloat(lane.count) >= 70
             let indent = base + (fits ? CGFloat(lane.col) * region / CGFloat(lane.count)
                                       : CGFloat(lane.col) * region / 2 / CGFloat(max(1, lane.count - 1)))
             let width = fits ? region / CGFloat(lane.count) : region - (indent - base)
@@ -584,32 +584,26 @@ private struct EventBlock: View {
 
     var body: some View {
         GeometryReader { geo in
-            // Короткое событие — одной строкой «название · время», иначе текст налезал на соседей.
+            // Как в Календаре Apple (снимок Макара 01.11.2026, «на небольшом окне так же»): компактный
+            // системный шрифт вместо широкого Martian, название цветом календаря, под ним время;
+            // короткое событие — одной строкой.
+            let time = span ?? "\(event.startDate.formatted(date: .omitted, time: .shortened))–\(event.endDate.formatted(date: .omitted, time: .shortened))"
             Group {
-                if geo.size.width < 26 {
-                    // Узкая дорожка — только цвет: текст рвался по буквам в столбик.
+                if geo.size.width < 18 {
                     Color.clear
-                } else if geo.size.width < 70, geo.size.height >= 38, !event.isAllDay {
-                    // Узкая колонка недели — название целиком, сколько влезает по высоте, мелким шрифтом:
-                    // так слова реже рвутся (01.11.2026, «полное всегда как можем»).
-                    Text(event.title ?? "").font(Martian.body.font(9))
-                        .lineLimit(max(1, Int((geo.size.height - 8) / 11)))
-                } else if geo.size.height < 38 || event.isAllDay {
-                    // Узко или коротко — одной строкой с многоточием: длинные слова рвались по буквам.
-                    Text("\(event.title ?? "")\(event.isAllDay ? "" : " · " + (span ?? event.startDate.formatted(.dateTime.hour().minute())))")
-                        .lineLimit(1)
-                        .font(Martian.body.font(geo.size.height < 20 ? 9 : 11))
+                } else if geo.size.height < 30 || event.isAllDay {
+                    Text(event.title ?? "").lineLimit(1)
                 } else {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(event.title ?? "").lineLimit(max(1, Int((geo.size.height - 24) / 14)))
-                        Text(span ?? event.startDate.formatted(.dateTime.hour().minute()))
-                            .foregroundStyle(tint)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(event.title ?? "").lineLimit(max(1, Int((geo.size.height - 22) / 13)))
+                        Text(time).font(.system(size: 10)).opacity(0.8).lineLimit(1)
                     }
                 }
             }
-            .font(Martian.body.font(11)).foregroundStyle(Theme.ink)
-            .padding(.leading, geo.size.width < 50 ? 6 : 8).padding(.trailing, geo.size.width < 50 ? 2 : 8)
-            .padding(.vertical, geo.size.height < 24 ? 1 : 4)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(tint.mix(with: Theme.ink, by: 0.35))
+            .padding(.leading, 6).padding(.trailing, 3)
+            .padding(.vertical, geo.size.height < 24 ? 1 : 3)
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
         // Цвет календаря, как в Календаре Apple: заливка и полоска слева (01.11.2026, «подгружать цвета»).
