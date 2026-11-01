@@ -15,7 +15,8 @@ final class DictationController {
     static let shared = DictationController()
 
     private(set) var state: State = .idle
-    private(set) var level: Float = 0
+    // Громкость по полосам частот — для сферы.
+    private(set) var level: SIMD4<Float> = .zero
 
     private let recorder = AudioRecorder()
     private let log = Logger(subsystem: "notes", category: "dictation")
@@ -91,7 +92,7 @@ final class DictationController {
                 // Сглаживаем, чтобы волны не дёргались от каждого всплеска.
                 Task { @MainActor in
                     let shared = DictationController.shared
-                    shared.level = shared.level * 0.6 + value * 0.4
+                    shared.level = value
                 }
             }
             state = .listening
@@ -119,7 +120,7 @@ final class DictationController {
         guard state == .listening else { return }
         limit?.cancel()
         let samples = recorder.stop()
-        level = 0
+        level = .zero
         guard Double(samples.count) / Double(Transcribers.sampleRate) >= Self.minimumSeconds else {
             hide()
             return
@@ -206,10 +207,18 @@ final class DictationController {
         default: state = .listening
         }
         panel?.show()
+        // «Готово» длится 1,1 с — в превью повторяем его, чтобы успеть снять заливку и испарение.
+        while name == "copied" {
+            try? await Task.sleep(for: .seconds(1.6))
+            state = .listening
+            try? await Task.sleep(for: .milliseconds(30))
+            state = .copied
+        }
         let start = Date()
         while state == .listening {
             let t = Date().timeIntervalSince(start)
-            level = Float(0.5 + 0.5 * sin(t * 5)) * Float(0.4 + 0.6 * abs(sin(t * 1.3)))
+            let v = Float(0.5 + 0.5 * sin(t * 5)) * Float(0.4 + 0.6 * abs(sin(t * 1.3)))
+            level = SIMD4(v, Float(0.5 + 0.5 * sin(t * 7 + 1)) * v, Float(0.5 + 0.5 * sin(t * 11 + 2)) * v, Float(0.5 + 0.5 * sin(t * 13 + 3)) * v * 0.7)
             try? await Task.sleep(for: .milliseconds(50))
         }
     }
@@ -234,10 +243,10 @@ final class DictationController {
         for start in stride(from: 0, to: min(samples.count, Transcribers.sampleRate * 3), by: chunk) {
             let slice = samples[start..<min(start + chunk, samples.count)]
             let rms = (slice.reduce(0) { $0 + $1 * $1 } / Float(slice.count)).squareRoot()
-            level = level * 0.6 + min(1, rms * 12) * 0.4
+            level = SIMD4(repeating: min(1, rms * 12))
             try? await Task.sleep(for: .milliseconds(100))
         }
-        level = 0
+        level = .zero
         state = .recognizing
         do {
             let engine = try await loadTranscriber()
@@ -298,9 +307,10 @@ private struct OrbHost: View {
         let visible = controller.state != .idle
         // Без .blur: даже с радиусом 0 он гнал каждый кадр шейдера через лишний проход (лаги, 31.10.2026).
         DictationOrb(state: controller.state, level: controller.level)
-            .scaleEffect(visible ? 1 : 0.6)
+            // Появление — мягко вырастает из чуть меньшего, без пружины: с отскоком выглядело «странно» (01.11.2026).
+            .scaleEffect(visible ? 1 : 0.82)
             .opacity(visible ? 1 : 0)
-            .animation(.spring(duration: 0.35, bounce: 0.25), value: visible)
+            .animation(.smooth(duration: 0.45), value: visible)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

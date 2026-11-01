@@ -2,59 +2,88 @@
 #include <SwiftUI/SwiftUI_Metal.h>
 using namespace metal;
 
-// Сфера надиктовки: стеклянный шар, за ним — полоса света. Шар как линза: ближе к краю сильнее
-// сжимает то, что за ним, поэтому полоса у края загибается; каналы цвета преломляются чуть по-разному —
-// отсюда радуга на концах. Верх стекла темнее низа, край светится (Френель).
-static float band(float2 p, float k, float t, float voice) {
-    float r2 = dot(p, p);
-    float lens = 1.0 + k * (1.0 - sqrt(max(0.0, 1.0 - r2)));
-    float2 q = p * lens;
-    float wave = (0.04 + voice * 0.2) * sin(q.x * 2.6 + t * 1.3) + 0.03 * sin(t * 0.7);
-    float width = 0.035 + voice * 0.09;
-    float d = q.y - wave;
-    return exp(-d * d / (width * width)) * smoothstep(1.15, 0.2, abs(q.x));
+// Сфера надиктовки: стеклянный шар, за ним — четыре полосы света, по одной на полосу частот голоса
+// (низкие → высокие). Шар как линза: у края сильнее сжимает то, что за ним, поэтому полосы загибаются;
+// каналы цвета преломляются чуть по-разному — радуга на концах. Верх стекла темнее низа, край светится.
+// Думает — по полосам бежит свет туда-обратно. Готово — шар заливается зелёным и испаряется вверх.
+static float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
+static float noise(float2 p) {
+    float2 i = floor(p), f = fract(p);
+    float2 u = f * f * (3.0 - 2.0 * f);
+    return mix(mix(hash(i), hash(i + float2(1, 0)), u.x), mix(hash(i + float2(0, 1)), hash(i + float2(1, 1)), u.x), u.y);
 }
 
-static half4 orbAt(float2 position, float4 bounds, float t, float voice, float dark, float canvas) {
-    float2 p = (position - bounds.xy - bounds.zw * 0.5) / (bounds.w * 0.5 / canvas);
-    float r = length(p);
+static float strip(float2 p, float k, float t, float level, float i, float think) {
+    float r2 = dot(p, p);
+    float2 q = p * (1.0 + k * (1.0 - sqrt(max(0.0, 1.0 - r2))));
+    // Думает: волна гаснет, вдоль полосы бежит пятно света.
+    float sweep = 0.75 * sin(t * 2.0 + i * 0.35);
+    float pulse = exp(-pow(q.x - sweep, 2.0) * 7.0);
+    float amp = mix(0.025 + level * 0.3, 0.05 * pulse, think);
+    float wave = amp * sin(q.x * (2.2 + i * 0.7) + t * (1.2 + i * 0.45) + i * 1.7);
+    float width = mix(0.022 + level * 0.06, 0.03 + 0.03 * pulse, think);
+    float d = q.y - (i - 1.5) * mix(0.07, 0.035, think) - wave;
+    float bright = mix(0.55 + level * 0.9, 0.35 + pulse * 1.1, think);
+    return bright * exp(-d * d / (width * width)) * smoothstep(1.15, 0.2, abs(q.x));
+}
 
-    // Ореол за пределами шара.
+static half4 orbAt(float2 position, float4 bounds, float t, float4 bands, float dark, float canvas, float think, float done) {
+    float2 p = (position - bounds.xy - bounds.zw * 0.5) / (bounds.w * 0.5 / canvas);
+    float fill = saturate(done / 0.3);           // зелёный поднимается снизу
+    float vapor = saturate((done - 0.35) / 0.65); // потом шар испаряется
+    float3 green = float3(0.2, 0.78, 0.38);
+    // Испарение: точки уносит вверх, сильнее там, где шум больше, — получаются струйки.
+    // Шум для испарения течёт вверх — струйки пара поднимаются.
+    float2 flow = float2(0.0, t * 1.6);
+    float n = 0.65 * noise(p * float2(6.0, 3.0) + flow) + 0.35 * noise(p * float2(14.0, 6.0) + flow * 1.8);
+    float r = length(p);
+    float voice = max(max(bands.x, bands.y), max(bands.z, bands.w));
+
     if (r > 1.0) {
-        float halo = exp(-(r - 1.0) * 5.0) * (0.10 + voice * 0.12);
-        float3 c = dark > 0.5 ? float3(1.0) : float3(0.0);
+        float halo = exp(-(r - 1.0) * 5.0) * (0.10 + voice * 0.15) * (1.0 - vapor * vapor);
+        float3 c = mix(dark > 0.5 ? float3(1.0) : float3(0.0), green, fill);
         return half4(half3(c * halo), half(halo));
     }
 
-    // Тело стекла: верх темнее, низ светлее; в тёмной теме всё глубже.
     float y = p.y;
     float3 top = dark > 0.5 ? float3(0.02) : float3(0.18, 0.18, 0.2);
     float3 bottom = dark > 0.5 ? float3(0.16, 0.16, 0.18) : float3(0.78, 0.79, 0.82);
     float3 body = mix(top, bottom, smoothstep(-0.35, 0.55, y));
     float alpha = mix(dark > 0.5 ? 0.55 : 0.75, 0.95, smoothstep(0.6, 1.0, r));
 
-    // Полоса света, по каналу на свой коэффициент преломления.
-    float3 light = float3(band(p, 0.45, t, voice), band(p, 0.62, t, voice), band(p, 0.85, t, voice));
-    light += 0.35 * float3(band(p * float2(1.0, 0.5), 0.6, t, voice)); // мягкое свечение вокруг полосы
+    // Полосы — каждая своим цветом от коралла (низкие) к сиреневому (высокие), каналы — свой коэффициент преломления.
+    float3 colors[4] = { float3(0.898, 0.302, 0.2), float3(0.96, 0.55, 0.28), float3(0.93, 0.36, 0.5), float3(0.62, 0.45, 0.95) };
+    float3 light = 0.0;
+    for (int i = 0; i < 4; i++) {
+        float fi = float(i);
+        float3 s3 = float3(strip(p, 0.45, t, bands[i], fi, think), strip(p, 0.62, t, bands[i], fi, think), strip(p, 0.85, t, bands[i], fi, think));
+        float lum = dot(s3, float3(0.3, 0.5, 0.2));
+        light += mix(s3, colors[i] * lum * 1.9 + lum * 0.2, 0.75);
+    }
 
-    // Край: светлый ободок и блик снизу.
     float fresnel = pow(smoothstep(0.75, 1.0, r), 3.0);
     float rim = fresnel * (dark > 0.5 ? 0.45 : 0.6);
     float glint = exp(-pow((y - 0.8) * 4.0, 2.0)) * smoothstep(0.6, 0.95, r) * 0.25;
+    float3 c = body + light * (1.1 + voice * 0.8) + rim + glint;
+    float a = min(1.0, alpha + max(light.r, light.b) * 0.5 + rim);
 
-    // Свет — коралловый (#E54D33, цвет приложения), радуга остаётся только на концах полосы (ТЗ 30.10.2026).
-    float3 coral = float3(0.898, 0.302, 0.2);
-    float lum = dot(light, float3(0.3, 0.5, 0.2));
-    float3 tinted = mix(light, coral * lum * 1.9 + float3(lum * 0.25), 0.7);
-    float3 c = body + tinted * (1.2 + voice * 1.2) + rim + glint;
-    float edge = smoothstep(1.0, 0.985, r);
-    float a = min(1.0, alpha + max(tinted.r, tinted.b) * 0.6 + rim) * edge;
+    // Зелёная заливка: уровень жидкости с лёгкой волной идёт снизу вверх.
+    float level = mix(1.1, -1.1, fill) + 0.04 * sin(p.x * 7.0 + t * 6.0);
+    float wet = smoothstep(-0.03, 0.03, y - level);
+    c = mix(c, green * (0.85 + 0.3 * smoothstep(-1.0, 1.0, y)) + rim * 0.6 + glint, wet * 0.95);
+    a = mix(a, 1.0, wet);
+
+    // Испарение: прозрачнеет кусками по шуму, края кусков — светлый пар.
+    // Испарение: фронт идёт сверху вниз с рваным краем; что выше — уже пар: редкая светлая дымка,
+    // которая тает. Без дыр посреди шара — он не «рвётся», а уходит паром (01.11.2026).
+    float front = mix(-1.25, 1.25, vapor);
+    float keep = smoothstep(front - 0.12, front + 0.12, y + (n - 0.5) * 0.6);
+    float steam = (1.0 - keep) * smoothstep(0.45, 0.85, n) * (1.0 - vapor) * fill;
+    c = mix(c, float3(0.75, 1.0, 0.82), (1.0 - keep) * fill);
+    c += float3(0.6, 1.0, 0.7) * keep * (1.0 - keep) * 2.5 * fill;
+    a = a * keep + steam * 0.55;
+    a *= smoothstep(1.0, 0.985, r);
     return half4(half3(c * a), half(a));
-}
-
-// Для SwiftUI (.colorEffect) — превью и запас.
-[[ stitchable ]] half4 orb(float2 position, half4 color, float4 bounds, float t, float voice, float dark, float canvas) {
-    return orbAt(position, bounds, t, voice, dark, canvas);
 }
 
 // Для OrbLayer (MTKView): сфера рисуется своим слоем без пересчёта SwiftUI на каждом кадре —
@@ -62,9 +91,12 @@ static half4 orbAt(float2 position, float4 bounds, float t, float voice, float d
 struct OrbUniforms {
     float2 size;   // в пикселях
     float t;
-    float voice;
     float dark;
     float canvas;
+    float think;   // 0…1 — распознаёт
+    float done;    // 0…1 — ход заливки и испарения
+    float pad;
+    float4 bands;  // громкость по полосам частот
 };
 
 struct OrbVertex { float4 position [[position]]; };
@@ -78,5 +110,5 @@ vertex OrbVertex orbVertex(uint id [[vertex_id]]) {
 }
 
 fragment half4 orbFragment(OrbVertex in [[stage_in]], constant OrbUniforms &u [[buffer(0)]]) {
-    return orbAt(in.position.xy, float4(0, 0, u.size), u.t, u.voice, u.dark, u.canvas);
+    return orbAt(in.position.xy, float4(0, 0, u.size), u.t, u.bands, u.dark, u.canvas, u.think, u.done);
 }
