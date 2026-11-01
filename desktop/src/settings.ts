@@ -4,6 +4,7 @@
 
 import type { Api, Prefs } from "./api";
 import { icon, type Glyph } from "./icons";
+import { choosePin, lockApi, type LockState } from "./lock";
 
 type Page = "general" | "sync" | "templates" | "calendar" | "dictation" | "lock";
 const PAGES: [Page, string, string, Glyph][] = [
@@ -50,6 +51,7 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
   let prefs = await host.backend.prefs();
   const vault = await host.backend.vaultPath();
   let git = await host.backend.gitStatus();
+  let lock: LockState | null = host.backend.inTauri ? await lockApi.state() : null;
   let gh = await host.backend.githubStatus();
   // Вход по коду: код на экране, пока ждём подтверждения на github.com.
   let login: { code: string; url: string; error?: string } | null = null;
@@ -86,8 +88,13 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
         return row("горячая клавиша", "зажать, сказать, отпустить — текст в буфере", later())
           + row("модели распознавания", "gigaam (русский) и whisper (99 языков), качаются по требованию", later());
       case "lock":
-        return row("пинкод", "при запуске и после сна", later())
-          + row(isMac ? "touch id" : "windows hello", isMac ? "палец вместо пинкода" : "лицо или палец вместо пинкода", later());
+        if (!lock) return row("пинкод", "в окне приложения", later("в браузере нет"));
+        return row("пинкод", lock.has_pin ? "при запуске и после 15 минут без приложения" : "4 цифры при входе в приложение",
+          lock.has_pin ? `${granted("включён")}${pill("pin-off", "убрать")}` : pill("pin-on", "задать"))
+          + row(isMac ? "touch id" : "windows hello", isMac ? "переезжает с мака"
+            : lock.hello ? "лицо или палец вместо пинкода — спросит при входе" : lock.has_pin ? "не настроен в windows: параметры → учётные записи → варианты входа" : "сначала задайте пинкод",
+            !isMac && lock.hello ? granted("включено") : later(""))
+          + note("заметки пинкодом не шифруются — их по-прежнему откроет любой редактор; пинкод закрывает приложение");
     }
   }
 
@@ -141,6 +148,12 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
       render();
       const note = root.querySelector(".settings-rows");
       note?.insertAdjacentHTML("beforeend", `<p class="setting-note">${message ? esc(message) : "менять было нечего"}</p>`);
+    } else if (b.dataset.set === "pin-on") {
+      if (await choosePin()) { lock = await lockApi.state(); await lockApi.seen(); render(); }
+    } else if (b.dataset.set === "pin-off") {
+      await lockApi.clear();
+      lock = await lockApi.state();
+      render();
     } else if (b.dataset.set === "gh-login") {
       if (!git.repo) { await host.backend.gitEnable(); git = await host.backend.gitStatus(); }
       try {

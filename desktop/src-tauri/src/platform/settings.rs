@@ -48,3 +48,21 @@ pub fn prefs(app: &AppHandle) -> String {
 pub fn save_prefs(app: &AppHandle, json: &str) {
     save(app, "prefs.json", json);
 }
+
+/// Состояние входа между запусками: когда последний раз было открыто и разблокировано, ошибки пинкода.
+/// Не секрет — секрет (хеш пинкода) в хранилище паролей.
+#[derive(serde::Serialize, serde::Deserialize, Default)]
+pub struct LockFile {
+    pub last_seen: Option<i64>,
+    pub attempts: notes_core::lock::Attempts,
+}
+
+pub fn lock(app: &AppHandle) -> LockFile {
+    load(app, "lock.json").and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_default()
+}
+
+pub fn save_lock(app: &AppHandle, lock: &LockFile) {
+    if let Ok(t) = serde_json::to_string(lock) {
+        save(app, "lock.json", &t);
+    }
+}

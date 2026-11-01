@@ -334,6 +334,91 @@ fn today() -> String {
     format!("{y:04}-{m:02}-{d:02}")
 }
 
+#[derive(Serialize)]
+struct LockState {
+    has_pin: bool,
+    /// Спросить сейчас (при запуске — если закрывали больше 5 минут назад).
+    needs_unlock: bool,
+    /// Windows Hello настроен.
+    hello: bool,
+    /// Сколько секунд ждать после ошибок.
+    wait: Option<i64>,
+}
+
+#[tauri::command]
+fn lock_state(now: i64, app: tauri::AppHandle) -> LockState {
+    let has_pin = platform::secrets::pin().is_some();
+    let lock = platform::settings::lock(&app);
+    LockState {
+        has_pin,
+        needs_unlock: has_pin && notes_core::lock::policy::at_launch(lock.last_seen, now),
+        hello: has_pin && platform::auth::available(),
+        wait: lock.attempts.remaining(now),
+    }
+}
+
+/// Приложение открыто и разблокировано сейчас — отсчёт «закрыл и сразу открыл» отсюда.
+#[tauri::command]
+fn lock_seen(now: i64, app: tauri::AppHandle) {
+    let mut lock = platform::settings::lock(&app);
+    lock.last_seen = Some(now);
+    platform::settings::save_lock(&app, &lock);
+}
+
+#[tauri::command]
+fn lock_needed_on_return(inactive_since: i64, now: i64) -> bool {
+    platform::secrets::pin().is_some() && notes_core::lock::policy::on_return(Some(inactive_since), now)
+}
+
+#[tauri::command]
+fn pin_set(pin: String) -> Result<(), String> {
+    if !notes_core::lock::valid(&pin) {
+        return Err("нужно 4 цифры".into());
+    }
+    platform::secrets::save_pin(&notes_core::lock::PinHash::new(&pin).encoded())
+}
+
+#[tauri::command]
+fn pin_clear(app: tauri::AppHandle) {
+    platform::secrets::forget_pin();
+    platform::settings::save_lock(&app, &Default::default());
+}
+
+#[derive(Serialize)]
+struct PinCheck {
+    ok: bool,
+    wait: Option<i64>,
+}
+
+/// Проверка пинкода с паузой после ошибок. Хеш считается 200 000 раундов — в фоне.
+#[tauri::command]
+async fn pin_check(pin: String, now: i64, app: tauri::AppHandle) -> Result<PinCheck, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut lock = platform::settings::lock(&app);
+        if let Some(wait) = lock.attempts.remaining(now) {
+            return Ok(PinCheck { ok: false, wait: Some(wait) });
+        }
+        let hash = platform::secrets::pin().and_then(|e| notes_core::lock::PinHash::decode(&e)).ok_or("пинкод не задан")?;
+        let ok = hash.matches(&pin);
+        if ok {
+            lock.attempts.reset();
+            lock.last_seen = Some(now);
+        } else {
+            lock.attempts.failure(now);
+        }
+        platform::settings::save_lock(&app, &lock);
+        Ok(PinCheck { ok, wait: lock.attempts.remaining(now) })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+/// Windows Hello вместо пинкода. Окно системы — поверх нашего.
+#[tauri::command]
+async fn hello_verify(window: tauri::WebviewWindow) -> bool {
+    tauri::async_runtime::spawn_blocking(move || platform::auth::verify(&window, "Откройте <notes>")).await.unwrap_or(false)
+}
+
 /// Какая ОС — интерфейс выбирает стекло окна (Mica на Windows, Liquid Glass на маке).
 #[tauri::command]
 fn os() -> &'static str {
@@ -356,7 +441,8 @@ pub fn run() {
             create_folder, duplicate, move_into, copy_in, trash, reveal, pins, set_pins,
             templates, create_from_template, daily,
             set_due, set_done, append_task, export_ics, ics, prefs, set_prefs, vault_path, git_status, git_enable, git_commit, selftest, selftest_slow, selftest_log,
-            github_status, github_code, github_finish, github_cancel, github_sign_out, github_sync, open_github
+            github_status, github_code, github_finish, github_cancel, github_sign_out, github_sync, open_github,
+            lock_state, lock_seen, lock_needed_on_return, pin_set, pin_clear, pin_check, hello_verify
         ])
         .run(tauri::generate_context!())
         .expect("error while running <notes>");

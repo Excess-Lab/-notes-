@@ -622,6 +622,22 @@ export const shell = { get backend() { return backend; }, get state() { return s
   const os = await backend.os();
   document.body.classList.add(backend.inTauri ? `tauri-${os}` : "browser");
   applyPrefs(await backend.prefs());
+  // Пинкод — до того, как показать заметки (как на маке: экран входа раньше главного).
+  if (backend.inTauri) {
+    const { lockApi, showUnlock } = await import("./lock");
+    const lock = await lockApi.state();
+    if (lock.needs_unlock) await showUnlock(lock);
+    else if (lock.has_pin) await lockApi.seen();
+    // Свернули надолго — при возврате спросить снова (15 минут, как на маке).
+    let inactiveSince: number | null = null;
+    addEventListener("blur", () => { inactiveSince = Math.floor(Date.now() / 1000); void lockApi.seen(); });
+    addEventListener("focus", async () => {
+      if (inactiveSince === null || document.querySelector(".unlock")) return;
+      const since = inactiveSince;
+      inactiveSince = null;
+      if (await lockApi.neededOnReturn(since)) await showUnlock(await lockApi.state());
+    });
+  }
   state.tree = await backend.lastVault();
   if (state.tree) state.pins = await backend.pins();
   if (backend.inTauri) void enableFileDrop(dragHost);

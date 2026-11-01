@@ -361,3 +361,47 @@ button { font: inherit; color: inherit; letter-spacing: inherit; background: non
 .setting-note { margin-top: 14px; font-size: 11px; color: rgba(var(--fg), 0.3); max-width: 640px; }
 .device-code { font: 17px "Martian Heading"; letter-spacing: 0.04em; padding: 4px 12px; border-radius: 10px; background: rgba(var(--bg), 0.7); white-space: nowrap; }
 .setting .pill + .pill { margin-left: -6px; }
+
+/* ——— вход по пинкоду (UnlockStep, PinCard на маке) ——— */
+#app.locked > *:not(.slats) { filter: blur(18px); pointer-events: none; }
+.unlock { position: fixed; inset: 0; z-index: 40; display: flex; justify-content: center; padding-top: 92px;
+  opacity: 0; transition: opacity .45s var(--smooth); }
+.unlock.shown { opacity: 1; } .unlock.leaving { opacity: 0; }
+.unlock-sheet { position: absolute; left: 17px; right: 17px; top: 92px; bottom: 0; border-radius: 18px 18px 0 0; text-align: center;
+  background: rgba(var(--sheet), 0.9); -webkit-backdrop-filter: blur(40px) saturate(1.4); backdrop-filter: blur(40px) saturate(1.4);
+  box-shadow: inset 0 0 0 1px var(--edge); display: flex; flex-direction: column; align-items: center; }
+/* Под листом входа заметок не видно совсем: плотный фон, а не только размытие. */
+.unlock::before { content: ""; position: absolute; left: 0; right: 0; top: 92px; bottom: 0; background: rgb(var(--bg)); }
+.unlock-sheet h1 { margin-top: 70px; font: 26px "Martian Heading"; letter-spacing: var(--track); font-weight: normal; }
+.unlock-sheet p { margin-top: 14px; color: rgba(var(--fg), 0.3); }
+.unlock-sheet p.error, .pin-card p.error { color: var(--coral); }
+.unlock-sheet .pin-cells { margin-top: 42px; }
+.unlock-sheet .waiting { opacity: .3; }
+.quiet { color: rgba(var(--fg), 0.3); font-size: 11px; }
+.quiet:hover { color: rgba(var(--fg), 0.6); }
+.unlock-sheet .quiet { margin-top: 150px; font-size: 13px; }
+.pin-cells { display: flex; gap: 12px; justify-content: center; }
+.pin-cells i { width: 46px; height: 46px; border-radius: 50%; background: rgb(244, 244, 244); position: relative;
+  transition: box-shadow .25s var(--smooth); }
+:root[data-theme="dark"] .pin-cells i { background: rgb(26, 26, 26); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .pin-cells i { background: rgb(26, 26, 26); } }
+.pin-card .pin-cells i { background: rgb(244, 244, 244); }
+.pin-cells i.current { box-shadow: inset 0 2px 8px rgba(229, 77, 51, 0.6); }
+.pin-cells.error i { box-shadow: inset 0 0 0 1px var(--coral); }
+.pin-cells i::after { content: ""; position: absolute; left: 18px; top: 18px; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--ink); transform: scale(.2); opacity: 0; transition: transform .3s var(--smooth), opacity .3s; }
+.pin-card .pin-cells i::after { background: #1d1d1f; }
+.pin-cells i.filled::after { transform: none; opacity: 1; }
+.pin-cells.shake { animation: shake .4s linear; }
+@keyframes shake { 0%, 100% { transform: none; } 17% { transform: translateX(8px); } 33% { transform: translateX(-8px); }
+  50% { transform: translateX(8px); } 67% { transform: translateX(-8px); } 83% { transform: translateX(4px); } }
+.pin-overlay { position: fixed; inset: 0; z-index: 40; background: rgba(var(--bg), 0.45); display: flex; justify-content: center;
+  align-items: center; opacity: 0; transition: opacity .3s var(--smooth); }
+.pin-overlay.shown { opacity: 1; }
+.pin-card { width: 300px; height: 180px; border-radius: 30px; text-align: center; color: #000;
+  background: rgba(255, 255, 255, 0.92); box-shadow: inset 0 0 0 1px #fff, 0 12px 40px rgba(0, 0, 0, 0.12);
+  display: flex; flex-direction: column; align-items: center; padding-top: 18px; }
+.pin-card .quiet { color: rgba(0, 0, 0, 0.3); }
+.pin-card h2 { margin-top: 9px; font: 20px "Martian Heading"; letter-spacing: var(--track); font-weight: normal; }
+.pin-card p { margin-top: 6px; font-size: 11px; color: rgba(0, 0, 0, 0.3); }
+.pin-card .pin-cells { margin-top: 21px; }

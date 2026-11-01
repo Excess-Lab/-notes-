@@ -50,6 +50,23 @@ export async function runSelftest(backend: Api, ui: { openNote(path: string): Pr
     const daily = await backend.daily("2026-11-01", "09:00");
     await check("daily note", daily === "дневник/2026-11-01.md");
     await ui.openNote("Входящие.md");
+    // Пинкод: хранилище паролей ОС, экран входа, неверный и верный ввод клавишами.
+    const { lockApi, showUnlock } = await import("./lock");
+    await lockApi.set("1234");
+    const lock = await lockApi.state();
+    await check("pin saved in OS keyring", lock.has_pin);
+    const unlocked = showUnlock({ ...lock, hello: false });
+    await pause(400);
+    const press = (k: string) => document.dispatchEvent(new KeyboardEvent("keydown", { key: k }));
+    for (const k of "0000") press(k);
+    await pause(1500);
+    await check("wrong pin rejected", document.querySelector(".unlock .pin-cells.error") !== null);
+    for (const k of "1234") press(k);
+    await Promise.race([unlocked, pause(4000)]);
+    await pause(600);
+    await check("right pin unlocks", document.querySelector(".unlock") === null);
+    await lockApi.clear();
+    await check("pin cleared", !(await lockApi.state()).has_pin);
     await pause(300);
   } catch (e) {
     await check(`exception: ${e}`, false);

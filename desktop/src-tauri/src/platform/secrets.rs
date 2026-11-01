@@ -21,3 +21,20 @@ pub fn forget_token() {
         let _ = e.delete_credential();
     }
 }
+
+const PIN: &str = "pin";
+
+/// Пинкод — его PBKDF2-хеш одной строкой (`notes_core::lock::PinHash::encoded`), сам пинкод нигде не лежит.
+pub fn save_pin(encoded: &str) -> Result<(), String> {
+    keyring::Entry::new(SERVICE, PIN).and_then(|e| e.set_password(encoded)).map_err(|e| e.to_string())
+}
+
+pub fn pin() -> Option<String> {
+    keyring::Entry::new(SERVICE, PIN).ok()?.get_password().ok()
+}
+
+pub fn forget_pin() {
+    if let Ok(e) = keyring::Entry::new(SERVICE, PIN) {
+        let _ = e.delete_credential();
+    }
+}
