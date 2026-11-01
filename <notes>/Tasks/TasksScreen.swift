@@ -450,12 +450,18 @@ private struct DayGrid: View {
     // Событие со временем в сетке: тащить, растягивать, открыть. Отдельно от body — в общей цепочке
     // компилятор не успевал вывести типы.
     @ViewBuilder
-    private func timed(_ event: EKEvent, column: Int, colW: CGFloat, lanes: [String: (Int, Int)]) -> some View {
-            let lane = lanes[event.slot] ?? (0, 1)
+    private func timed(_ event: EKEvent, column: Int, colW: CGFloat, lanes: [String: Lane]) -> some View {
+            let lane = lanes[event.slot] ?? Lane()
             // Наложения — слоями, как в Календаре Apple: первое снизу во всю ширину, каждое следующее
             // сдвинуто вправо; сверху то, что начинается позже, у всех видно начало с названием (01.11.2026).
-            let indent = CGFloat(lane.0) * min(18, (colW - 6) * 0.2)
-            let width = colW - 6 - indent
+            let base = CGFloat(min(lane.level, 2)) * min(18, (colW - 6) * 0.2)  // глубже двух слоёв не сдвигаем: узко
+            let region = colW - 6 - base
+            // Узкая колонка недели: рядом не влезут — следующее ложится на правую половину сверху,
+            // у нижнего название видно слева.
+            let fits = region / CGFloat(lane.count) >= 44
+            let indent = base + (fits ? CGFloat(lane.col) * region / CGFloat(lane.count)
+                                      : CGFloat(lane.col) * region / 2 / CGFloat(max(1, lane.count - 1)))
+            let width = fits ? region / CGFloat(lane.count) : region - (indent - base)
             let move = moving?.slot == event.slot ? moving : nil
             let grow = resizing?.slot == event.slot ? CGFloat(resizing!.quarters) * hour / 4 : 0
             // Тащим — событие во всю ширину колонки и поверх соседей, со своим новым временем.
@@ -478,8 +484,8 @@ private struct DayGrid: View {
                 .offset(x: gutter + CGFloat(column) * colW + 3 + (move != nil ? 0 : indent)
                            + CGFloat(move?.days ?? 0) * colW,
                         y: top(event) + 1.5 + CGFloat(move?.quarters ?? 0) * hour / 4)
-                .zIndex(move != nil || opened == event.slot ? 10_000 : event.startDate.timeIntervalSince(Calendar.current.startOfDay(for: event.startDate)) / 60 + Double(lane.0) / 10)
-                .shadow(color: .black.opacity(move != nil ? 0.35 : lane.0 > 0 ? 0.25 : 0), radius: move != nil ? 8 : 3, y: move != nil ? 3 : 1)
+                .zIndex(move != nil || opened == event.slot ? 10_000 : event.startDate.timeIntervalSince(Calendar.current.startOfDay(for: event.startDate)) / 60 + Double(lane.level) / 10)
+                .shadow(color: .black.opacity(move != nil ? 0.35 : lane.level > 0 ? 0.25 : 0), radius: move != nil ? 8 : 3, y: move != nil ? 3 : 1)
                 .onTapGesture { opened = event.slot }
                 .gesture(DragGesture(minimumDistance: 4)
                     .onChanged { drag in
@@ -541,23 +547,30 @@ private struct DayGrid: View {
     // Конец, каким событие нарисовано: дорожки считаются по нему же, чтобы видимое и расчёт совпадали.
     static func shown(_ event: EKEvent) -> Date { max(event.endDate, event.startDate.addingTimeInterval(20 * 60)) }
 
-    // Пересекающиеся по времени события одного дня — в соседние дорожки: (номер, сколько всего).
-    static func lanes(_ events: [EKEvent]) -> [String: (Int, Int)] {
-        var result: [String: (Int, Int)] = [:]
+    // Место события среди пересекающихся, как в Календаре Apple: начавшиеся почти вместе (до 45 мин)
+    // стоят рядом и делят ширину, начавшееся позже ложится слоем со сдвигом вправо и не закрывает
+    // чужое название. level — глубина слоя, col и count — место в ряду «рядом».
+    struct Lane { var level = 0, col = 0, count = 1 }
+
+    static func lanes(_ events: [EKEvent]) -> [String: Lane] {
+        var result: [String: Lane] = [:]
         let byDay = Dictionary(grouping: events) { Calendar.current.startOfDay(for: $0.startDate) }
         for (_, day) in byDay {
-            var cluster: [EKEvent] = [], ends: [Date] = [], clusterEnd = Date.distantPast
-            func close() { for e in cluster { result[e.slot] = (result[e.slot]?.0 ?? 0, max(ends.count, 1)) }; cluster = []; ends = [] }
+            var placed: [EKEvent] = []
+            var rows: [String: [String]] = [:]  // первое событие ряда → все события ряда
             for event in day.sorted(by: { $0.startDate < $1.startDate }) {
-                let end = shown(event)
-                if event.startDate >= clusterEnd { close() }
-                let lane = ends.firstIndex { $0 <= event.startDate } ?? ends.count
-                if lane == ends.count { ends.append(end) } else { ends[lane] = end }
-                result[event.slot] = (lane, 1)
-                cluster.append(event)
-                clusterEnd = max(clusterEnd, end)
+                let active = placed.filter { shown($0) > event.startDate }
+                if let near = active.first(where: { event.startDate.timeIntervalSince($0.startDate) < 45 * 60 }),
+                   let head = rows.first(where: { $0.value.contains(near.slot) })?.key {
+                    rows[head]!.append(event.slot)
+                    result[event.slot] = Lane(level: result[near.slot]!.level, col: rows[head]!.count - 1)
+                    for slot in rows[head]! { result[slot]!.count = rows[head]!.count }
+                } else {
+                    result[event.slot] = Lane(level: active.map { result[$0.slot]!.level + 1 }.max() ?? 0)
+                    rows[event.slot] = [event.slot]
+                }
+                placed.append(event)
             }
-            close()
         }
         return result
     }
