@@ -214,7 +214,7 @@ private struct TopBar: View {
             // Подсветка наведения одна на группу и переезжает между кнопками, не вылезая за них.
             let sections: CGFloat = switch fit {
             case .full: fullSections + 22
-            case .hybrid: Self.hybridWidth(selectedTitle.flatMap { labels[$0] })
+            case .hybrid: Self.hybridWidth(labels[selectedTitle])
             case .icons: 4 * 34 + 3 * 6 + 22
             }
             HeaderGroup(width: sections) {
@@ -288,13 +288,15 @@ private struct TopBar: View {
         return others * 34 + max(34, (label ?? 0) + 40) + others * 6 + 22
     }
 
-    private var selectedTitle: String? {
+    // Без `default`: с ним вкладка «заметки» осталась без подписи в счёте ширины — капсула гибрида
+    // была уже кнопок, и шестерёнка вылезала за правый край (снимок Макара, 01.11.2026).
+    private var selectedTitle: String {
         switch model.section {
+        case .notes: "заметки"
         case .tasks: "задачи"
         case .calendar: "календарь"
         case .video: "видео"
         case .settings: "настройки"
-        default: nil
         }
     }
 
