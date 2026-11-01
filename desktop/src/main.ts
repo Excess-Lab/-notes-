@@ -67,7 +67,19 @@ let page = $(".page");
 function paintSlats() {
   drawSlats(slats, app.clientWidth, 92, isDark());
 }
-new ResizeObserver(paintSlats).observe(app);
+
+// Шапка сжимается по очереди, как на маке: сначала текст синхронизации (значок остаётся), потом
+// гибрид — значки и слово только у выбранного, потом одни значки. Ширину не считаем по формуле
+// (на маке так и вышла кривая капсула), а меряем: влезло ли то, что нарисовано.
+const topbar = $(".topbar");
+const FITS = ["full", "nosync", "hybrid", "icons"] as const;
+function fitHeader() {
+  for (const fit of FITS) {
+    topbar.dataset.fit = fit;
+    if (topbar.scrollWidth <= topbar.clientWidth) return;
+  }
+}
+new ResizeObserver(() => { paintSlats(); fitHeader(); }).observe(app);
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", paintSlats);
 
 // ——— шапка ———
@@ -233,6 +245,7 @@ function renderContent() {
 
 function render() {
   renderNav();
+  fitHeader();
   renderSidebar();
   crumb.textContent = crumbText();
   renderActions();

@@ -87,6 +87,11 @@ button { font: inherit; color: inherit; letter-spacing: inherit; background: non
 .section .dot { color: var(--ink); }
 
 .sync { margin-left: auto; padding: 0 16px; gap: 6px; font-size: 11px; }
+.topbar { overflow: hidden; }
+.topbar:not([data-fit="full"]) .sync span { display: none; }
+.topbar[data-fit="hybrid"] .sections, .topbar[data-fit="icons"] .sections { gap: 6px; }
+.topbar[data-fit="hybrid"] .section:not(.active), .topbar[data-fit="icons"] .section { padding: 0; justify-content: center; }
+.topbar[data-fit="hybrid"] .section:not(.active) span, .topbar[data-fit="icons"] .section span { display: none; }
 .sync > * { opacity: 0.4; }
 
 /* ——— лист ——— */
