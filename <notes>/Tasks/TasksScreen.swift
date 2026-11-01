@@ -589,7 +589,12 @@ private struct EventBlock: View {
                 if geo.size.width < 26 {
                     // Узкая дорожка — только цвет: текст рвался по буквам в столбик.
                     Color.clear
-                } else if geo.size.height < 38 || event.isAllDay || geo.size.width < 70 {
+                } else if geo.size.width < 70, geo.size.height >= 38, !event.isAllDay {
+                    // Узкая колонка недели — название целиком, сколько влезает по высоте, мелким шрифтом:
+                    // так слова реже рвутся (01.11.2026, «полное всегда как можем»).
+                    Text(event.title ?? "").font(Martian.body.font(9))
+                        .lineLimit(max(1, Int((geo.size.height - 8) / 11)))
+                } else if geo.size.height < 38 || event.isAllDay {
                     // Узко или коротко — одной строкой с многоточием: длинные слова рвались по буквам.
                     Text("\(event.title ?? "")\(event.isAllDay ? "" : " · " + (span ?? event.startDate.formatted(.dateTime.hour().minute())))")
                         .lineLimit(1)
@@ -612,6 +617,9 @@ private struct EventBlock: View {
         .background(RoundedRectangle(cornerRadius: 8).fill(tint.opacity(0.2)).background(Theme.bg, in: RoundedRectangle(cornerRadius: 8)))
         .overlay(alignment: .leading) { Rectangle().fill(tint).frame(width: 3) }
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        // Наведение — полное название и время (01.11.2026, «прям полное при наведении»).
+        .help(event.isAllDay ? (event.title ?? "")
+              : "\(event.title ?? "")\n\(event.startDate.formatted(date: .omitted, time: .shortened)) – \(event.endDate.formatted(date: .omitted, time: .shortened))")
     }
 
     private var tint: Color {
