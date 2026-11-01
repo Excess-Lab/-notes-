@@ -247,6 +247,57 @@ impl Vault {
         Ok(join(folder, &name))
     }
 
+    /// Новая папка: занятое имя — «2», «3». Возвращает путь.
+    pub fn create_folder(&self, parent: &str, name: &str) -> Result<String, VaultError> {
+        let name = name.trim();
+        if let Some(why) = windows_problem(name) {
+            return Err(VaultError::BadName(why));
+        }
+        let dir = self.resolve(parent)?;
+        let name = free_name(&dir, name, None, |n| format!(" {n}"), 2);
+        fs::create_dir_all(dir.join(&name))?;
+        Ok(join(parent, &name))
+    }
+
+    /// Дубль рядом: «план копия.md», «план копия 2.md» — как на маке.
+    pub fn duplicate(&self, rel: &str) -> Result<String, VaultError> {
+        let from = self.resolve(rel)?;
+        let folder = parent_of(rel);
+        let (base, ext) = split_ext(rel.rsplit('/').next().unwrap_or(rel), from.is_file());
+        let dir = self.resolve(folder)?;
+        let name = free_name(&dir, &format!("{base} копия"), ext, |n| format!(" {n}"), 1);
+        copy_any(&from, &dir.join(&name))?;
+        Ok(join(folder, &name))
+    }
+
+    /// Перенести заметку или папку в другую папку хранилища. В себя и в свою подпапку — нельзя
+    /// (`None`), в ту же папку — ничего не делаем. Занятое имя — «2», «3».
+    pub fn move_into(&self, rel: &str, folder: &str) -> Result<Option<String>, VaultError> {
+        let from = self.resolve(rel)?;
+        if !from.exists() {
+            return Err(VaultError::NotFound);
+        }
+        if parent_of(rel) == folder || folder == rel || folder.starts_with(&format!("{rel}/")) {
+            return Ok(None);
+        }
+        let dir = self.resolve(folder)?;
+        let current = rel.rsplit('/').next().unwrap_or(rel);
+        let (base, ext) = split_ext(current, from.is_file());
+        let name = if dir.join(current).exists() { free_name(&dir, base, ext, |n| format!(" {n}"), 2) } else { current.to_string() };
+        fs::rename(&from, dir.join(&name))?;
+        Ok(Some(join(folder, &name)))
+    }
+
+    /// Скопировать внутрь файл снаружи хранилища (перетащили из Проводника или Finder).
+    pub fn copy_in(&self, outside: &Path, folder: &str) -> Result<String, VaultError> {
+        let dir = self.resolve(folder)?;
+        let file = outside.file_name().and_then(|n| n.to_str()).ok_or(VaultError::NotFound)?.to_string();
+        let (base, ext) = split_ext(&file, outside.is_file());
+        let name = if dir.join(&file).exists() { free_name(&dir, &format!("{base} копия"), ext, |n| format!(" {n}"), 1) } else { file };
+        copy_any(outside, &dir.join(&name))?;
+        Ok(join(folder, &name))
+    }
+
     /// Задачи из всех заметок: (путь заметки, задача).
     pub fn tasks(&self) -> Vec<(String, Task)> {
         let mut out = Vec::new();
@@ -263,6 +314,50 @@ impl Vault {
         for child in &folder.folders {
             self.collect_tasks(child, out);
         }
+    }
+}
+
+fn parent_of(rel: &str) -> &str {
+    rel.rsplit_once('/').map_or("", |(f, _)| f)
+}
+
+/// «план.md» → («план», Some("md")); у папки расширения нет.
+fn split_ext(name: &str, is_file: bool) -> (&str, Option<&str>) {
+    match name.rsplit_once('.') {
+        Some((base, ext)) if is_file && !base.is_empty() => (base, Some(ext)),
+        _ => (name, None),
+    }
+}
+
+/// Первое свободное имя: `base`, потом `base` + suffix(n) начиная с `start` (1 — сначала без номера).
+fn free_name(dir: &Path, base: &str, ext: Option<&str>, suffix: impl Fn(u32) -> String, start: u32) -> String {
+    let taken: Vec<String> = fs::read_dir(dir).into_iter().flatten().flatten()
+        .map(|e| compare_key(&e.file_name().to_string_lossy())).collect();
+    let make = |b: String| match ext { Some(e) => format!("{b}.{e}"), None => b };
+    let first = make(base.to_string());
+    if !taken.contains(&compare_key(&first)) {
+        return first;
+    }
+    let mut n = start.max(2);
+    loop {
+        let name = make(format!("{base}{}", suffix(n)));
+        if !taken.contains(&compare_key(&name)) {
+            return name;
+        }
+        n += 1;
+    }
+}
+
+fn copy_any(from: &Path, to: &Path) -> io::Result<()> {
+    if from.is_dir() {
+        fs::create_dir_all(to)?;
+        for entry in fs::read_dir(from)? {
+            let entry = entry?;
+            copy_any(&entry.path(), &to.join(entry.file_name()))?;
+        }
+        Ok(())
+    } else {
+        fs::copy(from, to).map(|_| ())
     }
 }
 

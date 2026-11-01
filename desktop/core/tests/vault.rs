@@ -92,3 +92,37 @@ fn search_all_words_title_first() {
     assert!(v.search("хлеб сделано", 10).is_empty(), "all words must match");
     assert!(v.search("  ", 10).is_empty());
 }
+
+#[test]
+fn duplicate_names_like_mac() {
+    let (d, v) = vault();
+    assert_eq!(v.duplicate("Входящие.md").unwrap(), "Входящие копия.md");
+    assert_eq!(v.duplicate("Входящие.md").unwrap(), "Входящие копия 2.md");
+    assert_eq!(fs::read_to_string(d.path().join("Входящие копия.md")).unwrap(), "- [ ] купить хлеб 📅 2026-11-02\n");
+    assert_eq!(v.duplicate("проекты/вложенная").unwrap(), "проекты/вложенная копия");
+    assert!(d.path().join("проекты/вложенная копия/идея.md").exists(), "folder copied deep");
+}
+
+#[test]
+fn move_into_folder() {
+    let (d, v) = vault();
+    assert_eq!(v.move_into("Входящие.md", "проекты").unwrap().as_deref(), Some("проекты/Входящие.md"));
+    assert!(!d.path().join("Входящие.md").exists());
+    assert_eq!(v.move_into("проекты/Входящие.md", "проекты").unwrap(), None, "same folder");
+    assert_eq!(v.move_into("проекты", "проекты/вложенная").unwrap(), None, "not into itself");
+    fs::write(d.path().join("идея.md"), "").unwrap();
+    assert_eq!(v.move_into("идея.md", "проекты/вложенная").unwrap().as_deref(), Some("проекты/вложенная/идея 2.md"));
+    assert_eq!(v.move_into("проекты/вложенная", "").unwrap().as_deref(), Some("вложенная"));
+}
+
+#[test]
+fn create_folder_and_copy_in() {
+    let (d, v) = vault();
+    assert_eq!(v.create_folder("", "проекты").unwrap(), "проекты 2");
+    let outside = tempfile::tempdir().unwrap();
+    let file = outside.path().join("скан.pdf");
+    fs::write(&file, "pdf").unwrap();
+    assert_eq!(v.copy_in(&file, "проекты").unwrap(), "проекты/скан.pdf");
+    assert_eq!(v.copy_in(&file, "проекты").unwrap(), "проекты/скан копия.pdf");
+    assert!(d.path().join("проекты/скан копия.pdf").exists());
+}
