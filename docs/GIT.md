@@ -33,7 +33,9 @@
 Название релиза — **только имя и версия**: `<notes> 1.0.0`, без описания в названии. Описание —
 по-английски: раздел CHANGELOG и в конце блок «Install» про Gatekeeper (01.11.2026, [DECISIONS.md](DECISIONS.md)).
 
-Релиз можно создать и без DMG (облачная сессия на Linux его не соберёт), тогда файл докладывается потом:
+Облачная сессия релиз не создаст: GitHub отвечает 403 «not permitted for this session type»
+(01.11.2026), DMG на Linux тоже не собрать. Релиз делает Макар на маке, шаги ниже. Если релиз уже есть,
+DMG докладывается так:
 
 ```
 gh release upload v1.0.0 build/notes.dmg --clobber
@@ -50,8 +52,24 @@ gh release upload v1.0.0 build/notes.dmg --clobber
 3. `Scripts/make-dmg.sh` — в конце строка `13M build/notes.dmg`. Во время сборки на секунду откроется
    окно Finder с установщиком: это скрипт расставляет иконки, его не трогать.
 4. Проверить: `hdiutil verify build/notes.dmg`, двойной клик по файлу — окно с фоном и стрелкой.
-5. `gh release upload v1.0.0 build/notes.dmg --clobber` — DMG прикрепляется к релизу.
-6. `git checkout Dev` — вернуться в рабочую ветку.
+5. Текст релиза — раздел CHANGELOG плюс блок «Install»:
+
+   ```
+   awk '/^## 1.0.0/{f=1;next} /^## /{if(f)exit} f' CHANGELOG.md > build/release.md
+   cat >> build/release.md <<'EOF'
+
+   ### Install
+   1. Download `notes.dmg` below, open it and drag `<notes>` into Applications.
+   2. This build is signed for development and not notarized yet. On first launch macOS will block it:
+      open System Settings → Privacy & Security, scroll down and click **Open Anyway**.
+
+   Requires macOS 27 or later.
+   EOF
+   ```
+
+6. `gh release create v1.0.0 build/notes.dmg --title "<notes> 1.0.0" --notes-file build/release.md --latest`
+   — релиз с DMG. В конце ссылка на страницу релиза.
+7. `git checkout Dev` — вернуться в рабочую ветку.
 
 `build/notes.dmg` в git не идёт (`build/` в `.gitignore`).
 
