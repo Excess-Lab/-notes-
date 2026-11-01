@@ -150,6 +150,7 @@ private struct TopBar: View {
     @State private var fullSections: CGFloat = 518
     @State private var syncText: CGFloat = 0
     @State private var labels: [String: CGFloat] = [:]
+    @State private var syncHovered = false
     @Namespace private var hover
 
     // Разделы в шапке: все со словами → гибрид (значки, слово только у выбранного) → только значки.
@@ -255,7 +256,8 @@ private struct TopBar: View {
                     .clipped()
                     .animation(.smooth(duration: 0.25), value: fits)
                     .contentShape(Rectangle())
-                    .help(sync.status(now: .now))
+                    .onHover { syncHovered = $0 }
+                    .hoverHint(sync.status(now: .now), when: !fits && syncHovered)
                 }
                 .padding(.trailing, 17)
                 .transition(.opacity)
@@ -280,7 +282,10 @@ private struct TopBar: View {
 
     // Кнопка со словом: значок 16 + зазор 8 + поля 8 по краям; группа — 3 значка по 34, зазоры 6 и поля 22.
     private static func hybridWidth(_ label: CGFloat?) -> CGFloat {
-        3 * 34 + max(34, (label ?? 0) + 40) + 3 * 6 + 22
+        // Значки всех разделов, кроме выбранного: с вкладкой «заметки» их стало пять, а счёт остался на четыре —
+        // гибрид включался, когда подпись уже не влезала (01.11.2026).
+        let others = CGFloat(titles.count - 1)
+        return others * 34 + max(34, (label ?? 0) + 40) + others * 6 + 22
     }
 
     private var selectedTitle: String? {
@@ -340,7 +345,7 @@ private struct TopBar: View {
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .help(compact ? title : "")
+        .hoverHint(title, when: compact && hovered == target)
         .onHover { inside in
             if inside { hovered = target } else if hovered == target { hovered = nil }
         }
@@ -515,6 +520,10 @@ struct SectionContent: View {
                         .disabled(model.summarizing)
                     }
                     IconButton(glyph: .microphone, help: "надиктовать") { DictationController.shared.toggleFromApp() }
+                    // Шаблоны — отдельной кнопкой рядом с «новой заметкой», а не только правым кликом (01.11.2026).
+                    Menu { TemplateItems(model: model, folder: nil) } label: { IconButtonLabel(glyph: .file) }
+                        .menuStyle(.button).menuIndicator(.hidden).buttonStyle(.plain).fixedSize()
+                        .help("новая заметка из шаблона")
                     IconButton(glyph: .newNote, help: "новая заметка · правый клик — из шаблона") { model.newNote() }
                         .keyboardShortcut("n", modifiers: .command)
                         .contextMenu { TemplateItems(model: model, folder: nil) }
@@ -821,3 +830,25 @@ struct StaticSlats: View, Equatable {
         GlassSlats(slatWidth: Layout.finalSlatWidth).drawingGroup()
     }
 }
+
+// Подсказка под значком сразу при наведении — системная всплывает через секунду и её «не видно» (01.11.2026).
+extension View {
+    func hoverHint(_ text: String, when shown: Bool) -> some View {
+        overlay(alignment: .bottom) {
+            if shown {
+                Text(text)
+                    .font(Martian.body.font(11))
+                    .kerning(Theme.tracking(-7, size: 11))
+                    .foregroundStyle(Theme.fg)
+                    .fixedSize()
+                    .padding(.horizontal, 10).padding(.vertical, 6)
+                    .background(Capsule().fill(.regularMaterial))
+                    .offset(y: 34)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+        .animation(.smooth(duration: 0.15), value: shown)
+    }
+}
+

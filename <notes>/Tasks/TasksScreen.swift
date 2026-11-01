@@ -340,6 +340,7 @@ private struct DayGrid: View {
                                     .frame(width: colW - 6, height: 20)
                                     .onTapGesture { opened = event.slot }
                                     .popover(isPresented: openBinding(event)) { EventCard(event: event, tasks: tasks) { opened = nil } }
+                                    .contextMenu { EventMenu(event: event, tasks: tasks) { opened = event.slot } }
                             }
                         }
                         .offset(x: gutter + CGFloat(index) * colW + 3)
@@ -350,6 +351,11 @@ private struct DayGrid: View {
 
             ScrollView {
                 ZStack(alignment: .topLeading) {
+                    // Разделители дней — вертикальные линии, как в Календаре Apple: без них неделя сливалась.
+                    ForEach(1..<max(1, days.count), id: \.self) { i in
+                        Rectangle().fill(NotesLayout.line).frame(width: 1, height: 24 * hour)
+                            .offset(x: gutter + CGFloat(i) * colW)
+                    }
                     ForEach(0..<24, id: \.self) { h in
                         Rectangle().fill(NotesLayout.line).frame(width: page - gutter, height: 1)
                             .offset(x: gutter, y: CGFloat(h) * hour)
@@ -396,6 +402,10 @@ private struct DayGrid: View {
                                                 resizing = nil
                                             })
                                 }
+                                .popover(isPresented: openBinding(event), arrowEdge: .trailing) {
+                                    EventCard(event: event, tasks: tasks) { opened = nil }
+                                }
+                                .contextMenu { EventMenu(event: event, tasks: tasks) { opened = event.slot } }
                                 .offset(x: gutter + CGFloat(column) * colW + 3 + (move != nil ? 0 : CGFloat(lane.0) * width)
                                            + CGFloat(move?.days ?? 0) * colW,
                                         y: top(event) + 1.5 + CGFloat(move?.quarters ?? 0) * hour / 4)
@@ -415,9 +425,6 @@ private struct DayGrid: View {
                                         }
                                         moving = nil
                                     })
-                                .popover(isPresented: openBinding(event), arrowEdge: .trailing) {
-                                    EventCard(event: event, tasks: tasks) { opened = nil }
-                                }
                         }
                     }
                     // Линия «сейчас» — красная черта с точкой в колонке сегодняшнего дня.
@@ -428,6 +435,12 @@ private struct DayGrid: View {
                                 Rectangle().fill(Theme.coral).frame(width: colW - 4, height: 1.5)
                             }
                             .offset(x: gutter + CGFloat(today) * colW - 3, y: top(at: context.date) - 3.5)
+                            // Сколько сейчас — плашкой слева, поверх подписей часов.
+                            Text(context.date.formatted(.dateTime.hour().minute()))
+                                .font(Martian.body.font(10)).foregroundStyle(.white)
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(Capsule().fill(Theme.coral))
+                                .offset(x: -4, y: top(at: context.date) - 8)
                         }
                         .allowsHitTesting(false)
                         .zIndex(2)
@@ -439,13 +452,15 @@ private struct DayGrid: View {
                                 Text(Self.span(start, end)).font(Martian.body.font(11)).foregroundStyle(Theme.coral).padding(6)
                             }
                             .frame(width: colW - 6, height: max(hour / 4, CGFloat(end.timeIntervalSince(start) / 3600) * hour) - 4)
-                            .offset(x: gutter + CGFloat(column) * colW + 3, y: top(at: start) + 2)
+                            // Попап — до offset: после него он цеплялся за исходное место (левый верх сетки),
+                            // и задача «создавалась непонятно где» (01.11.2026).
                             .popover(isPresented: Binding(get: { draft != nil && !dragging }, set: { if !$0 { draft = nil; draftEnd = nil } }), arrowEdge: .trailing) {
                                 NewTaskPopover(start: start, minutes: Int(end.timeIntervalSince(start) / 60)) { title, due, hasTime, minutes in
                                     tasks.add(title, due: due, hasTime: hasTime, minutes: minutes)
                                     draft = nil; draftEnd = nil
                                 }
                             }
+                            .offset(x: gutter + CGFloat(column) * colW + 3, y: top(at: start) + 2)
                     }
                 }
                 .frame(width: page, height: 24 * hour + 10, alignment: .topLeading)
@@ -547,7 +562,7 @@ private struct EventBlock: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(event.title ?? "").lineLimit(max(1, Int((geo.size.height - 24) / 14)))
                         Text(span ?? event.startDate.formatted(.dateTime.hour().minute()))
-                            .foregroundStyle(task ? Theme.coral : NotesLayout.gray)
+                            .foregroundStyle(tint)
                     }
                 }
             }
@@ -555,8 +570,14 @@ private struct EventBlock: View {
             .padding(.horizontal, 8).padding(.vertical, geo.size.height < 24 ? 1 : 4)
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
-        .background(RoundedRectangle(cornerRadius: 8).fill(task ? Theme.coral.opacity(0.14) : Theme.fg.opacity(0.07)))
+        // Цвет календаря, как в Календаре Apple: заливка и полоска слева (01.11.2026, «подгружать цвета»).
+        .background(RoundedRectangle(cornerRadius: 8).fill(tint.opacity(0.2)))
+        .overlay(alignment: .leading) { Rectangle().fill(tint).frame(width: 3) }
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var tint: Color {
+        event.calendar.map { Color(nsColor: $0.color) } ?? (task ? Theme.coral : Theme.fg.opacity(0.4))
     }
 }
 
@@ -567,16 +588,27 @@ private struct EventCard: View {
     let tasks: TasksModel
     let close: () -> Void
     @State private var title = ""
+    // Сначала карточка только показывает; «изменить» — поле названия. Delete — удалить (01.11.2026).
+    @State private var editing = false
+    @FocusState private var focused: Bool
     @Environment(\.undoManager) private var undo
 
     var body: some View {
         let task = tasks.task(for: event)
         VStack(alignment: .leading, spacing: 10) {
-            if task == nil {
+            if task == nil && editing {
                 TextField("без названия", text: $title)
                     .textFieldStyle(.plain)
                     .font(Martian.heading.font(17))
+                    .focused($focused)
+                    .onAppear { focused = true }
                     .onSubmit { tasks.rename(event, to: title, undo: undo); close() }
+            } else if task == nil {
+                HStack {
+                    Text(event.title ?? "без названия").font(Martian.heading.font(17)).foregroundStyle(Theme.ink)
+                    Spacer(minLength: 8)
+                    Button("изменить") { editing = true }.buttonStyle(QuietLinkStyle(size: 13, opacity: 0.6))
+                }
             } else {
                 Text(event.title ?? "").font(Martian.heading.font(17)).foregroundStyle(Theme.ink)
             }
@@ -606,12 +638,39 @@ private struct EventCard: View {
         .padding(14)
         .frame(width: 260, alignment: .leading)
         .onAppear { title = event.title ?? "" }
+        .focusable(!editing)
+        .focusEffectDisabled()
+        .onKeyPress(.delete) {
+            guard !editing, task == nil else { return .ignored }
+            tasks.remove(event, undo: undo); close(); return .handled
+        }
     }
 
     private var when: String {
         let ru = Locale(identifier: "ru_RU")
         let day = event.startDate.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(ru))
         return event.isAllDay ? "\(day), весь день" : "\(day), \(DayGrid.span(event.startDate, event.endDate))"
+    }
+}
+
+// Правый клик по событию: изменить, перенести в другой календарь, удалить. Событие задачи правится в заметке.
+private struct EventMenu: View {
+    let event: EKEvent
+    let tasks: TasksModel
+    let open: () -> Void
+    @Environment(\.undoManager) private var undo
+
+    var body: some View {
+        Button("изменить") { open() }
+        if tasks.task(for: event) == nil {
+            Menu("в календарь") {
+                ForEach(tasks.calendar.calendars, id: \.calendarIdentifier) { target in
+                    Button(target.title) { tasks.moveTo(event, target, undo: undo) }
+                }
+            }
+            Divider()
+            Button("удалить", role: .destructive) { tasks.remove(event, undo: undo) }
+        }
     }
 }
 

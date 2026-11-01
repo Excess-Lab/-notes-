@@ -5,7 +5,7 @@ using namespace metal;
 // Сфера надиктовки: стеклянный шар, за ним — четыре полосы света, по одной на полосу частот голоса
 // (низкие → высокие). Шар как линза: у края сильнее сжимает то, что за ним, поэтому полосы загибаются;
 // каналы цвета преломляются чуть по-разному — радуга на концах. Верх стекла темнее низа, край светится.
-// Думает — по полосам бежит свет туда-обратно. Готово — шар заливается зелёным и испаряется вверх.
+// Думает — полосы сворачиваются в кольца, пульсируют и крутятся. Готово — шар заливается зелёным и испаряется вверх.
 static float hash(float2 p) { return fract(sin(dot(p, float2(127.1, 311.7))) * 43758.5453); }
 static float noise(float2 p) {
     float2 i = floor(p), f = fract(p);
@@ -16,15 +16,20 @@ static float noise(float2 p) {
 static float strip(float2 p, float k, float t, float level, float i, float think) {
     float r2 = dot(p, p);
     float2 q = p * (1.0 + k * (1.0 - sqrt(max(0.0, 1.0 - r2))));
-    // Думает: волна гаснет, вдоль полосы бежит пятно света.
-    float sweep = 0.75 * sin(t * 2.0 + i * 0.35);
-    float pulse = exp(-pow(q.x - sweep, 2.0) * 7.0);
-    float amp = mix(0.025 + level * 0.3, 0.05 * pulse, think);
-    float wave = amp * sin(q.x * (2.2 + i * 0.7) + t * (1.2 + i * 0.45) + i * 1.7);
-    float width = mix(0.022 + level * 0.06, 0.03 + 0.03 * pulse, think);
-    float d = q.y - (i - 1.5) * mix(0.07, 0.035, think) - wave;
-    float bright = mix(0.55 + level * 0.9, 0.35 + pulse * 1.1, think);
-    return bright * exp(-d * d / (width * width)) * smoothstep(1.15, 0.2, abs(q.x));
+    // Слушает — волна поперёк шара.
+    float wave = (0.025 + level * 0.3) * sin(q.x * (2.2 + i * 0.7) + t * (1.2 + i * 0.45) + i * 1.7);
+    float lineD = q.y - (i - 1.5) * 0.07 - wave;
+    float lineW = 0.022 + level * 0.06;
+    float lineB = (0.55 + level * 0.9) * smoothstep(1.15, 0.2, abs(q.x));
+    // Думает — полосы сворачиваются в кольца: каждое пульсирует и крутится в свою сторону (01.11.2026).
+    float ang = atan2(q.y, q.x);
+    float dir = fmod(i, 2.0) < 0.5 ? 1.0 : -1.0;
+    float radius = 0.36 + i * 0.075 + 0.03 * sin(t * 3.2 + i * 0.9);
+    float ringD = length(q) - radius - 0.025 * sin(ang * (3.0 + i) + dir * t * (1.6 + i * 0.4));
+    float ringB = 0.45 + 0.75 * pow(0.5 + 0.5 * sin(ang * 2.0 - dir * t * 2.4 + i), 2.0);
+    float d = mix(lineD, ringD, think);
+    float w = mix(lineW, 0.026, think);
+    return mix(lineB, ringB, think) * exp(-d * d / (w * w));
 }
 
 static half4 orbAt(float2 position, float4 bounds, float t, float4 bands, float dark, float canvas, float think, float done) {

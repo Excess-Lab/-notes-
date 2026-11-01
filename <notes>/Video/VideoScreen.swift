@@ -76,6 +76,26 @@ private struct VideoList: View {
                     return true
                 }
 
+                // Во «всех расшифровках» — и папки, как в заметках: щелчок открывает папку (01.11.2026).
+                if video.folderFilter == nil, !video.folders.isEmpty {
+                    Text("папки")
+                        .font(Martian.body.font(15)).kerning(Theme.tracking(-7, size: 15)).foregroundStyle(Theme.ink)
+                        .padding(.top, 30)
+                    ForEach(video.folders, id: \.self) { name in
+                        Button { video.folderFilter = name } label: {
+                            HStack(spacing: 10) {
+                                DotIcon(glyph: .folder)
+                                Text(name).font(Martian.body.font(13)).kerning(Theme.tracking(-7, size: 13)).foregroundStyle(Theme.ink)
+                                Spacer(minLength: 10)
+                                Text("\(video.count(folder: name))").font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+                            }
+                            .padding(.vertical, 12)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .overlay(alignment: .bottom) { Rectangle().fill(NotesLayout.line).frame(height: 1) }
+                    }
+                }
                 group("в работе", video.visible.filter { $0.status == .working || $0.status == .queued })
                 group("готово", video.visible.filter { $0.status == .done })
                 group("не получилось", video.visible.filter { $0.status == .failed })
