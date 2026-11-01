@@ -12,10 +12,14 @@ HEADER_SHA256="2a1b95084be8fd1deb3228fcad2fd3f7f0258b64582f7402281ec174c7b7f4ce"
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DEST="$ROOT/NotesSpeech/Vendor/SherpaOnnx.xcframework"
-if [ -d "$DEST" ]; then
+# Готов — только если внутри есть сама библиотека. Пустая или недособранная папка (прерванный
+# запуск, сброс git clean, синхронизация папки) раньше считалась готовой, и Xcode падал с
+# «does not contain a binary artifact» (01.11.2026) — такую папку пересобираем.
+if ls "$DEST"/*/libsherpa-onnx.a >/dev/null 2>&1; then
   echo "уже есть: $DEST"
   exit 0
 fi
+rm -rf "$DEST"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
