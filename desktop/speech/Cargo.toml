@@ -1,0 +1,17 @@
+[package]
+name = "notes-speech"
+description = "On-device speech recognition for <notes>: GigaAM via sherpa-onnx, models downloaded on demand."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+sherpa-onnx = "2.0.1"
+sha2 = "0.10"
+tar = "0.4"
+bzip2 = "0.4"
+ureq = "2"
+serde = { version = "1", features = ["derive"] }
+
+[dev-dependencies]
+tempfile = "3"
