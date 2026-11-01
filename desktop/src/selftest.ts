@@ -67,6 +67,19 @@ export async function runSelftest(backend: Api, ui: { openNote(path: string): Pr
     await check("right pin unlocks", document.querySelector(".unlock") === null);
     await lockApi.clear();
     await check("pin cleared", !(await lockApi.state()).has_pin);
+    // Надиктовка без микрофона: WAV модели проходит весь путь до буфера обмена (как -dictationTestFile).
+    const archive = await invoke<string | null>("selftest_env", { name: "NOTES_SELFTEST_GIGAAM" });
+    if (archive) {
+      const { listen } = await import("@tauri-apps/api/event");
+      let copied = "";
+      const states: string[] = [];
+      const stop = await listen<{ state: string; text?: string }>("dictation", (e) => { states.push(e.payload.state); if (e.payload.text) copied = e.payload.text; });
+      const wav = archive.replace(/[^/\\]+$/, "") + "sherpa-onnx-nemo-transducer-punct-giga-am-v3-russian-2025-12-16/test_wavs/example.wav";
+      await invoke("dictation_test", { wav, archive });
+      for (let i = 0; i < 120 && !copied; i++) await pause(500);
+      stop();
+      await check(`dictation → clipboard: «${copied.slice(0, 40)}…»`, copied.includes("лукоморья") && states.includes("recognizing"));
+    }
     await pause(300);
   } catch (e) {
     await check(`exception: ${e}`, false);

@@ -51,6 +51,10 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
   let prefs = await host.backend.prefs();
   const vault = await host.backend.vaultPath();
   let git = await host.backend.gitStatus();
+  const { invoke } = await import("@tauri-apps/api/core");
+  type ModelInfo = { id: string; installed: boolean; download_mb: number };
+  let models: ModelInfo[] = host.backend.inTauri ? await invoke<ModelInfo[]>("models") : [];
+  let downloading: number | null = null;
   let lock: LockState | null = host.backend.inTauri ? await lockApi.state() : null;
   let gh = await host.backend.githubStatus();
   // Вход по коду: код на экране, пока ждём подтверждения на github.com.
@@ -84,9 +88,18 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
         return row("календарь в приложении", "задачи с 📅 из заметок: день, неделя, месяц", granted("включено"))
           + row(isMac ? "календарь apple" : "календарь windows и outlook", isMac ? "переезжает с мака" : "файл .ics со всеми задачами со сроком", isMac ? later() : pill("ics", "сохранить .ics"))
           + note(isMac ? "" : "системный календарь windows закрыт для приложений не из store — поэтому .ics");
-      case "dictation":
-        return row("горячая клавиша", "зажать, сказать, отпустить — текст в буфере", later())
-          + row("модели распознавания", "gigaam (русский) и whisper (99 языков), качаются по требованию", later());
+      case "dictation": {
+        const hotkey = isMac ? "⌥ space" : "ctrl + alt + space";
+        const gigaam = models.find((m) => m.id === "gigaam-v3-punct");
+        const status = !host.backend.inTauri ? later("в браузере нет")
+          : downloading !== null ? `<span class="later">${Math.round(downloading * 100)}%</span>`
+          : gigaam?.installed ? `${granted("скачана")}${pill("model-remove", "удалить")}` : pill("model-get", `скачать ${gigaam?.download_mb ?? 176} мб`);
+        return row("горячая клавиша", `${hotkey} — нажать, сказать, нажать ещё раз: текст в буфере`, `<span class="device-code">${hotkey}</span>`)
+          + row("gigaam", "русский с пунктуацией, распознаёт на этом компьютере", status)
+          + row("whisper", "99 языков", later())
+          + row("вставлять в поле", "в поле, где курсор", later())
+          + note("модели не входят в приложение: качаются один раз и проверяются по контрольной сумме");
+      }
       case "lock":
         if (!lock) return row("пинкод", "в окне приложения", later("в браузере нет"));
         return row("пинкод", lock.has_pin ? "при запуске и после 15 минут без приложения" : "4 цифры при входе в приложение",
@@ -148,6 +161,26 @@ export async function mountSettings(root: HTMLElement, sidebar: HTMLElement, hos
       render();
       const note = root.querySelector(".settings-rows");
       note?.insertAdjacentHTML("beforeend", `<p class="setting-note">${message ? esc(message) : "менять было нечего"}</p>`);
+    } else if (b.dataset.set === "model-get") {
+      const { listen } = await import("@tauri-apps/api/event");
+      downloading = 0;
+      render();
+      const stop = await listen<number>("model-progress", (e) => {
+        downloading = e.payload;
+        const s = root.querySelector(".setting:nth-child(2) .later");
+        if (s) s.textContent = `${Math.round(e.payload * 100)}%`;
+      });
+      try { await invoke("model_download"); } catch (error) {
+        root.querySelector(".settings-rows")?.insertAdjacentHTML("beforeend", note(`не скачалось: ${esc(String(error))}`));
+      }
+      stop();
+      downloading = null;
+      models = await invoke<ModelInfo[]>("models");
+      render();
+    } else if (b.dataset.set === "model-remove") {
+      await invoke("model_remove");
+      models = await invoke<ModelInfo[]>("models");
+      render();
     } else if (b.dataset.set === "pin-on") {
       if (await choosePin()) { lock = await lockApi.state(); await lockApi.seen(); render(); }
     } else if (b.dataset.set === "pin-off") {

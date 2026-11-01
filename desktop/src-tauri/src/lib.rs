@@ -1,13 +1,14 @@
 //! Оболочка Tauri: команды для интерфейса поверх `notes-core`. Здесь нет логики заметок —
 //! она в ядре, — и нет кода под ОС: он в `platform`.
 
+mod dictation;
 mod github;
 mod platform;
 
 use notes_core::{Folder, Vault};
 use serde::Serialize;
 use std::sync::Mutex;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 
 /// Открытое хранилище. Путь к нему — в настройках приложения (вне хранилища).
 #[derive(Default)]
@@ -234,6 +235,15 @@ fn selftest_slow() -> bool {
     std::env::var("NOTES_SELFTEST_SLOW").is_ok_and(|v| v == "1")
 }
 
+/// Переменная окружения для самопроверки (путь к архиву модели и т. п.). Только в режиме самопроверки.
+#[tauri::command]
+fn selftest_env(name: String) -> Option<String> {
+    if !selftest() || !name.starts_with("NOTES_SELFTEST_") {
+        return None;
+    }
+    std::env::var(name).ok()
+}
+
 #[tauri::command]
 fn selftest_log(line: String, done: bool, app: tauri::AppHandle) {
     println!("selftest: {line}");
@@ -419,30 +429,103 @@ async fn hello_verify(window: tauri::WebviewWindow) -> bool {
     tauri::async_runtime::spawn_blocking(move || platform::auth::verify(&window, "Откройте <notes>")).await.unwrap_or(false)
 }
 
+/// Кнопка микрофона в приложении — то же, что хоткей.
+#[tauri::command]
+fn dictation_toggle(app: tauri::AppHandle) {
+    dictation::toggle(&app);
+}
+
+#[derive(Serialize)]
+struct ModelStatus {
+    id: &'static str,
+    installed: bool,
+    download_mb: u32,
+}
+
+#[tauri::command]
+fn models(app: tauri::AppHandle) -> Vec<ModelStatus> {
+    let store = dictation::store(&app);
+    notes_speech::Model::ALL.iter().map(|&m| ModelStatus { id: m.id(), installed: store.is_installed(m), download_mb: m.download_mb() }).collect()
+}
+
+/// Скачать модель; ход — событием `model-progress` (0…1).
+#[tauri::command]
+async fn model_download(app: tauri::AppHandle) -> Result<(), String> {
+    let store = dictation::store(&app);
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        store.download(notes_speech::Model::GigaAm, |p| { let _ = handle.emit("model-progress", p); })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn model_remove(app: tauri::AppHandle) -> Result<(), String> {
+    dictation::store(&app).remove(notes_speech::Model::GigaAm).map_err(|e| e.to_string())
+}
+
+/// Самопроверка без микрофона, как `-dictationTestFile` на маке: WAV 16 кГц моно проходит весь путь
+/// до буфера обмена. `archive` — поставить модель из уже скачанного архива (облако не качает с github).
+#[tauri::command]
+fn dictation_test(wav: String, archive: Option<String>, app: tauri::AppHandle) -> Result<(), String> {
+    if let Some(a) = archive {
+        dictation::store(&app).install_from_archive(notes_speech::Model::GigaAm, std::path::Path::new(&a))?;
+    }
+    let wave = sherpa_onnx_wave(&wav)?;
+    dictation::recognize(app, wave);
+    Ok(())
+}
+
+fn sherpa_onnx_wave(path: &str) -> Result<Vec<f32>, String> {
+    let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
+    // Простой PCM16 моно WAV: данные после чанка «data».
+    let at = bytes.windows(4).position(|w| w == b"data").ok_or("не wav")? + 8;
+    Ok(bytes[at..].chunks_exact(2).map(|c| i16::from_le_bytes([c[0], c[1]]) as f32 / 32768.0).collect())
+}
+
 /// Какая ОС — интерфейс выбирает стекло окна (Mica на Windows, Liquid Glass на маке).
 #[tauri::command]
 fn os() -> &'static str {
     std::env::consts::OS
 }
 
+pub const DICTATION_SHORTCUT: &str = "ctrl+alt+space";
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            // Хоткей надиктовки: Ctrl+Alt+Space (на маке ⌥ Space; Alt+Space на Windows — меню окна).
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcuts([DICTATION_SHORTCUT])
+                .expect("valid shortcut")
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        dictation::toggle(app);
+                    }
+                })
+                .build(),
+        )
+        .manage(dictation::Dictation::default())
         .manage(AppState::default())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
                 platform::window::apply_glass(&window);
             }
+            dictation::create_orb(app.handle())?;
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
             open_vault, last_vault, tree, read_note, write_note, create_note, rename_note, search, tasks, os,
             create_folder, duplicate, move_into, copy_in, trash, reveal, pins, set_pins,
             templates, create_from_template, daily,
-            set_due, set_done, append_task, export_ics, ics, prefs, set_prefs, vault_path, git_status, git_enable, git_commit, selftest, selftest_slow, selftest_log,
+            set_due, set_done, append_task, export_ics, ics, prefs, set_prefs, vault_path, git_status, git_enable, git_commit, selftest, selftest_slow, selftest_log, selftest_env,
             github_status, github_code, github_finish, github_cancel, github_sign_out, github_sync, open_github,
-            lock_state, lock_seen, lock_needed_on_return, pin_set, pin_clear, pin_check, hello_verify
+            lock_state, lock_seen, lock_needed_on_return, pin_set, pin_clear, pin_check, hello_verify,
+            dictation_toggle, models, model_download, model_remove, dictation_test
         ])
         .run(tauri::generate_context!())
         .expect("error while running <notes>");

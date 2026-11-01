@@ -398,6 +398,8 @@ app.addEventListener("click", async (e) => {
   } else if (el.dataset.act === "pick") {
     state.tree = await backend.pickVault();
     render();
+  } else if (el.dataset.act === "dictate") {
+    if (backend.inTauri) await (await import("@tauri-apps/api/core")).invoke("dictation_toggle");
   } else if (el.dataset.act === "new-task") {
     tasksScreen?.focusNew();
   } else if (el.dataset.act === "templates" && state.tree) {
