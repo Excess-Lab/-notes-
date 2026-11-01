@@ -35,6 +35,7 @@
 - `<notes>/Video/DropZone.metal` — шейдер зоны «перетащи» в видео: стеклянные планки поверх плывущих тёплых пятен.
 - `<notes>/Video/VideoScreen.swift` — список видео с зоной для файла и экран расшифровки.
 - `<notes>/Settings/SettingsScreen.swift` — страницы настроек на настоящих данных: общие, синхронизация, надиктовка, поиск, вход, календарь, шаблоны.
+- `<notes>/Localizable.xcstrings` — переводы интерфейса: en и sr-Latn, исходный русский.
 - `<notes>/AppSupport.swift` — своя папка в Application Support и переезд данных из контейнера песочницы.
 - `<notes>/Dictation/AutoPaste.swift` — вставка надиктованного в поле в фокусе (универсальный доступ, ⌘V).
 - `<notes>/Intelligence/Intelligence.swift` — Apple Intelligence (Foundation Models): включение, доступность, краткое содержание по частям.
