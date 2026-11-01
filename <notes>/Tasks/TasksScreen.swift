@@ -131,6 +131,9 @@ struct CalendarScreen: View {
     @State private var anchor = Date()
     // Задача, которую сейчас вписывают: время начала.
     @State private var draft: Date?
+    @State private var titleHeight: CGFloat = 60
+    // Сколько сверху занято заголовком (с отступом листа): на столько сетка заходит под него.
+    private var inset: CGFloat { 36 + titleHeight }
 
     private var calendar: Calendar {
         var calendar = Calendar(identifier: .gregorian)
@@ -154,19 +157,23 @@ struct CalendarScreen: View {
                 }
             }
             .frame(width: page)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { titleHeight = $0 }
+            .zIndex(1)
 
             if tasks.calendar.hasAccess {
                 Group {
                     switch mode {
-                    case .day: DayGrid(days: [calendar.startOfDay(for: anchor)], tasks: tasks, uploads: uploads, draft: $draft)
-                    case .week: DayGrid(days: week, tasks: tasks, uploads: uploads, draft: $draft)
+                    case .day: DayGrid(days: [calendar.startOfDay(for: anchor)], tasks: tasks, uploads: uploads, draft: $draft, inset: inset)
+                    case .week: DayGrid(days: week, tasks: tasks, uploads: uploads, draft: $draft, inset: inset)
                     case .month: MonthGrid(month: anchor, calendar: calendar, tasks: tasks) { anchor = $0; mode = .day }
                     }
                 }
                 // Неделя, день, месяц и листание — мягким размытием, как разделы.
                 .id("\(mode)-\(Int(anchor.timeIntervalSince1970 / 86_400))")
                 .transition(.blurReplace)
-                .padding(.top, 30)
+                // День и неделя — сетка уходит под заголовок: шапка сверху цвета листа, книзу прозрачная
+                // с размытием (01.11.2026). Месяц — как был, под заголовком.
+                .padding(.top, mode == .month ? 30 : -inset)
             } else {
                 Button("дать доступ") { Task { _ = await tasks.calendar.requestAccess(); anchor = Date() } }
                     .buttonStyle(CoralCapsuleStyle())
@@ -176,6 +183,7 @@ struct CalendarScreen: View {
         .padding(.leading, 58)
         .padding(.top, 36)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .clipped()
         // Стрелки ← → листают неделю, день или месяц.
         .onKeyPress(.leftArrow) { shift(-1); return .handled }
         .onKeyPress(.rightArrow) { shift(1); return .handled }
@@ -287,6 +295,7 @@ private struct DayGrid: View {
     let tasks: TasksModel
     let uploads: [VideoModel.Item]
     @Binding var draft: Date?
+    var inset: CGFloat = 0
     @State private var draftEnd: Date?
     @State private var dragging = false
     @State private var position = ScrollPosition(y: 8 * 44)
@@ -304,51 +313,11 @@ private struct DayGrid: View {
         let allDay = all.filter(\.isAllDay)
         let events = all.filter { !$0.isAllDay }
         let lanes = Self.lanes(events)
-        VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .topLeading) {
-                ForEach(Array(days.enumerated()), id: \.offset) { index, day in
-                    let today = Calendar.current.isDateInToday(day)
-                    VStack(alignment: .leading, spacing: 2) {
-                        // Значок видео — у дня недели: рядом с числом он прилипал к числу соседнего дня.
-                        HStack(spacing: 4) {
-                            Text(day.formatted(.dateTime.weekday(.abbreviated).locale(Locale(identifier: "ru_RU"))).lowercased())
-                                .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
-                            let count = uploads.filter { Calendar.current.isDate($0.added, inSameDayAs: day) }.count
-                            if count > 0 {
-                                DotIcon(glyph: .video, size: 11, color: NotesLayout.gray).help("видео на расшифровку: \(count)")
-                            }
-                        }
-                        Text("\(Calendar.current.component(.day, from: day))")
-                            .font(Martian.heading.font(15)).foregroundStyle(today ? Theme.coral : Theme.ink)
-                    }
-                    // Подпись дня — строго в своей колонке: значок видео раньше налезал на число соседнего дня.
-                    .frame(width: colW - 8, alignment: .leading)
-                    .clipped()
-                    .offset(x: gutter + CGFloat(index) * colW + 6)
-                }
-            }
-            .frame(width: page, height: head, alignment: .topLeading)
-
-            let perDay = days.map { day in allDay.filter { Self.covers($0, day) } }
-            if let most = perDay.map(\.count).max(), most > 0 {
-                ZStack(alignment: .topLeading) {
-                    Text("весь день").font(Martian.body.font(9)).foregroundStyle(NotesLayout.gray).offset(y: 4)
-                    ForEach(Array(perDay.enumerated()), id: \.offset) { index, list in
-                        VStack(alignment: .leading, spacing: 2) {
-                            ForEach(list, id: \.slot) { event in
-                                EventBlock(event: event, task: tasks.calendar.isTaskEvent(event))
-                                    .frame(width: colW - 6, height: 20)
-                                    .onTapGesture { opened = event.slot }
-                                    .popover(isPresented: openBinding(event)) { EventCard(event: event, tasks: tasks) { opened = nil } }
-                                    .contextMenu { EventMenu(event: event, tasks: tasks) { opened = event.slot } }
-                            }
-                        }
-                        .offset(x: gutter + CGFloat(index) * colW + 3)
-                    }
-                }
-                .frame(width: page, height: CGFloat(most) * 22 + 6, alignment: .topLeading)
-            }
-
+        let perDay = days.map { day in allDay.filter { Self.covers($0, day) } }
+        let most = perDay.map(\.count).max() ?? 0
+        // Над сеткой: место заголовка экрана, дни, строка «весь день». Сетка прокручивается под этим.
+        let above = inset + head + (most > 0 ? CGFloat(most) * 22 + 6 : 0)
+        ZStack(alignment: .topLeading) {
             ScrollView {
                 ZStack(alignment: .topLeading) {
                     // Разделители дней — вертикальные линии, как в Календаре Apple: без них неделя сливалась.
@@ -382,49 +351,7 @@ private struct DayGrid: View {
                             .onEnded { _ in dragging = false })
                     ForEach(events, id: \.slot) { event in
                         if let column = days.firstIndex(where: { Calendar.current.isDate($0, inSameDayAs: event.startDate) }) {
-                            let lane = lanes[event.slot] ?? (0, 1)
-                            let width = (colW - 6) / CGFloat(lane.1)
-                            let move = moving?.slot == event.slot ? moving : nil
-                            let grow = resizing?.slot == event.slot ? CGFloat(resizing!.quarters) * hour / 4 : 0
-                            // Тащим — событие во всю ширину колонки и поверх соседей, со своим новым временем.
-                            EventBlock(event: event, task: tasks.calendar.isTaskEvent(event),
-                                       span: move.map { Self.span(shifted(event, $0.days, $0.quarters).0, shifted(event, $0.days, $0.quarters).1) }
-                                           ?? (resizing?.slot == event.slot ? Self.span(event.startDate, resized(event, resizing!.quarters)) : nil))
-                                .frame(width: (move != nil ? colW - 6 : width) - 2, height: max(hour / 4 - 3, height(event) + grow))
-                                .overlay(alignment: .bottom) {
-                                    // Нижний край — растянуть, как в Календаре Apple.
-                                    Color.clear.frame(height: 6).contentShape(Rectangle())
-                                        .pointerStyle(.frameResize(position: .bottom))
-                                        .gesture(DragGesture(minimumDistance: 2)
-                                            .onChanged { resizing = (event.slot, Int(($0.translation.height / (hour / 4)).rounded())) }
-                                            .onEnded { _ in
-                                                if let r = resizing { tasks.move(event, start: event.startDate, end: resized(event, r.quarters), undo: undo) }
-                                                resizing = nil
-                                            })
-                                }
-                                .popover(isPresented: openBinding(event), arrowEdge: .trailing) {
-                                    EventCard(event: event, tasks: tasks) { opened = nil }
-                                }
-                                .contextMenu { EventMenu(event: event, tasks: tasks) { opened = event.slot } }
-                                .offset(x: gutter + CGFloat(column) * colW + 3 + (move != nil ? 0 : CGFloat(lane.0) * width)
-                                           + CGFloat(move?.days ?? 0) * colW,
-                                        y: top(event) + 1.5 + CGFloat(move?.quarters ?? 0) * hour / 4)
-                                .zIndex(move != nil || opened == event.slot ? 1 : 0)
-                                .shadow(color: .black.opacity(move != nil ? 0.35 : 0), radius: 8, y: 3)
-                                .onTapGesture { opened = event.slot }
-                                .gesture(DragGesture(minimumDistance: 4)
-                                    .onChanged { drag in
-                                        let shift = Int((drag.translation.width / colW).rounded())
-                                        moving = (event.slot, max(-column, min(days.count - 1 - column, shift)),
-                                                  Int((drag.translation.height / (hour / 4)).rounded()))
-                                    }
-                                    .onEnded { _ in
-                                        if let m = moving {
-                                            let (start, end) = shifted(event, m.days, m.quarters)
-                                            tasks.move(event, start: start, end: end, undo: undo)
-                                        }
-                                        moving = nil
-                                    })
+                            timed(event, column: column, colW: colW, lanes: lanes)
                         }
                     }
                     // Линия «сейчас» — красная черта с точкой в колонке сегодняшнего дня.
@@ -464,13 +391,106 @@ private struct DayGrid: View {
                     }
                 }
                 .frame(width: page, height: 24 * hour + 10, alignment: .topLeading)
-                .padding(.top, 6)
+                .padding(.top, above + 6)
             }
             .scrollIndicators(.never)
             // Сетка открывается на 8:00. scrollTo по id не срабатывал: метки часов сдвинуты offset'ом,
             // их рамки остаются наверху, и сетка висела на полуночи.
             .scrollPosition($position)
+            VStack(alignment: .leading, spacing: 0) {
+                Color.clear.frame(height: inset)
+            ZStack(alignment: .topLeading) {
+                ForEach(Array(days.enumerated()), id: \.offset) { index, day in
+                    let today = Calendar.current.isDateInToday(day)
+                    VStack(alignment: .leading, spacing: 2) {
+                        // Значок видео — у дня недели: рядом с числом он прилипал к числу соседнего дня.
+                        HStack(spacing: 4) {
+                            Text(day.formatted(.dateTime.weekday(.abbreviated).locale(Locale(identifier: "ru_RU"))).lowercased())
+                                .font(Martian.body.font(11)).foregroundStyle(NotesLayout.gray)
+                            let count = uploads.filter { Calendar.current.isDate($0.added, inSameDayAs: day) }.count
+                            if count > 0 {
+                                DotIcon(glyph: .video, size: 11, color: NotesLayout.gray).help("видео на расшифровку: \(count)")
+                            }
+                        }
+                        Text("\(Calendar.current.component(.day, from: day))")
+                            .font(Martian.heading.font(15)).foregroundStyle(today ? Theme.coral : Theme.ink)
+                    }
+                    // Подпись дня — строго в своей колонке: значок видео раньше налезал на число соседнего дня.
+                    .frame(width: colW - 8, alignment: .leading)
+                    .clipped()
+                    .offset(x: gutter + CGFloat(index) * colW + 6)
+                }
+            }
+            .frame(width: page, height: head, alignment: .topLeading)
+
+            if let most = perDay.map(\.count).max(), most > 0 {
+                ZStack(alignment: .topLeading) {
+                    Text("весь день").font(Martian.body.font(9)).foregroundStyle(NotesLayout.gray).offset(y: 4)
+                    ForEach(Array(perDay.enumerated()), id: \.offset) { index, list in
+                        VStack(alignment: .leading, spacing: 2) {
+                            ForEach(list, id: \.slot) { event in
+                                EventBlock(event: event, task: tasks.calendar.isTaskEvent(event))
+                                    .frame(width: colW - 6, height: 20)
+                                    .onTapGesture { opened = event.slot }
+                                    .popover(isPresented: openBinding(event)) { EventCard(event: event, tasks: tasks) { opened = nil } }
+                                    .contextMenu { EventMenu(event: event, tasks: tasks) { opened = event.slot } }
+                            }
+                        }
+                        .offset(x: gutter + CGFloat(index) * colW + 3)
+                    }
+                }
+                .frame(width: page, height: CGFloat(most) * 22 + 6, alignment: .topLeading)
+            }
+
+            }
+            .background(alignment: .top) { HeaderFade().frame(width: page + 116, height: above + 28).offset(x: -58) }
         }
+    }
+
+    // Событие со временем в сетке: тащить, растягивать, открыть. Отдельно от body — в общей цепочке
+    // компилятор не успевал вывести типы.
+    @ViewBuilder
+    private func timed(_ event: EKEvent, column: Int, colW: CGFloat, lanes: [String: (Int, Int)]) -> some View {
+            let lane = lanes[event.slot] ?? (0, 1)
+            let width = (colW - 6) / CGFloat(lane.1)
+            let move = moving?.slot == event.slot ? moving : nil
+            let grow = resizing?.slot == event.slot ? CGFloat(resizing!.quarters) * hour / 4 : 0
+            // Тащим — событие во всю ширину колонки и поверх соседей, со своим новым временем.
+            EventBlock(event: event, task: tasks.calendar.isTaskEvent(event),
+                       span: move.map { Self.span(shifted(event, $0.days, $0.quarters).0, shifted(event, $0.days, $0.quarters).1) }
+                           ?? (resizing?.slot == event.slot ? Self.span(event.startDate, resized(event, resizing!.quarters)) : nil))
+                .frame(width: (move != nil ? colW - 6 : width) - 2, height: max(hour / 4 - 3, height(event) + grow))
+                .overlay(alignment: .bottom) {
+                    // Нижний край — растянуть, как в Календаре Apple.
+                    Color.clear.frame(height: 6).contentShape(Rectangle())
+                        .pointerStyle(.frameResize(position: .bottom))
+                        .gesture(DragGesture(minimumDistance: 2)
+                            .onChanged { resizing = (event.slot, Int(($0.translation.height / (hour / 4)).rounded())) }
+                            .onEnded { _ in
+                                if let r = resizing { tasks.move(event, start: event.startDate, end: resized(event, r.quarters), undo: undo) }
+                                resizing = nil
+                            })
+                }
+                .modifier(EventActions(event: event, tasks: tasks, opened: $opened))
+                .offset(x: gutter + CGFloat(column) * colW + 3 + (move != nil ? 0 : CGFloat(lane.0) * width)
+                           + CGFloat(move?.days ?? 0) * colW,
+                        y: top(event) + 1.5 + CGFloat(move?.quarters ?? 0) * hour / 4)
+                .zIndex(move != nil || opened == event.slot ? 1 : 0)
+                .shadow(color: .black.opacity(move != nil ? 0.35 : 0), radius: 8, y: 3)
+                .onTapGesture { opened = event.slot }
+                .gesture(DragGesture(minimumDistance: 4)
+                    .onChanged { drag in
+                        let shift = Int((drag.translation.width / colW).rounded())
+                        moving = (event.slot, max(-column, min(days.count - 1 - column, shift)),
+                                  Int((drag.translation.height / (hour / 4)).rounded()))
+                    }
+                    .onEnded { _ in
+                        if let m = moving {
+                            let (start, end) = shifted(event, m.days, m.quarters)
+                            tasks.move(event, start: start, end: end, undo: undo)
+                        }
+                        moving = nil
+                    })
     }
 
     private func openBinding(_ event: EKEvent) -> Binding<Bool> {
@@ -650,6 +670,36 @@ private struct EventCard: View {
         let ru = Locale(identifier: "ru_RU")
         let day = event.startDate.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated).locale(ru))
         return event.isAllDay ? "\(day), весь день" : "\(day), \(DayGrid.span(event.startDate, event.endDate))"
+    }
+}
+
+// Карточка по клику и меню по правому клику — отдельным модификатором: в общей цепочке события
+// компилятор не успевал вывести типы.
+private struct EventActions: ViewModifier {
+    let event: EKEvent
+    let tasks: TasksModel
+    @Binding var opened: String?
+
+    func body(content: Content) -> some View {
+        content
+            .popover(isPresented: Binding(get: { opened == event.slot }, set: { if !$0 { opened = nil } }), arrowEdge: .trailing) {
+                EventCard(event: event, tasks: tasks) { opened = nil }
+            }
+            .contextMenu { EventMenu(event: event, tasks: tasks) { opened = event.slot } }
+    }
+}
+
+// Шапка календаря над сеткой: сверху цвет листа, книзу — в прозрачность; размытие под ней тоже сходит на нет.
+private struct HeaderFade: View {
+    var body: some View {
+        // Тот же материал, что у листа (NoteViews: материал + фон 78 %), — иначе виден край прямоугольника.
+        ZStack {
+            Rectangle().fill(.regularMaterial)
+            Rectangle().fill(Theme.bg.opacity(0.78))
+        }
+        .mask(LinearGradient(stops: [.init(color: .black, location: 0), .init(color: .black, location: 0.62),
+                                     .init(color: .clear, location: 1)], startPoint: .top, endPoint: .bottom))
+        .allowsHitTesting(false)
     }
 }
 
