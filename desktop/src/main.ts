@@ -1,7 +1,7 @@
 // Главный экран — порт `NotesWindow.swift`: шапка из планок, три капсулы, стеклянный лист,
 // путь капсулой, дерево слева, раздел справа. Окно 1200×760, сжимается до 820.
 
-import { api, type Api, type Folder, type Note, type TaskRow } from "./api";
+import { api, type Api, type Folder, type Note } from "./api";
 export type { Note };
 import { icon, type Glyph } from "./icons";
 import { drawSlats } from "./slats";
@@ -10,6 +10,7 @@ import { closeSearch, openSearch, searchShown } from "./search";
 import { showMenu, type MenuItem } from "./menu";
 import { enableDrag, enableFileDrop, type DragHost } from "./drag";
 import { mountCalendar } from "./calendar";
+import { mountTasks } from "./tasks";
 
 type Section = "notes" | "tasks" | "calendar" | "video" | "settings";
 type Selection = { kind: "folder"; path: string } | { kind: "note"; path: string };
@@ -29,7 +30,6 @@ const state = {
   expanded: new Set<string>(),
   text: "",
   saved: Date.now(),
-  tasks: [] as TaskRow[],
   tabs: [] as string[],
   pins: [] as string[],
   /** Папка, в которой сейчас вписывают имя новой папки. */
@@ -157,9 +157,7 @@ function renderSidebar() {
       input.addEventListener("blur", () => void done(true), { once: true });
     }
   } else if (state.section === "tasks") {
-    const open = state.tasks.filter((t) => !t.done).length;
-    sidebar.innerHTML = `
-      <button class="row selected" style="padding-left:8px">${icon("taskDone")}<span>все</span><small>${open}</small></button>`;
+    // Фильтры рисует сам экран задач (tasks.ts).
   } else {
     sidebar.innerHTML = "";
   }
@@ -219,15 +217,6 @@ function noteHTML(path: string): string {
   </article>`;
 }
 
-function tasksHTML(): string {
-  const list = state.tasks;
-  return `<div class="placeholder"><h1>задачи</h1>
-    <p>${list.length ? `${list.filter((t) => !t.done).length} открытых — из строк «- [ ] … 📅 дата» в заметках.` : "Задач пока нет: напишите «- [ ] задача 📅 2026-11-03» в любой заметке."}</p>
-    <div style="margin-top:28px">${list.map((t) => `
-      <div class="task${t.done ? " done" : ""}"><i></i><span>${esc(t.title)}${t.urgent ? ' <b class="urgent">!!</b>' : ""}</span>
-      <small>${[t.date, t.time].filter(Boolean).join(" ")}</small></div>`).join("")}</div></div>`;
-}
-
 function soonHTML(title: string): string {
   return `<div class="placeholder"><h1>${title}</h1><p>Этот раздел переезжает с мака следующим.</p></div>`;
 }
@@ -252,7 +241,7 @@ function contentHTML(): string {
     case "notes":
       return state.selection.kind === "note" ? noteHTML(state.selection.path)
         : overviewHTML(findFolder(state.selection.path) ?? state.tree);
-    case "tasks": return tasksHTML();
+    case "tasks": return `<div class="tasks-root"></div>`;
     case "calendar": return `<div class="cal-root"></div>`;
     case "video": return soonHTML("видео");
     case "settings": return soonHTML("настройки");
@@ -261,9 +250,12 @@ function contentHTML(): string {
 
 // Смена раздела или заметки: старое уходит в размытие, новое из него проявляется — как на маке.
 let lastKey = "";
+let tasksScreen: { focusNew(): void } | null = null;
 function mountSection() {
   const cal = page.querySelector<HTMLElement>(".cal-root");
   if (cal) mountCalendar(cal, { backend, openNote });
+  const tasks = page.querySelector<HTMLElement>(".tasks-root");
+  tasksScreen = tasks ? mountTasks(tasks, sidebar, { backend, openNote, onFilter: (t) => (crumb.textContent = t) }) : null;
 }
 
 function renderContent() {
@@ -383,7 +375,6 @@ app.addEventListener("click", async (e) => {
   if (el.classList.contains("search")) { openSearch(); return; }
   if (el.dataset.section) {
     state.section = el.dataset.section as Section;
-    if (state.section === "tasks" && state.tree) state.tasks = await backend.tasks();
     render();
   } else if (el.dataset.folder !== undefined) {
     const path = el.dataset.folder;
@@ -400,6 +391,8 @@ app.addEventListener("click", async (e) => {
   } else if (el.dataset.act === "pick") {
     state.tree = await backend.pickVault();
     render();
+  } else if (el.dataset.act === "new-task") {
+    tasksScreen?.focusNew();
   } else if (el.dataset.act === "templates" && state.tree) {
     const r = el.getBoundingClientRect();
     showMenu(r.right - 220, r.bottom + 8, await templateItems(currentFolder()));
