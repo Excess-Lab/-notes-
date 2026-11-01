@@ -130,9 +130,8 @@ button { font: inherit; color: inherit; letter-spacing: inherit; background: non
 .note-title { width: 100%; font: 28px/1.15 "Martian Heading"; letter-spacing: var(--track); color: var(--ink);
   background: none; border: 0; outline: 0; }
 .note-meta { margin-top: 10px; font-size: 11px; color: var(--gray); }
-.note-text { display: block; width: 100%; margin-top: 28px; min-height: 420px; resize: none; border: 0; outline: 0;
-  background: none; color: var(--ink); font: 15px/1.6 "Martian", system-ui; letter-spacing: var(--track);
-  user-select: text; field-sizing: content; }
+.note-text { display: block; width: 100%; margin-top: 28px; color: var(--ink); font: 15px/1.6 "Martian", system-ui;
+  letter-spacing: var(--track); user-select: text; cursor: text; }
 
 .overview { padding: 36px 58px 0; }
 .overview h1 { font: 26px "Martian Heading"; letter-spacing: var(--track); font-weight: normal; }
@@ -164,3 +163,58 @@ button { font: inherit; color: inherit; letter-spacing: inherit; background: non
 .task.done span { text-decoration: line-through; color: var(--gray); }
 .task small { margin-left: auto; color: var(--gray); font-size: 11px; }
 .task .urgent { color: var(--coral); }
+
+/* ——— текст заметки: заголовки и задачи (MarkdownEditor.swift) ——— */
+.note-text { min-height: 420px; white-space: pre-wrap; word-break: break-word; outline: 0; caret-color: var(--coral); }
+.note-text .l { min-height: 1.6em; }
+.note-text .l + .l { margin-top: 0; }
+.note-text .h1, .note-text .h2, .note-text .h3 { font-family: system-ui, "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; margin: 6px 0 2px; }
+.note-text .h1 { font-size: 24px; } .note-text .h2 { font-size: 20px; } .note-text .h3 { font-size: 17px; }
+.note-text .mark { opacity: 0.25; }
+.note-text .todo.done { color: var(--gray); }
+
+/* ——— вкладки над листом ——— */
+.tabs { position: absolute; left: 56px; right: 100px; top: 15px; height: 36px; display: flex; gap: 6px; overflow-x: auto;
+  scrollbar-width: none; z-index: 2; -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent);
+          mask-image: linear-gradient(90deg, #000 calc(100% - 40px), transparent); }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: none; height: 36px; display: flex; align-items: center; gap: 6px; padding: 0 10px 0 15px; border-radius: 18px;
+  background: rgba(var(--bg), 0.2); color: var(--gray); transition: background-color .25s var(--smooth), color .25s; }
+.tab.active { background: rgba(var(--bg), 0.55); color: var(--ink); }
+.tab span { max-width: 160px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tab-close { width: 14px; height: 14px; display: grid; place-items: center; font-size: 13px; line-height: 1; color: var(--gray);
+  opacity: 0; transition: opacity .15s; letter-spacing: 0; }
+.tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
+
+/* ——— поиск поверх экрана ——— */
+#app > * { transition: filter .3s var(--smooth); }
+#app.searching > * { filter: blur(8px); pointer-events: none; }
+.search-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.12); display: flex; justify-content: center;
+  padding-top: 150px; opacity: 0; transition: opacity .3s var(--smooth); z-index: 10; }
+.search-overlay.shown { opacity: 1; }
+.search-panel { width: 720px; max-width: calc(100vw - 40px); align-self: flex-start; border-radius: 28px; overflow: hidden;
+  background: rgba(var(--bg), 0.78); -webkit-backdrop-filter: blur(30px) saturate(1.5); backdrop-filter: blur(30px) saturate(1.5);
+  box-shadow: inset 0 0 0 1px var(--edge), 0 16px 80px rgba(0, 0, 0, 0.18);
+  transform: translateY(10px) scale(.98); transition: transform .3s var(--smooth); }
+.search-overlay.shown .search-panel { transform: none; }
+.search-field { height: 64px; display: flex; align-items: center; gap: 12px; padding: 0 22px; border-bottom: 1px solid var(--line); }
+.search-field .dot { color: var(--ink); }
+.search-field input { flex: 1; border: 0; outline: 0; background: none; color: var(--ink); font: 20px "Martian Heading";
+  letter-spacing: var(--track); user-select: text; }
+.search-field input::placeholder { color: var(--gray); }
+.search-count { color: var(--gray); }
+.search-results { padding: 10px; max-height: 420px; overflow-y: auto; }
+.caption { padding: 6px 12px; font-size: 11px; color: rgba(var(--fg), 0.3); }
+.nothing { height: 70px; display: grid; place-items: center; color: var(--gray); }
+.result { width: 100%; display: flex; align-items: flex-start; gap: 12px; padding: 10px 12px; border-radius: 12px; text-align: left; }
+.result .dot { margin-top: 2px; color: var(--ink); }
+.result.selected, .result:hover { background: rgba(var(--fg), 0.06); }
+.result-head { display: flex; align-items: baseline; gap: 8px; }
+.result-head span { font-size: 14px; }
+.result-head small, .snippet { font-size: 11px; color: var(--gray); }
+.snippet { margin-top: 3px; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 620px; }
+.result b { font-weight: inherit; color: var(--ink); }
+.search-panel footer { height: 38px; display: flex; align-items: center; gap: 16px; padding: 0 22px; background: rgba(var(--fg), 0.03);
+  font-size: 11px; color: var(--gray); }
+.search-panel footer em { margin-left: auto; font-style: normal; }

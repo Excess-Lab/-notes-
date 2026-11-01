@@ -5,8 +5,10 @@
 //! служебных файлов в хранилище нет, концы строк сохраняются такими, какими пришли.
 
 pub mod names;
+pub mod search;
 pub mod tasks;
 pub mod vault;
 
+pub use search::Hit;
 pub use tasks::{parse_task, Task};
 pub use vault::{Entry, Folder, Note, Vault, VaultError};

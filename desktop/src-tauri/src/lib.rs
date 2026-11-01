@@ -67,6 +67,16 @@ fn create_note(folder: String, title: String, state: State<AppState>) -> Result<
 }
 
 #[tauri::command]
+fn rename_note(path: String, title: String, state: State<AppState>) -> Result<String, String> {
+    with_vault(&state, |v| v.rename(&path, &title).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+fn search(query: String, state: State<AppState>) -> Result<Vec<notes_core::Hit>, String> {
+    with_vault(&state, |v| Ok(v.search(&query, 20)))
+}
+
+#[tauri::command]
 fn tasks(state: State<AppState>) -> Result<Vec<TaskRow>, String> {
     with_vault(&state, |v| Ok(v.tasks().into_iter().map(|(note, task)| TaskRow { note, task }).collect()))
 }
@@ -89,7 +99,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            open_vault, last_vault, tree, read_note, write_note, create_note, tasks, os
+            open_vault, last_vault, tree, read_note, write_note, create_note, rename_note, search, tasks, os
         ])
         .run(tauri::generate_context!())
         .expect("error while running <notes>");

@@ -13,6 +13,8 @@ export interface TaskRow {
   date: string | null; time: string | null; minutes: number | null; urgent: boolean;
 }
 
+export interface Hit { note: Note; snippet: string; score: number }
+
 export interface Api {
   inTauri: boolean;
   lastVault(): Promise<Folder | null>;
@@ -21,6 +23,8 @@ export interface Api {
   read(path: string): Promise<string>;
   write(path: string, text: string): Promise<void>;
   create(folder: string, title: string): Promise<string>;
+  rename(path: string, title: string): Promise<string>;
+  search(query: string): Promise<Hit[]>;
   tasks(): Promise<TaskRow[]>;
   os(): Promise<string>;
 }
@@ -41,6 +45,8 @@ async function tauriApi(): Promise<Api> {
     read: (path) => invoke<string>("read_note", { path }),
     write: (path, text) => invoke<void>("write_note", { path, text }),
     create: (folder, title) => invoke<string>("create_note", { folder, title }),
+    rename: (path, title) => invoke<string>("rename_note", { path, title }),
+    search: (query) => invoke<Hit[]>("search", { query }),
     tasks: () => invoke<TaskRow[]>("tasks"),
     os: () => invoke<string>("os"),
   };
@@ -105,6 +111,32 @@ const demoApi: Api = {
     while (name() in demo) n++;
     demo[name()] = "";
     return name();
+  },
+  async rename(path, title) {
+    const folder = path.includes("/") ? path.slice(0, path.lastIndexOf("/") + 1) : "";
+    const to = `${folder}${title.trim()}.md`;
+    if (to === path || !title.trim()) return path;
+    if (to in demo) throw new Error("name taken");
+    demo[to] = demo[path]; delete demo[path];
+    return to;
+  },
+  // Как `core/src/search.rs`: все слова, ё = е, название весит больше.
+  async search(query) {
+    const norm = (s: string) => s.toLowerCase().replaceAll("ё", "е");
+    const words = norm(query).split(/\s+/).filter(Boolean);
+    if (!words.length) return [];
+    const hits: Hit[] = [];
+    for (const [path, text] of Object.entries(demo)) {
+      const title = path.slice(path.lastIndexOf("/") + 1, -3);
+      const t = norm(title), b = norm(text);
+      if (!words.every((w) => t.includes(w) || b.includes(w))) continue;
+      const lines = text.split("\n").map((l) => l.trim());
+      const line = lines.find((l) => norm(l).includes(words[0]) && !l.startsWith("#")) ?? lines.find(Boolean) ?? "";
+      const snippet = line.replace(/^[#\s\-—*]+/, "").replace(/^\[[ xX]\] /, "").split("📅")[0].trim();
+      const score = words.filter((w) => t.includes(w)).length * 3 + Math.min(10, words.reduce((n, w) => n + b.split(w).length - 1, 0));
+      hits.push({ note: { path, title, modified: demoTime }, snippet, score });
+    }
+    return hits.sort((a, b) => b.score - a.score).slice(0, 20);
   },
   // Упрощённый разбор, только для демо; настоящий — `core/src/tasks.rs`.
   tasks: async () =>

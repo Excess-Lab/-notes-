@@ -2,8 +2,11 @@
 // путь капсулой, дерево слева, раздел справа. Окно 1200×760, сжимается до 820.
 
 import { api, type Api, type Folder, type Note, type TaskRow } from "./api";
+export type { Note };
 import { icon, type Glyph } from "./icons";
 import { drawSlats } from "./slats";
+import { bindMarkdown, editorHTML } from "./editor";
+import { closeSearch, openSearch, searchShown } from "./search";
 
 type Section = "notes" | "tasks" | "calendar" | "video" | "settings";
 type Selection = { kind: "folder"; path: string } | { kind: "note"; path: string };
@@ -24,6 +27,7 @@ const state = {
   text: "",
   saved: Date.now(),
   tasks: [] as TaskRow[],
+  tabs: [] as string[],
 };
 
 let backend: Api;
@@ -178,9 +182,9 @@ function noteHTML(path: string): string {
   const title = path.split("/").pop()!.replace(/\.md$/, "");
   const n = words(state.text);
   return `<article class="note">
-    <input class="note-title" value="${esc(title)}" placeholder="без названия" spellcheck="false" readonly>
+    <input class="note-title" value="${esc(title)}" placeholder="без названия" spellcheck="false">
     <div class="note-meta">изменено ${when(state.saved / 1000)} · ${n} ${plural(n, "слово", "слова", "слов")}</div>
-    <textarea class="note-text" spellcheck="true">${esc(state.text)}</textarea>
+    ${editorHTML(state.text)}
   </article>`;
 }
 
@@ -246,6 +250,7 @@ function renderContent() {
 function render() {
   renderNav();
   fitHeader();
+  renderTabs();
   renderSidebar();
   crumb.textContent = crumbText();
   renderActions();
@@ -255,11 +260,12 @@ function render() {
 // ——— редактор: автосохранение через полсекунды тишины ———
 let saveTimer = 0;
 function bindEditor() {
-  const area = page.querySelector<HTMLTextAreaElement>(".note-text");
-  if (!area || state.selection.kind !== "note") return;
-  const path = state.selection.path;
-  area.addEventListener("input", () => {
-    state.text = area.value;
+  const editor = page.querySelector<HTMLElement>(".note-text");
+  const title = page.querySelector<HTMLInputElement>(".note-title");
+  if (!editor || !title || state.selection.kind !== "note") return;
+  bindMarkdown(editor, (text) => {
+    state.text = text;
+    const path = state.selection.path;
     clearTimeout(saveTimer);
     saveTimer = window.setTimeout(async () => {
       await backend.write(path, state.text);
@@ -269,6 +275,51 @@ function bindEditor() {
       if (meta) meta.textContent = `изменено ${when(state.saved / 1000)} · ${n} ${plural(n, "слово", "слова", "слов")}`;
     }, 500);
   });
+  // Заголовок — имя файла: Enter или уход фокуса переименовывают файл.
+  const rename = async () => {
+    const from = state.selection.path;
+    const next = title.value.trim();
+    if (!next || next === from.split("/").pop()!.replace(/\.md$/, "")) { title.value = from.split("/").pop()!.replace(/\.md$/, ""); return; }
+    try {
+      const to = await backend.rename(from, next);
+      state.tabs = state.tabs.map((p) => (p === from ? to : p));
+      state.selection = { kind: "note", path: to };
+      state.tree = await backend.tree();
+      lastKey = `${state.section}:note:${to}:true`;
+      title.value = to.split("/").pop()!.replace(/\.md$/, "");
+      renderSidebar(); renderTabs(); crumb.textContent = crumbText();
+    } catch {
+      title.value = from.split("/").pop()!.replace(/\.md$/, "");
+    }
+  };
+  title.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); editor.focus(); } });
+  title.addEventListener("blur", rename);
+  if (!state.text) title.select();
+}
+
+// ——— вкладки открытых заметок: капсулы в стиле пути, выбранная ярче, крестик при наведении ———
+const tabsBar = document.createElement("div");
+tabsBar.className = "tabs";
+$(".content").prepend(tabsBar);
+
+function renderTabs() {
+  const show = state.section === "notes" && state.tabs.length > 0;
+  tabsBar.hidden = !show;
+  if (!show) return;
+  tabsBar.innerHTML = state.tabs.map((p) => {
+    const active = state.selection.kind === "note" && state.selection.path === p;
+    return `<div class="tab${active ? " active" : ""}" data-tab="${esc(p)}"><span>${esc(p.split("/").pop()!.replace(/\.md$/, ""))}</span>
+      <button class="tab-close" data-close="${esc(p)}" title="закрыть">×</button></div>`;
+  }).join("");
+}
+
+function closeTab(path: string) {
+  const i = state.tabs.indexOf(path);
+  if (i < 0) return;
+  state.tabs.splice(i, 1);
+  if (state.selection.kind !== "note" || state.selection.path !== path) { renderTabs(); return; }
+  if (state.tabs.length) void openNote(state.tabs[Math.min(i, state.tabs.length - 1)]);
+  else { state.selection = { kind: "folder", path: path.split("/").slice(0, -1).join("/") }; render(); }
 }
 
 async function openNote(path: string) {
@@ -276,6 +327,7 @@ async function openNote(path: string) {
   state.saved = (findNote(path)?.modified ?? Date.now() / 1000) * 1000;
   state.selection = { kind: "note", path };
   state.section = "notes";
+  if (!state.tabs.includes(path)) state.tabs.push(path);
   render();
 }
 
@@ -287,7 +339,11 @@ function findNote(path: string, node = state.tree): Note | null {
 // ——— клики ———
 app.addEventListener("click", async (e) => {
   const el = (e.target as HTMLElement).closest<HTMLElement>("button");
+  const tab = (e.target as HTMLElement).closest<HTMLElement>(".tab");
+  if (el?.dataset.close) { closeTab(el.dataset.close); return; }
+  if (tab && !el) { await openNote(tab.dataset.tab!); return; }
   if (!el) return;
+  if (el.classList.contains("search")) { openSearch(); return; }
   if (el.dataset.section) {
     state.section = el.dataset.section as Section;
     if (state.section === "tasks" && state.tree) state.tasks = await backend.tasks();
@@ -318,11 +374,15 @@ app.addEventListener("click", async (e) => {
 
 // Ctrl+K — поиск (на маке ⌘K), Ctrl+N — новая заметка.
 window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && searchShown()) { closeSearch(); return; }
   if (!(e.ctrlKey || e.metaKey)) return;
+  if (e.key.toLowerCase() === "k") { e.preventDefault(); searchShown() ? closeSearch() : openSearch(); return; }
+  if (e.key.toLowerCase() === "w" && state.selection.kind === "note") { e.preventDefault(); closeTab(state.selection.path); return; }
   if (e.key.toLowerCase() === "n") { e.preventDefault(); actions.querySelector<HTMLButtonElement>('[data-act="new-note"]')?.click(); }
 });
 
 // ——— старт ———
+export const shell = { get backend() { return backend; }, get state() { return state; }, openNote, app };
 (async () => {
   backend = await api;
   const os = await backend.os();

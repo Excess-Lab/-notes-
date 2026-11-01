@@ -70,3 +70,25 @@ fn tasks_from_all_notes() {
     assert_eq!(bread.1.date.as_deref(), Some("2026-11-02"));
     assert!(tasks.iter().any(|(p, t)| p == "проекты/план 2.md" && t.done));
 }
+
+#[test]
+fn rename_keeps_folder_and_avoids_clash() {
+    let (d, v) = vault();
+    assert_eq!(v.rename("проекты/план 10.md", "план 2").unwrap(), "проекты/план 2 2.md");
+    assert!(d.path().join("проекты/план 2 2.md").exists());
+    assert_eq!(v.rename("проекты/план 2 2.md", "  итог ").unwrap(), "проекты/итог.md");
+    assert_eq!(v.rename("проекты/итог.md", "итог").unwrap(), "проекты/итог.md", "same name is a no-op");
+    assert!(matches!(v.rename("проекты/итог.md", "a/b"), Err(VaultError::BadName(_))));
+}
+
+#[test]
+fn search_all_words_title_first() {
+    let (d, v) = vault();
+    fs::write(d.path().join("хлеб.md"), "просто так").unwrap();
+    let hits = v.search("ХЛЕБ", 10);
+    assert_eq!(hits.len(), 2);
+    assert_eq!(hits[0].note.title, "хлеб", "title match ranks higher");
+    assert_eq!(hits[1].snippet, "купить хлеб");
+    assert!(v.search("хлеб сделано", 10).is_empty(), "all words must match");
+    assert!(v.search("  ", 10).is_empty());
+}

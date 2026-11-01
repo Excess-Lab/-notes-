@@ -210,6 +210,43 @@ impl Vault {
         }
     }
 
+    /// Переименовать заметку заголовком. Имя занято — добавляем номер, как Finder. Возвращает новый путь.
+    pub fn rename(&self, rel: &str, title: &str) -> Result<String, VaultError> {
+        let title = title.trim();
+        if let Some(why) = windows_problem(title) {
+            return Err(VaultError::BadName(why));
+        }
+        let from = self.resolve(rel)?;
+        if !from.is_file() {
+            return Err(VaultError::NotFound);
+        }
+        let folder = rel.rsplit_once('/').map_or("", |(f, _)| f);
+        let current = rel.rsplit('/').next().unwrap_or(rel);
+        let dir = self.resolve(folder)?;
+        let taken: Vec<String> = fs::read_dir(&dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|n| compare_key(n) != compare_key(current))
+            .map(|n| compare_key(&n))
+            .collect();
+        let mut n = 1;
+        let name = loop {
+            let name = if n == 1 { format!("{title}.md") } else { format!("{title} {n}.md") };
+            if !taken.contains(&compare_key(&name)) {
+                break name;
+            }
+            n += 1;
+        };
+        if name == current {
+            return Ok(rel.to_string());
+        }
+        let to = dir.join(&name);
+        fs::rename(&from, &to)?;
+        Ok(join(folder, &name))
+    }
+
     /// Задачи из всех заметок: (путь заметки, задача).
     pub fn tasks(&self) -> Vec<(String, Task)> {
         let mut out = Vec::new();
