@@ -29,7 +29,10 @@ static float strip(float2 p, float k, float t, float level, float i, float think
     float ringB = 0.45 + 0.75 * pow(0.5 + 0.5 * sin(ang * 2.0 - dir * t * 2.4 + i), 2.0);
     float d = mix(lineD, ringD, think);
     float w = mix(lineW, 0.026, think);
-    return mix(lineB, ringB, think) * exp(-d * d / (w * w));
+    // Матовое стекло размывает линии: тонкое ядро почти гаснет, свет расплывается широким ореолом,
+    // к краю шара (стекло толще) — сильнее (01.11.2026, «чтобы размывала линии»).
+    float W = w * mix(2.0, 3.5, r2);
+    return mix(lineB, ringB, think) * (0.35 * exp(-d * d / (w * w)) + 0.3 * exp(-d * d / (W * W)));
 }
 
 static half4 orbAt(float2 position, float4 bounds, float t, float4 bands, float dark, float canvas, float think, float done) {
