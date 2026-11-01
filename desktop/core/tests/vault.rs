@@ -126,3 +126,25 @@ fn create_folder_and_copy_in() {
     assert_eq!(v.copy_in(&file, "проекты").unwrap(), "проекты/скан копия.pdf");
     assert!(d.path().join("проекты/скан копия.pdf").exists());
 }
+
+#[test]
+fn templates_and_daily() {
+    let (d, v) = vault();
+    assert!(v.templates().is_empty());
+    let daily = v.daily("2026-11-01", "09:00").unwrap();
+    assert_eq!(daily, "дневник/2026-11-01.md");
+    assert_eq!(fs::read_to_string(d.path().join(&daily)).unwrap(), "# 2026-11-01\n\n");
+    fs::write(d.path().join(&daily), "мой текст").unwrap();
+    assert_eq!(v.daily("2026-11-01", "10:00").unwrap(), daily);
+    assert_eq!(fs::read_to_string(d.path().join(&daily)).unwrap(), "мой текст", "existing daily untouched");
+
+    fs::create_dir_all(d.path().join("шаблоны")).unwrap();
+    fs::write(d.path().join("шаблоны/встреча.md"), "# {{название}}\n{{дата}} {{время}}\n").unwrap();
+    fs::write(d.path().join("шаблоны/день.md"), "день {{дата}}").unwrap();
+    assert_eq!(v.templates(), ["встреча", "день"]);
+    let a = v.create_from_template("встреча", "проекты", "2026-11-02", "15:30").unwrap();
+    let b = v.create_from_template("встреча", "проекты", "2026-11-02", "15:30").unwrap();
+    assert_eq!((a.as_str(), b.as_str()), ("проекты/встреча.md", "проекты/встреча 2.md"));
+    assert_eq!(fs::read_to_string(d.path().join(&b)).unwrap(), "# встреча 2\n2026-11-02 15:30\n");
+    assert_eq!(fs::read_to_string(d.path().join(v.daily("2026-11-03", "08:00").unwrap())).unwrap(), "день 2026-11-03");
+}

@@ -7,6 +7,7 @@
 pub mod names;
 pub mod search;
 pub mod tasks;
+pub mod templates;
 pub mod vault;
 
 pub use search::Hit;

@@ -34,6 +34,9 @@ export interface Api {
   trash(path: string): Promise<void>;
   reveal(path: string): Promise<void>;
   pins(): Promise<string[]>;
+  templates(): Promise<string[]>;
+  createFromTemplate(template: string, folder: string, date: string, time: string): Promise<string>;
+  daily(date: string, time: string): Promise<string>;
   setPins(pins: string[]): Promise<void>;
   os(): Promise<string>;
 }
@@ -64,6 +67,9 @@ async function tauriApi(): Promise<Api> {
     trash: (path) => invoke<void>("trash", { path }),
     reveal: (path) => invoke<void>("reveal", { path }),
     pins: () => invoke<string[]>("pins"),
+    templates: () => invoke<string[]>("templates"),
+    createFromTemplate: (template, folder, date, time) => invoke<string>("create_from_template", { template, folder, date, time }),
+    daily: (date, time) => invoke<string>("daily", { date, time }),
     setPins: (pins) => invoke<void>("set_pins", { pins }),
     os: () => invoke<string>("os"),
   };
@@ -79,6 +85,8 @@ const demo: Record<string, string> = {
   "проекты/дизайн/шапка.md": "# Шапка\n\nКапсулы 48, скругление 18, стекло 20 %.\n",
   "дневник/2026-11-01.md": "# 1 ноября\n\nВыпустили 1.0.0.\n",
   "идеи.md": "- рисунки внутри заметки\n- поиск по смыслу точнее\n",
+  "шаблоны/встреча.md": "# {{название}}\n\n{{дата}} {{время}}\n\n## Кто\n\n## Решили\n\n- [ ] \n",
+  "шаблоны/день.md": "# {{дата}}\n\n## Главное\n\n- [ ] \n",
 };
 const demoTime = Math.floor(Date.now() / 1000) - 600;
 const demoFolders = new Set<string>();
@@ -195,6 +203,18 @@ const demoApi: Api = {
   },
   reveal: async () => {},
   pins: async () => demoPins.filter((p) => p in demo),
+  templates: async () => Object.keys(demo).filter((k) => k.startsWith("шаблоны/")).map((k) => k.slice(8, -3)).sort(),
+  async createFromTemplate(template, folder, date, time) {
+    const path = await demoApi.create(folder, template);
+    const title = path.slice(path.lastIndexOf("/") + 1, -3);
+    demo[path] = demo[`шаблоны/${template}.md`].replaceAll("{{дата}}", date).replaceAll("{{время}}", time).replaceAll("{{название}}", title);
+    return path;
+  },
+  async daily(date, time) {
+    const path = `дневник/${date}.md`;
+    if (!(path in demo)) demo[path] = (demo["шаблоны/день.md"] ?? "# {{дата}}\n\n").replaceAll("{{дата}}", date).replaceAll("{{время}}", time).replaceAll("{{название}}", date);
+    return path;
+  },
   setPins: async (pins) => { demoPins = pins; },
   tasks: async () =>
     Object.entries(demo).flatMap(([note, text]) =>

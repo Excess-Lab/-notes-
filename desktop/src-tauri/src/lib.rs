@@ -121,6 +121,21 @@ fn set_pins(pins: Vec<String>, app: tauri::AppHandle) {
     platform::settings::save_pins(&app, &pins);
 }
 
+#[tauri::command]
+fn templates(state: State<AppState>) -> Result<Vec<String>, String> {
+    with_vault(&state, |v| Ok(v.templates()))
+}
+
+#[tauri::command]
+fn create_from_template(template: String, folder: String, date: String, time: String, state: State<AppState>) -> Result<String, String> {
+    with_vault(&state, |v| v.create_from_template(&template, &folder, &date, &time).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+fn daily(date: String, time: String, state: State<AppState>) -> Result<String, String> {
+    with_vault(&state, |v| v.daily(&date, &time).map_err(|e| e.to_string()))
+}
+
 /// Какая ОС — интерфейс выбирает стекло окна (Mica на Windows, Liquid Glass на маке).
 #[tauri::command]
 fn os() -> &'static str {
@@ -140,7 +155,8 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_vault, last_vault, tree, read_note, write_note, create_note, rename_note, search, tasks, os,
-            create_folder, duplicate, move_into, copy_in, trash, reveal, pins, set_pins
+            create_folder, duplicate, move_into, copy_in, trash, reveal, pins, set_pins,
+            templates, create_from_template, daily
         ])
         .run(tauri::generate_context!())
         .expect("error while running <notes>");

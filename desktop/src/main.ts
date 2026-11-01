@@ -233,7 +233,7 @@ function soonHTML(title: string): string {
 
 function renderActions() {
   const buttons: [Glyph, string, string][] =
-    state.section === "notes" ? [["microphone", "надиктовать", "dictate"], ["newNote", "новая заметка", "new-note"]]
+    state.section === "notes" ? [["microphone", "надиктовать", "dictate"], ["file", "новая заметка из шаблона", "templates"], ["newNote", "новая заметка", "new-note"]]
     : state.section === "tasks" ? [["microphone", "надиктовать", "dictate"], ["plus", "новая задача", "new-task"]]
     : state.section === "video" ? [["plus", "добавить видео или аудио", "add-video"]]
     : state.section === "calendar" ? [["microphone", "надиктовать", "dictate"]] : [];
@@ -393,6 +393,9 @@ app.addEventListener("click", async (e) => {
   } else if (el.dataset.act === "pick") {
     state.tree = await backend.pickVault();
     render();
+  } else if (el.dataset.act === "templates" && state.tree) {
+    const r = el.getBoundingClientRect();
+    showMenu(r.right - 220, r.bottom + 8, await templateItems(currentFolder()));
   } else if (el.dataset.act === "new-note" && state.tree) {
     const folder = state.selection.kind === "folder" ? state.selection.path : state.selection.path.split("/").slice(0, -1).join("/");
     const path = await backend.create(folder, "Новая заметка");
@@ -401,6 +404,39 @@ app.addEventListener("click", async (e) => {
     await openNote(path);
   }
 });
+
+// ——— шаблоны: папка «шаблоны» хранилища, подстановки дата/время/название ———
+const now = () => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return { date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`, time: `${pad(d.getHours())}:${pad(d.getMinutes())}` };
+};
+const currentFolder = () => (state.selection.kind === "folder" ? state.selection.path : state.selection.path.split("/").slice(0, -1).join("/"));
+
+async function templateItems(folder: string): Promise<MenuItem[]> {
+  const names = await backend.templates();
+  const items: MenuItem[] = names.map((name) => ({ label: name, run: async () => {
+    const { date, time } = now();
+    const path = await backend.createFromTemplate(name, folder, date, time);
+    await reload();
+    if (folder) state.expanded.add(folder);
+    await openNote(path);
+  } }));
+  if (!names.length) items.push({ label: "Шаблонов нет: добавьте .md в папку «шаблоны»", run: async () => {
+    await backend.createFolder("", "шаблоны").catch(() => "");
+    await reload(); state.expanded.add("шаблоны"); state.selection = { kind: "folder", path: "шаблоны" }; render();
+  } });
+  items.push("divider", { label: "Заметка дня", run: () => void openDaily() });
+  return items;
+}
+
+async function openDaily() {
+  const { date, time } = now();
+  const path = await backend.daily(date, time);
+  await reload();
+  state.expanded.add("дневник");
+  await openNote(path);
+}
 
 // ——— меню правого клика: как NoteMenu на маке ———
 const revealLabel = () => (document.body.classList.contains("tauri-macos") ? "Показать в Finder" : "Показать в Проводнике");
@@ -426,6 +462,10 @@ function itemsFor(path: string, folder: boolean): MenuItem[] {
       await reload();
       if (path) state.expanded.add(path);
       await openNote(note);
+    } });
+    items.push({ label: "Новая из шаблона…", run: async () => {
+      const r = sidebar.getBoundingClientRect();
+      showMenu(r.left + 60, r.top + 40, await templateItems(path));
     } });
     items.push({ label: "Новая папка", run: () => {
       state.naming = path;
