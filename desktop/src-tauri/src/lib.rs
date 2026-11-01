@@ -81,6 +81,46 @@ fn tasks(state: State<AppState>) -> Result<Vec<TaskRow>, String> {
     with_vault(&state, |v| Ok(v.tasks().into_iter().map(|(note, task)| TaskRow { note, task }).collect()))
 }
 
+#[tauri::command]
+fn create_folder(parent: String, name: String, state: State<AppState>) -> Result<String, String> {
+    with_vault(&state, |v| v.create_folder(&parent, &name).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+fn duplicate(path: String, state: State<AppState>) -> Result<String, String> {
+    with_vault(&state, |v| v.duplicate(&path).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+fn move_into(path: String, folder: String, state: State<AppState>) -> Result<Option<String>, String> {
+    with_vault(&state, |v| v.move_into(&path, &folder).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+fn copy_in(outside: String, folder: String, state: State<AppState>) -> Result<String, String> {
+    with_vault(&state, |v| v.copy_in(std::path::Path::new(&outside), &folder).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+fn trash(path: String, state: State<AppState>) -> Result<(), String> {
+    with_vault(&state, |v| platform::files::trash(&v.resolve(&path).map_err(|e| e.to_string())?))
+}
+
+#[tauri::command]
+fn reveal(path: String, state: State<AppState>) -> Result<(), String> {
+    with_vault(&state, |v| platform::files::reveal(&v.resolve(&path).map_err(|e| e.to_string())?).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+fn pins(app: tauri::AppHandle) -> Vec<String> {
+    platform::settings::pins(&app)
+}
+
+#[tauri::command]
+fn set_pins(pins: Vec<String>, app: tauri::AppHandle) {
+    platform::settings::save_pins(&app, &pins);
+}
+
 /// Какая ОС — интерфейс выбирает стекло окна (Mica на Windows, Liquid Glass на маке).
 #[tauri::command]
 fn os() -> &'static str {
@@ -99,7 +139,8 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            open_vault, last_vault, tree, read_note, write_note, create_note, rename_note, search, tasks, os
+            open_vault, last_vault, tree, read_note, write_note, create_note, rename_note, search, tasks, os,
+            create_folder, duplicate, move_into, copy_in, trash, reveal, pins, set_pins
         ])
         .run(tauri::generate_context!())
         .expect("error while running <notes>");

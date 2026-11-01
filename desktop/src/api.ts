@@ -26,6 +26,15 @@ export interface Api {
   rename(path: string, title: string): Promise<string>;
   search(query: string): Promise<Hit[]>;
   tasks(): Promise<TaskRow[]>;
+  createFolder(parent: string, name: string): Promise<string>;
+  duplicate(path: string): Promise<string>;
+  /** null — переносить некуда (та же папка или папка в саму себя). */
+  moveInto(path: string, folder: string): Promise<string | null>;
+  copyIn(outside: string, folder: string): Promise<string>;
+  trash(path: string): Promise<void>;
+  reveal(path: string): Promise<void>;
+  pins(): Promise<string[]>;
+  setPins(pins: string[]): Promise<void>;
   os(): Promise<string>;
 }
 
@@ -48,6 +57,14 @@ async function tauriApi(): Promise<Api> {
     rename: (path, title) => invoke<string>("rename_note", { path, title }),
     search: (query) => invoke<Hit[]>("search", { query }),
     tasks: () => invoke<TaskRow[]>("tasks"),
+    createFolder: (parent, name) => invoke<string>("create_folder", { parent, name }),
+    duplicate: (path) => invoke<string>("duplicate", { path }),
+    moveInto: (path, folder) => invoke<string | null>("move_into", { path, folder }),
+    copyIn: (outside, folder) => invoke<string>("copy_in", { outside, folder }),
+    trash: (path) => invoke<void>("trash", { path }),
+    reveal: (path) => invoke<void>("reveal", { path }),
+    pins: () => invoke<string[]>("pins"),
+    setPins: (pins) => invoke<void>("set_pins", { pins }),
     os: () => invoke<string>("os"),
   };
 }
@@ -64,6 +81,13 @@ const demo: Record<string, string> = {
   "идеи.md": "- рисунки внутри заметки\n- поиск по смыслу точнее\n",
 };
 const demoTime = Math.floor(Date.now() / 1000) - 600;
+const demoFolders = new Set<string>();
+let demoPins: string[] = [];
+const demoFree = (want: (n: number) => string, taken: (p: string) => boolean) => {
+  let n = 1;
+  while (taken(want(n))) n++;
+  return want(n);
+};
 
 function demoTree(): Folder {
   const root: Folder = { path: "", name: "заметки", folders: [], notes: [], files: [], note_count: 0, unreadable: [] };
@@ -82,6 +106,7 @@ function demoTree(): Folder {
     });
     return node;
   };
+  demoFolders.forEach((f) => ensure(f));
   for (const path of Object.keys(demo)) {
     const slash = path.lastIndexOf("/");
     const folder = ensure(slash < 0 ? "" : path.slice(0, slash));
@@ -139,6 +164,38 @@ const demoApi: Api = {
     return hits.sort((a, b) => b.score - a.score).slice(0, 20);
   },
   // Упрощённый разбор, только для демо; настоящий — `core/src/tasks.rs`.
+  async createFolder(parent, name) {
+    const base = `${parent ? parent + "/" : ""}${name.trim()}`;
+    const path = demoFree((n) => (n === 1 ? base : `${base} ${n}`), (p) => demoFolders.has(p) || Object.keys(demo).some((k) => k.startsWith(p + "/")));
+    demoFolders.add(path);
+    return path;
+  },
+  async duplicate(path) {
+    const base = path.replace(/\.md$/, " копия");
+    const to = demoFree((n) => `${base}${n === 1 ? "" : " " + n}.md`, (p) => p in demo);
+    demo[to] = demo[path] ?? "";
+    return to;
+  },
+  async moveInto(path, folder) {
+    const parent = path.includes("/") ? path.slice(0, path.lastIndexOf("/")) : "";
+    if (parent === folder || folder === path || folder.startsWith(path + "/")) return null;
+    const name = path.slice(path.lastIndexOf("/") + 1);
+    const moved: Record<string, string> = {};
+    for (const k of Object.keys(demo)) {
+      if (k === path || k.startsWith(path + "/")) moved[k] = `${folder ? folder + "/" : ""}${name}${k.slice(path.length)}`;
+    }
+    for (const [from, to] of Object.entries(moved)) { demo[to] = demo[from]; delete demo[from]; }
+    if (demoFolders.delete(path)) demoFolders.add(`${folder ? folder + "/" : ""}${name}`);
+    return `${folder ? folder + "/" : ""}${name}`;
+  },
+  copyIn: async () => { throw new Error("no files outside in the browser"); },
+  async trash(path) {
+    for (const k of Object.keys(demo)) if (k === path || k.startsWith(path + "/")) delete demo[k];
+    demoFolders.delete(path);
+  },
+  reveal: async () => {},
+  pins: async () => demoPins.filter((p) => p in demo),
+  setPins: async (pins) => { demoPins = pins; },
   tasks: async () =>
     Object.entries(demo).flatMap(([note, text]) =>
       text.split("\n").flatMap((line, i) => {

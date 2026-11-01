@@ -5,5 +5,6 @@
 //! Дальше сюда приедут: секреты (Credential Manager / Связка ключей), вход по лицу или пальцу
 //! (Windows Hello / Touch ID), глобальный хоткей, вставка текста в чужое поле, календарь.
 
+pub mod files;
 pub mod settings;
 pub mod window;

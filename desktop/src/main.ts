@@ -7,6 +7,7 @@ import { icon, type Glyph } from "./icons";
 import { drawSlats } from "./slats";
 import { bindMarkdown, editorHTML } from "./editor";
 import { closeSearch, openSearch, searchShown } from "./search";
+import { showMenu, type MenuItem } from "./menu";
 
 type Section = "notes" | "tasks" | "calendar" | "video" | "settings";
 type Selection = { kind: "folder"; path: string } | { kind: "note"; path: string };
@@ -28,6 +29,9 @@ const state = {
   saved: Date.now(),
   tasks: [] as TaskRow[],
   tabs: [] as string[],
+  pins: [] as string[],
+  /** Папка, в которой сейчас вписывают имя новой папки. */
+  naming: null as string | null,
 };
 
 let backend: Api;
@@ -107,7 +111,9 @@ function findFolder(path: string, node = state.tree): Folder | null {
 
 function rows(folder: Folder, depth: number): string {
   const pad = 8 + depth * 18;
-  let html = "";
+  let html = state.naming === folder.path
+    ? `<label class="row naming" style="padding-left:${pad}px">${icon("folder")}<input class="new-folder" placeholder="новая папка" spellcheck="false"></label>`
+    : "";
   for (const f of folder.folders) {
     const selected = state.selection.kind === "folder" && state.selection.path === f.path;
     html += `<button class="row${selected ? " selected" : ""}" style="padding-left:${pad}px" data-folder="${esc(f.path)}">
@@ -124,7 +130,30 @@ function rows(folder: Folder, depth: number): string {
 
 function renderSidebar() {
   if (state.section === "notes") {
-    sidebar.innerHTML = state.tree ? rows(state.tree, 0) : "";
+    // Закреплённые — над деревом, через линию (как на маке).
+    const pins = state.pins.map((p) => {
+      const selected = state.selection.kind === "note" && state.selection.path === p;
+      return `<button class="row${selected ? " selected" : ""}" style="padding-left:8px" data-note="${esc(p)}" data-pinned>
+        ${icon("file")}<span>${esc(p.split("/").pop()!.replace(/\.md$/, ""))}</span></button>`;
+    }).join("");
+    sidebar.innerHTML = (pins ? pins + `<hr class="pins-line">` : "") + (state.tree ? rows(state.tree, 0) : "");
+    const input = sidebar.querySelector<HTMLInputElement>(".new-folder");
+    if (input) {
+      input.focus();
+      const done = async (create: boolean) => {
+        const parent = state.naming;
+        state.naming = null;
+        if (create && parent !== null && input.value.trim()) {
+          const path = await backend.createFolder(parent, input.value);
+          state.tree = await backend.tree();
+          if (parent) state.expanded.add(parent);
+          state.selection = { kind: "folder", path };
+          render();
+        } else renderSidebar();
+      };
+      input.addEventListener("keydown", (e) => { if (e.key === "Enter") void done(true); if (e.key === "Escape") void done(false); });
+      input.addEventListener("blur", () => void done(true), { once: true });
+    }
   } else if (state.section === "tasks") {
     const open = state.tasks.filter((t) => !t.done).length;
     sidebar.innerHTML = `
@@ -372,6 +401,66 @@ app.addEventListener("click", async (e) => {
   }
 });
 
+// ——— меню правого клика: как NoteMenu на маке ———
+const revealLabel = () => (document.body.classList.contains("tauri-macos") ? "Показать в Finder" : "Показать в Проводнике");
+const under = (path: string, root: string) => path === root || path.startsWith(root + "/");
+
+async function reload() {
+  state.tree = await backend.tree();
+  state.pins = await backend.pins();
+}
+
+function itemsFor(path: string, folder: boolean): MenuItem[] {
+  const items: MenuItem[] = [];
+  if (!folder) {
+    const pinned = state.pins.includes(path);
+    items.push({ label: pinned ? "Открепить" : "Закрепить", run: async () => {
+      state.pins = pinned ? state.pins.filter((p) => p !== path) : [path, ...state.pins];
+      await backend.setPins(state.pins);
+      renderSidebar();
+    } });
+  } else {
+    items.push({ label: "Новая заметка", run: async () => {
+      const note = await backend.create(path, "Новая заметка");
+      await reload();
+      if (path) state.expanded.add(path);
+      await openNote(note);
+    } });
+    items.push({ label: "Новая папка", run: () => {
+      state.naming = path;
+      if (path) state.expanded.add(path);
+      state.section = "notes";
+      renderSidebar();
+    } });
+  }
+  if (path) {
+    items.push({ label: "Дублировать", run: async () => { await backend.duplicate(path); await reload(); render(); } });
+    if (backend.inTauri) items.push({ label: revealLabel(), run: () => void backend.reveal(path) });
+    items.push("divider");
+    items.push({ label: "Удалить", danger: true, run: async () => {
+      await backend.trash(path);
+      state.tabs = state.tabs.filter((p) => !under(p, path));
+      state.pins = state.pins.filter((p) => !under(p, path));
+      await backend.setPins(state.pins);
+      if (under(state.selection.path, path)) state.selection = { kind: "folder", path: path.split("/").slice(0, -1).join("/") };
+      await reload();
+      render();
+    } });
+  }
+  return items;
+}
+
+app.addEventListener("contextmenu", (e) => {
+  const target = e.target as HTMLElement;
+  if (target.closest(".note-text, .note-title, input")) return; // в тексте — меню правки ОС
+  e.preventDefault();
+  if (!state.tree) return;
+  const el = target.closest<HTMLElement>("[data-note], [data-folder]");
+  if (el?.dataset.note) showMenu(e.clientX, e.clientY, itemsFor(el.dataset.note, false));
+  else if (el?.dataset.folder !== undefined) showMenu(e.clientX, e.clientY, itemsFor(el.dataset.folder, true));
+  else if (target.closest(".sidebar, .overview")) showMenu(e.clientX, e.clientY, itemsFor(state.selection.kind === "folder" ? state.selection.path : "", true));
+});
+
 // Ctrl+K — поиск (на маке ⌘K), Ctrl+N — новая заметка.
 window.addEventListener("keydown", (e) => {
   if (e.key === "Escape" && searchShown()) { closeSearch(); return; }
@@ -388,6 +477,7 @@ export const shell = { get backend() { return backend; }, get state() { return s
   const os = await backend.os();
   document.body.classList.add(backend.inTauri ? `tauri-${os}` : "browser");
   state.tree = await backend.lastVault();
+  if (state.tree) state.pins = await backend.pins();
   const demo = new URLSearchParams(location.search).get("open");
   render();
   paintSlats();

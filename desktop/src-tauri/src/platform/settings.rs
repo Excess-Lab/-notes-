@@ -4,21 +4,38 @@
 use std::fs;
 use tauri::{AppHandle, Manager};
 
-fn file(app: &AppHandle) -> Option<std::path::PathBuf> {
-    Some(app.path().app_config_dir().ok()?.join("vault-path"))
+fn file(app: &AppHandle, name: &str) -> Option<std::path::PathBuf> {
+    Some(app.path().app_config_dir().ok()?.join(name))
 }
 
-pub fn save_vault_path(app: &AppHandle, path: &str) {
-    if let Some(file) = file(app) {
+fn save(app: &AppHandle, name: &str, text: &str) {
+    if let Some(file) = file(app, name) {
         if let Some(dir) = file.parent() {
             let _ = fs::create_dir_all(dir);
         }
-        let _ = fs::write(file, path);
+        let _ = fs::write(file, text);
     }
 }
 
+fn load(app: &AppHandle, name: &str) -> Option<String> {
+    fs::read_to_string(file(app, name)?).ok()
+}
+
+pub fn save_vault_path(app: &AppHandle, path: &str) {
+    save(app, "vault-path", path);
+}
+
 pub fn load_vault_path(app: &AppHandle) -> Option<String> {
-    let text = fs::read_to_string(file(app)?).ok()?;
-    let path = text.trim().to_string();
+    let path = load(app, "vault-path")?.trim().to_string();
     (!path.is_empty()).then_some(path)
+}
+
+/// Закреплённые заметки — пути от корня хранилища, по строке. Настройка приложения, как
+/// `pinnedNotes` в UserDefaults на маке: в хранилище не пишем.
+pub fn pins(app: &AppHandle) -> Vec<String> {
+    load(app, "pins").map(|t| t.lines().filter(|l| !l.is_empty()).map(str::to_string).collect()).unwrap_or_default()
+}
+
+pub fn save_pins(app: &AppHandle, pins: &[String]) {
+    save(app, "pins", &pins.join("\n"));
 }
