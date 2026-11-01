@@ -9,6 +9,7 @@ import { bindMarkdown, editorHTML } from "./editor";
 import { closeSearch, openSearch, searchShown } from "./search";
 import { showMenu, type MenuItem } from "./menu";
 import { enableDrag, enableFileDrop, type DragHost } from "./drag";
+import { mountCalendar } from "./calendar";
 
 type Section = "notes" | "tasks" | "calendar" | "video" | "settings";
 type Selection = { kind: "folder"; path: string } | { kind: "note"; path: string };
@@ -252,7 +253,7 @@ function contentHTML(): string {
       return state.selection.kind === "note" ? noteHTML(state.selection.path)
         : overviewHTML(findFolder(state.selection.path) ?? state.tree);
     case "tasks": return tasksHTML();
-    case "calendar": return soonHTML("календарь");
+    case "calendar": return `<div class="cal-root"></div>`;
     case "video": return soonHTML("видео");
     case "settings": return soonHTML("настройки");
   }
@@ -260,10 +261,15 @@ function contentHTML(): string {
 
 // Смена раздела или заметки: старое уходит в размытие, новое из него проявляется — как на маке.
 let lastKey = "";
+function mountSection() {
+  const cal = page.querySelector<HTMLElement>(".cal-root");
+  if (cal) mountCalendar(cal, { backend, openNote });
+}
+
 function renderContent() {
   const key = `${state.section}:${state.selection.kind}:${state.selection.path}:${!!state.tree}`;
   const html = contentHTML();
-  if (key === lastKey) { page.innerHTML = html; bindEditor(); return; }
+  if (key === lastKey) { page.innerHTML = html; bindEditor(); mountSection(); return; }
   lastKey = key;
   const old = page;
   const next = document.createElement("div");
@@ -275,6 +281,7 @@ function renderContent() {
   setTimeout(() => old.remove(), 450);
   page = next;
   bindEditor();
+  mountSection();
 }
 
 function render() {

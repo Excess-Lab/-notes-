@@ -10,7 +10,7 @@ export interface Folder {
 }
 export interface TaskRow {
   note: string; line: number; title: string; done: boolean;
-  date: string | null; time: string | null; minutes: number | null; urgent: boolean;
+  date: string | null; time: string | null; minutes: number | null; urgent: boolean; raw: string;
 }
 
 export interface Hit { note: Note; snippet: string; score: number }
@@ -35,6 +35,9 @@ export interface Api {
   reveal(path: string): Promise<void>;
   pins(): Promise<string[]>;
   templates(): Promise<string[]>;
+  setDue(task: TaskRow, date: string | null, time: string | null, minutes: number | null): Promise<void>;
+  setDone(task: TaskRow, done: boolean): Promise<void>;
+  appendTask(path: string, title: string, date: string | null, time: string | null, minutes: number | null): Promise<void>;
   createFromTemplate(template: string, folder: string, date: string, time: string): Promise<string>;
   daily(date: string, time: string): Promise<string>;
   setPins(pins: string[]): Promise<void>;
@@ -68,6 +71,9 @@ async function tauriApi(): Promise<Api> {
     reveal: (path) => invoke<void>("reveal", { path }),
     pins: () => invoke<string[]>("pins"),
     templates: () => invoke<string[]>("templates"),
+    setDue: (t, date, time, minutes) => invoke<void>("set_due", { path: t.note, line: t.line, raw: t.raw, date, time, minutes }),
+    setDone: (t, done) => invoke<void>("set_done", { path: t.note, line: t.line, raw: t.raw, done }),
+    appendTask: (path, title, date, time, minutes) => invoke<void>("append_task", { path, title, date, time, minutes }),
     createFromTemplate: (template, folder, date, time) => invoke<string>("create_from_template", { template, folder, date, time }),
     daily: (date, time) => invoke<string>("daily", { date, time }),
     setPins: (pins) => invoke<void>("set_pins", { pins }),
@@ -77,8 +83,15 @@ async function tauriApi(): Promise<Api> {
 
 // ——— демо-хранилище ———
 
+// Демо-задачи — вокруг сегодняшнего дня, чтобы неделя в календаре не пустовала.
+function dayOffset(n: number) {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
 const demo: Record<string, string> = {
-  "Входящие.md": "- [ ] купить хлеб 📅 2026-11-02\n- [ ] позвонить Ане !! 📅 2026-11-03 15:00\n",
+  "Входящие.md": `- [ ] купить хлеб 📅 ${dayOffset(1)}\n- [ ] позвонить Ане !! 📅 ${dayOffset(2)} 15:00\n- [ ] созвон с командой 📅 ${dayOffset(0)} 11:00–12:30\n- [ ] спортзал 📅 ${dayOffset(0)} 19:00–20:30\n- [x] выпустить 1.0 📅 ${dayOffset(-1)} 10:00\n`,
   "проекты/план приложения.md":
     "# Что делаем\n\nЗаметки — обычные файлы Markdown в папке. История — в git, на GitHub по желанию.\n\n## Windows\n\n- [x] ядро на Rust\n- [ ] стекло как на маке 📅 2026-11-05\n- [ ] надиктовка по хоткею\n\nСинхронизация идёт сама: раз в час коммит, раз в день — на GitHub.\n",
   "проекты/лендинг.md": "# Лендинг\n\nОдин экран, кнопка «скачать», три фишки.\n",
@@ -90,6 +103,14 @@ const demo: Record<string, string> = {
 };
 const demoTime = Math.floor(Date.now() / 1000) - 600;
 const demoFolders = new Set<string>();
+const demoDate = (date: string | null, time: string | null, minutes: number | null) => {
+  if (!date) return "";
+  if (!time) return ` 📅 ${date}`;
+  if (!minutes) return ` 📅 ${date} ${time}`;
+  const [h, m] = time.split(":").map(Number);
+  const end = Math.min(h * 60 + m + minutes, 23 * 60 + 59);
+  return ` 📅 ${date} ${time}–${String(Math.floor(end / 60)).padStart(2, "0")}:${String(end % 60).padStart(2, "0")}`;
+};
 let demoPins: string[] = [];
 const demoFree = (want: (n: number) => string, taken: (p: string) => boolean) => {
   let n = 1;
@@ -203,6 +224,24 @@ const demoApi: Api = {
   },
   reveal: async () => {},
   pins: async () => demoPins.filter((p) => p in demo),
+  async setDue(task, date, time, minutes) {
+    const lines = (demo[task.note] ?? "").split("\n");
+    if (lines[task.line] !== task.raw) throw new Error("the note changed on disk");
+    lines[task.line] = lines[task.line].split("📅")[0].trimEnd() + demoDate(date, time, minutes);
+    demo[task.note] = lines.join("\n");
+  },
+  async setDone(task, done) {
+    const lines = (demo[task.note] ?? "").split("\n");
+    if (lines[task.line] !== task.raw) throw new Error("the note changed on disk");
+    lines[task.line] = lines[task.line].replace(/\[[ xX]\]/, done ? "[x]" : "[ ]");
+    demo[task.note] = lines.join("\n");
+  },
+  async appendTask(path, title, date, time, minutes) {
+    if (!title.trim()) return;
+    let text = demo[path] ?? "";
+    if (text && !text.endsWith("\n")) text += "\n";
+    demo[path] = text + `- [ ] ${title.trim()}${demoDate(date, time, minutes)}\n`;
+  },
   templates: async () => Object.keys(demo).filter((k) => k.startsWith("шаблоны/")).map((k) => k.slice(8, -3)).sort(),
   async createFromTemplate(template, folder, date, time) {
     const path = await demoApi.create(folder, template);
@@ -219,11 +258,13 @@ const demoApi: Api = {
   tasks: async () =>
     Object.entries(demo).flatMap(([note, text]) =>
       text.split("\n").flatMap((line, i) => {
-        const m = /^\s*[-*] \[([ xX])\] (.+?)(?: 📅 (\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2}))?.*)?$/u.exec(line);
+        const m = /^\s*[-*] \[([ xX])\] (.+?)(?: 📅 (\d{4}-\d{2}-\d{2})(?: (\d{2}:\d{2})(?:–(\d{2}:\d{2}))?)?.*)?$/u.exec(line);
         if (!m) return [];
         const urgent = m[2].includes("!!");
+        const toMin = (s: string) => Number(s.slice(0, 2)) * 60 + Number(s.slice(3));
+        const minutes = m[4] && m[5] && toMin(m[5]) > toMin(m[4]) ? toMin(m[5]) - toMin(m[4]) : null;
         return [{ note, line: i, title: m[2].replace("!!", "").trim(), done: m[1] !== " ",
-          date: m[3] ?? null, time: m[4] ?? null, minutes: null, urgent }];
+          date: m[3] ?? null, time: m[4] ?? null, minutes, urgent, raw: line }];
       })),
   os: async () => "browser",
 };

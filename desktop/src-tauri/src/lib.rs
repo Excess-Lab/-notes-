@@ -136,6 +136,21 @@ fn daily(date: String, time: String, state: State<AppState>) -> Result<String, S
     with_vault(&state, |v| v.daily(&date, &time).map_err(|e| e.to_string()))
 }
 
+#[tauri::command]
+fn set_due(path: String, line: usize, raw: String, date: Option<String>, time: Option<String>, minutes: Option<u32>, state: State<AppState>) -> Result<(), String> {
+    with_vault(&state, |v| v.set_due(&path, line, &raw, date.as_deref(), time.as_deref(), minutes).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+fn set_done(path: String, line: usize, raw: String, done: bool, state: State<AppState>) -> Result<(), String> {
+    with_vault(&state, |v| v.set_done(&path, line, &raw, done).map_err(|e| e.to_string()))
+}
+
+#[tauri::command]
+fn append_task(path: String, title: String, date: Option<String>, time: Option<String>, minutes: Option<u32>, state: State<AppState>) -> Result<(), String> {
+    with_vault(&state, |v| v.append_task(&path, &title, date.as_deref(), time.as_deref(), minutes).map_err(|e| e.to_string()))
+}
+
 /// Какая ОС — интерфейс выбирает стекло окна (Mica на Windows, Liquid Glass на маке).
 #[tauri::command]
 fn os() -> &'static str {
@@ -156,7 +171,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_vault, last_vault, tree, read_note, write_note, create_note, rename_note, search, tasks, os,
             create_folder, duplicate, move_into, copy_in, trash, reveal, pins, set_pins,
-            templates, create_from_template, daily
+            templates, create_from_template, daily,
+            set_due, set_done, append_task
         ])
         .run(tauri::generate_context!())
         .expect("error while running <notes>");
