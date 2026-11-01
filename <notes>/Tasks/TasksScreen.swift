@@ -452,7 +452,10 @@ private struct DayGrid: View {
     @ViewBuilder
     private func timed(_ event: EKEvent, column: Int, colW: CGFloat, lanes: [String: (Int, Int)]) -> some View {
             let lane = lanes[event.slot] ?? (0, 1)
-            let width = (colW - 6) / CGFloat(lane.1)
+            // Наложения — слоями, как в Календаре Apple: первое снизу во всю ширину, каждое следующее
+            // сдвинуто вправо; сверху то, что начинается позже, у всех видно начало с названием (01.11.2026).
+            let indent = CGFloat(lane.0) * min(18, (colW - 6) * 0.2)
+            let width = colW - 6 - indent
             let move = moving?.slot == event.slot ? moving : nil
             let grow = resizing?.slot == event.slot ? CGFloat(resizing!.quarters) * hour / 4 : 0
             // Тащим — событие во всю ширину колонки и поверх соседей, со своим новым временем.
@@ -472,11 +475,11 @@ private struct DayGrid: View {
                             })
                 }
                 .modifier(EventActions(event: event, tasks: tasks, opened: $opened))
-                .offset(x: gutter + CGFloat(column) * colW + 3 + (move != nil ? 0 : CGFloat(lane.0) * width)
+                .offset(x: gutter + CGFloat(column) * colW + 3 + (move != nil ? 0 : indent)
                            + CGFloat(move?.days ?? 0) * colW,
                         y: top(event) + 1.5 + CGFloat(move?.quarters ?? 0) * hour / 4)
-                .zIndex(move != nil || opened == event.slot ? 1 : 0)
-                .shadow(color: .black.opacity(move != nil ? 0.35 : 0), radius: 8, y: 3)
+                .zIndex(move != nil || opened == event.slot ? 10_000 : event.startDate.timeIntervalSince(Calendar.current.startOfDay(for: event.startDate)) / 60 + Double(lane.0) / 10)
+                .shadow(color: .black.opacity(move != nil ? 0.35 : lane.0 > 0 ? 0.25 : 0), radius: move != nil ? 8 : 3, y: move != nil ? 3 : 1)
                 .onTapGesture { opened = event.slot }
                 .gesture(DragGesture(minimumDistance: 4)
                     .onChanged { drag in
@@ -570,7 +573,7 @@ private struct EventBlock: View {
         GeometryReader { geo in
             // Короткое событие — одной строкой «название · время», иначе текст налезал на соседей.
             Group {
-                if geo.size.width < 40 {
+                if geo.size.width < 26 {
                     // Узкая дорожка — только цвет: текст рвался по буквам в столбик.
                     Color.clear
                 } else if geo.size.height < 38 || event.isAllDay || geo.size.width < 70 {
@@ -587,11 +590,13 @@ private struct EventBlock: View {
                 }
             }
             .font(Martian.body.font(11)).foregroundStyle(Theme.ink)
-            .padding(.horizontal, 8).padding(.vertical, geo.size.height < 24 ? 1 : 4)
+            .padding(.leading, geo.size.width < 50 ? 6 : 8).padding(.trailing, geo.size.width < 50 ? 2 : 8)
+            .padding(.vertical, geo.size.height < 24 ? 1 : 4)
             .frame(width: geo.size.width, height: geo.size.height, alignment: .topLeading)
         }
         // Цвет календаря, как в Календаре Apple: заливка и полоска слева (01.11.2026, «подгружать цвета»).
-        .background(RoundedRectangle(cornerRadius: 8).fill(tint.opacity(0.2)))
+        // Под цветом — непрозрачный фон: верхний слой закрывает нижний, текст не просвечивает.
+        .background(RoundedRectangle(cornerRadius: 8).fill(tint.opacity(0.2)).background(Theme.bg, in: RoundedRectangle(cornerRadius: 8)))
         .overlay(alignment: .leading) { Rectangle().fill(tint).frame(width: 3) }
         .clipShape(RoundedRectangle(cornerRadius: 8))
     }
